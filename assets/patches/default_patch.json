@@ -1,0 +1,32 @@
+{
+  "version":1,
+  "wav_path":"assets/audio/danano.wav",
+  "next_node_id":12,
+  "next_link_id":12,
+  "nodes":[
+    {"id":1,"type":"wav_player","x":40,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[true,false,false,false]}},
+    {"id":2,"type":"preamp","x":280,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":3,"type":"echo","x":520,"y":80,"params":{"f":[320,0.35,0.25,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":4,"type":"drive_pedal","x":520,"y":360,"params":{"f":[3,0.65,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":5,"type":"mixer","x":760,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":6,"type":"high_pass","x":1000,"y":220,"params":{"f":[70,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":7,"type":"low_pass","x":1240,"y":220,"params":{"f":[8000,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":8,"type":"vu_meter","x":1480,"y":80,"params":{"f":[1,0.85,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":9,"type":"oscilloscope","x":1480,"y":280,"params":{"f":[1,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":10,"type":"spectrum","x":1480,"y":480,"params":{"f":[1,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
+    {"id":11,"type":"output","x":1720,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}}
+  ],
+  "links":[
+    {"id":1,"from":1,"to":2,"to_slot":0},
+    {"id":2,"from":2,"to":3,"to_slot":0},
+    {"id":3,"from":2,"to":4,"to_slot":0},
+    {"id":4,"from":3,"to":5,"to_slot":0},
+    {"id":5,"from":4,"to":5,"to_slot":1},
+    {"id":6,"from":5,"to":6,"to_slot":0},
+    {"id":7,"from":6,"to":7,"to_slot":0},
+    {"id":8,"from":7,"to":8,"to_slot":0},
+    {"id":9,"from":8,"to":9,"to_slot":0},
+    {"id":10,"from":9,"to":10,"to_slot":0},
+    {"id":11,"from":10,"to":11,"to_slot":0}
+  ]
+}

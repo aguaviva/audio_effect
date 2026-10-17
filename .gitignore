@@ -1,1 +1,14 @@
 *.o
+alsa_lpf_gui
+tests/graph_tests
+tests/_tmp_graph.json
+tests/_tmp_record.wav
+patch_graph.json
+imgui.ini
+assets/recordings/
+build/
+
+audio_effect_gui
+build/
+media/
+*.png

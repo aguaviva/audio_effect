@@ -4,6 +4,33 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdio>
+#include <string>
+
+// Format detected pitch as MIDI note name + octave (A4 = 440 Hz).
+// Writes "--" when frequency is not positive / not detected.
+inline void pitch_frequency_to_note(float frequency_hz, char* destination, size_t capacity) {
+    if (destination == nullptr || capacity == 0) {
+        return;
+    }
+    if (!(frequency_hz > 0.0f) || !std::isfinite(frequency_hz)) {
+        std::snprintf(destination, capacity, "--");
+        return;
+    }
+    const float midi = 69.0f + 12.0f * std::log2(frequency_hz / 440.0f);
+    const int rounded = static_cast<int>(std::lround(midi));
+    static constexpr const char* kNames[] = {
+        "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    const int note = ((rounded % 12) + 12) % 12;
+    const int octave = (rounded / 12) - 1;
+    std::snprintf(destination, capacity, "%s%d", kNames[note], octave);
+}
+
+inline std::string pitch_frequency_to_note_string(float frequency_hz) {
+    char buf[16];
+    pitch_frequency_to_note(frequency_hz, buf, sizeof(buf));
+    return buf;
+}
 
 class PitchDetector {
 public:

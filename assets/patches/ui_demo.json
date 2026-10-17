@@ -1,0 +1,28 @@
+{
+  "version": 2,
+  "wav_path": "assets/audio/danano.wav",
+  "record_path": "assets/recordings/capture.wav",
+  "next_node_id": 10,
+  "next_link_id": 9,
+  "nodes": [
+    {"id":1,"type":"wav_player","x":40,"y":200,"params":{"bypassed":false,"loop":true,"path":"assets/audio/danano.wav"}},
+    {"id":2,"type":"audio_input","x":40,"y":420,"params":{"bypassed":false,"device":"default"}},
+    {"id":3,"type":"preamp","x":300,"y":200,"params":{"bypassed":false,"gain_db":12.0}},
+    {"id":4,"type":"preamp","x":300,"y":420,"params":{"bypassed":false,"gain_db":0.0}},
+    {"id":5,"type":"mixer","x":560,"y":280,"params":{"bypassed":false}},
+    {"id":6,"type":"vu_meter","x":820,"y":80,"params":{"bypassed":false,"display_gain":1.5,"decay":0.85}},
+    {"id":7,"type":"oscilloscope","x":820,"y":280,"params":{"bypassed":false,"display_gain":1.25}},
+    {"id":8,"type":"spectrum","x":820,"y":480,"params":{"bypassed":false,"display_gain":1.5}},
+    {"id":9,"type":"output","x":1100,"y":280,"params":{"bypassed":false,"device":"default"}}
+  ],
+  "links": [
+    {"id":1,"from":1,"to":3,"to_slot":0},
+    {"id":2,"from":2,"to":4,"to_slot":0},
+    {"id":3,"from":3,"to":5,"to_slot":0},
+    {"id":4,"from":4,"to":5,"to_slot":1},
+    {"id":5,"from":5,"to":6,"to_slot":0},
+    {"id":6,"from":6,"to":7,"to_slot":0},
+    {"id":7,"from":7,"to":8,"to_slot":0},
+    {"id":8,"from":8,"to":9,"to_slot":0}
+  ]
+}
