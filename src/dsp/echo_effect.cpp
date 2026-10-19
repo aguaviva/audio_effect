@@ -91,43 +91,12 @@ std::string EchoEffect::save() const {
 }
 
 bool EchoEffect::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "delay_ms") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            delay_ms = static_cast<float>(num);
-            return true;
-        }
-        if (key == "feedback") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            feedback = static_cast<float>(num);
-            return true;
-        }
-        if (key == "mix") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            mix = static_cast<float>(num);
-            return true;
-        }
-        if (key == "selected_preset") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            selected_preset = static_cast<int>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "delay_ms", delay_ms);
+    module_json::read(json, "feedback", feedback);
+    module_json::read(json, "mix", mix);
+    module_json::read(json, "selected_preset", selected_preset);
+    return true;
 }
-
 
 void EchoEffect::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

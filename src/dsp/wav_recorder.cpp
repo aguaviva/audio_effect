@@ -15,17 +15,9 @@ std::string WavRecorder::save() const {
 }
 
 bool WavRecorder::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "armed") {
-            if (!module_json::parse_bool_value(text, i, armed)) {
-                return false;
-            }
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "armed", armed);
+    return true;
 }
-
 
 bool WavRecorder::render() {
     return ImGui::Checkbox("Arm Record", &armed);

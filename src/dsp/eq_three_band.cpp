@@ -139,35 +139,11 @@ std::string EqThreeBand::save() const {
 }
 
 bool EqThreeBand::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "low_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            low_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "mid_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            mid_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "high_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            high_db = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "low_db", low_db);
+    module_json::read(json, "mid_db", mid_db);
+    module_json::read(json, "high_db", high_db);
+    return true;
 }
-
 
 void EqThreeBand::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

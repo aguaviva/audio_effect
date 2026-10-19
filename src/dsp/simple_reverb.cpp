@@ -138,35 +138,11 @@ std::string SimpleReverb::save() const {
 }
 
 bool SimpleReverb::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "room") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            room = static_cast<float>(num);
-            return true;
-        }
-        if (key == "damping") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            damping = static_cast<float>(num);
-            return true;
-        }
-        if (key == "mix") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            mix = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "room", room);
+    module_json::read(json, "damping", damping);
+    module_json::read(json, "mix", mix);
+    return true;
 }
-
 
 void SimpleReverb::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

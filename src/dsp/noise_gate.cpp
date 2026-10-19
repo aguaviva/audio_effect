@@ -63,35 +63,11 @@ std::string NoiseGate::save() const {
 }
 
 bool NoiseGate::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "threshold_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            threshold_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "attack_ms") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            attack_ms = static_cast<float>(num);
-            return true;
-        }
-        if (key == "release_ms") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            release_ms = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "threshold_db", threshold_db);
+    module_json::read(json, "attack_ms", attack_ms);
+    module_json::read(json, "release_ms", release_ms);
+    return true;
 }
-
 
 void NoiseGate::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

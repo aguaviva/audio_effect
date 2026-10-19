@@ -225,6 +225,50 @@ inline bool for_each_member(const std::string& text, Fn&& fn) {
     }
 }
 
+inline bool parse_value(const std::string& text, size_t& i, float& out) {
+    double num = 0.0;
+    if (!parse_number_value(text, i, num)) {
+        return false;
+    }
+    out = static_cast<float>(num);
+    return true;
+}
+
+inline bool parse_value(const std::string& text, size_t& i, int& out) {
+    double num = 0.0;
+    if (!parse_number_value(text, i, num)) {
+        return false;
+    }
+    out = static_cast<int>(num);
+    return true;
+}
+
+inline bool parse_value(const std::string& text, size_t& i, bool& out) {
+    return parse_bool_value(text, i, out);
+}
+
+inline bool parse_value(const std::string& text, size_t& i, std::string& out) {
+    return parse_string_key(text, i, out);
+}
+
+// Read member `name` from a JSON object into out; out is untouched if absent or mistyped.
+template <typename T>
+inline bool read(const std::string& json, const char* name, T& out) {
+    bool found = false;
+    for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) {
+        if (!found && key == name) {
+            T value{};
+            if (parse_value(text, i, value)) {
+                out = value;
+                found = true;
+                return true;
+            }
+        }
+        return skip_value(text, i);
+    });
+    return found;
+}
+
 // Append members from a JSON object (without its braces) into out.
 inline void append_object_members(std::string& out, const std::string& object) {
     size_t i = 0;

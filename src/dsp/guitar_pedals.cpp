@@ -84,35 +84,11 @@ std::string DrivePedal::save() const {
 }
 
 bool DrivePedal::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "model") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            model = static_cast<int>(num);
-            return true;
-        }
-        if (key == "amount") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            amount = static_cast<float>(num);
-            return true;
-        }
-        if (key == "tone") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            tone = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "model", model);
+    module_json::read(json, "amount", amount);
+    module_json::read(json, "tone", tone);
+    return true;
 }
-
 
 } // namespace guitar_pedals
 

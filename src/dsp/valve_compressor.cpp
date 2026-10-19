@@ -140,67 +140,15 @@ std::string ValveCompressor::save() const {
 }
 
 bool ValveCompressor::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "threshold_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            threshold_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "ratio") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            ratio = static_cast<float>(num);
-            return true;
-        }
-        if (key == "attack_ms") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            attack_ms = static_cast<float>(num);
-            return true;
-        }
-        if (key == "release_ms") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            release_ms = static_cast<float>(num);
-            return true;
-        }
-        if (key == "drive") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            drive = static_cast<float>(num);
-            return true;
-        }
-        if (key == "makeup_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            makeup_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "selected_preset") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            selected_preset = static_cast<int>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "threshold_db", threshold_db);
+    module_json::read(json, "ratio", ratio);
+    module_json::read(json, "attack_ms", attack_ms);
+    module_json::read(json, "release_ms", release_ms);
+    module_json::read(json, "drive", drive);
+    module_json::read(json, "makeup_db", makeup_db);
+    module_json::read(json, "selected_preset", selected_preset);
+    return true;
 }
-
 
 void ValveCompressor::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

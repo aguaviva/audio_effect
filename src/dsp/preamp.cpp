@@ -47,27 +47,10 @@ std::string Preamp::save() const {
 }
 
 bool Preamp::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "gain_db") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            gain_db = static_cast<float>(num);
-            return true;
-        }
-        if (key == "selected_preset") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            selected_preset = static_cast<int>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "gain_db", gain_db);
+    module_json::read(json, "selected_preset", selected_preset);
+    return true;
 }
-
 
 void Preamp::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

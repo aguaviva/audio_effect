@@ -16,21 +16,9 @@ std::string WavPlayer::save() const {
 }
 
 bool WavPlayer::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "loop") {
-            if (!module_json::parse_bool_value(text, i, loop)) {
-                return false;
-            }
-            return true;
-        }
-        if (key == "path") {
-            if (!module_json::parse_string_key(text, i, path)) {
-                return false;
-            }
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "loop", loop);
+    module_json::read(json, "path", path);
+    return true;
 }
 
 bool WavPlayer::render() {
@@ -72,18 +60,11 @@ std::string AudioInput::save() const {
 }
 
 bool AudioInput::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "device") {
-            if (!module_json::parse_string_key(text, i, device)) {
-                return false;
-            }
-            if (device.empty()) {
-                device = "default";
-            }
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "device", device);
+    if (device.empty()) {
+        device = "default";
+    }
+    return true;
 }
 
 bool AudioInput::render() {
@@ -107,18 +88,11 @@ std::string AudioOutput::save() const {
 }
 
 bool AudioOutput::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "device") {
-            if (!module_json::parse_string_key(text, i, device)) {
-                return false;
-            }
-            if (device.empty()) {
-                device = "default";
-            }
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "device", device);
+    if (device.empty()) {
+        device = "default";
+    }
+    return true;
 }
 
 bool AudioOutput::render() {
@@ -134,17 +108,9 @@ std::string ChordGenerator::save() const {
 }
 
 bool ChordGenerator::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "chord_index") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            index = std::clamp(static_cast<int>(num), 0, kChordCount - 1);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "chord_index", index);
+    index = std::clamp(index, 0, kChordCount - 1);
+    return true;
 }
 
 bool ChordGenerator::render() {
@@ -179,17 +145,9 @@ std::string WhiteNoise::save() const {
 }
 
 bool WhiteNoise::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "level") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            level = std::clamp(static_cast<float>(num), 0.0f, 1.0f);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "level", level);
+    level = std::clamp(level, 0.0f, 1.0f);
+    return true;
 }
 
 bool WhiteNoise::render() {
@@ -217,17 +175,8 @@ std::string DryWetMix::save() const {
 }
 
 bool DryWetMix::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "mix") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            mix = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "mix", mix);
+    return true;
 }
 
 bool DryWetMix::render() {
@@ -258,25 +207,9 @@ std::string VuMeter::save() const {
 }
 
 bool VuMeter::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "display_gain") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            display_gain = static_cast<float>(num);
-            return true;
-        }
-        if (key == "decay") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            decay = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "display_gain", display_gain);
+    module_json::read(json, "decay", decay);
+    return true;
 }
 
 bool VuMeter::render() {
@@ -303,17 +236,8 @@ std::string Oscilloscope::save() const {
 }
 
 bool Oscilloscope::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "display_gain") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            display_gain = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "display_gain", display_gain);
+    return true;
 }
 
 bool Oscilloscope::render() {
@@ -335,17 +259,8 @@ std::string Spectrum::save() const {
 }
 
 bool Spectrum::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key == "display_gain") {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            display_gain = static_cast<float>(num);
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    module_json::read(json, "display_gain", display_gain);
+    return true;
 }
 
 bool Spectrum::render() {

@@ -17,22 +17,15 @@ std::string Mixer::save() const {
 }
 
 bool Mixer::load(const std::string& json) {
-    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
-        if (key.rfind("gain_", 0) == 0) {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            const int index = std::atoi(key.c_str() + 5);
-            if (index >= 0 && index < kChannels) {
-                gain[static_cast<size_t>(index)] = std::clamp(static_cast<float>(num), 0.0f, 2.0f);
-            }
-            return true;
-        }
-        return module_json::skip_value(text, i);
-    });
+    char key[16];
+    for (int i = 0; i < kChannels; ++i) {
+        std::snprintf(key, sizeof(key), "gain_%d", i);
+        float& g = gain[static_cast<size_t>(i)];
+        module_json::read(json, key, g);
+        g = std::clamp(g, 0.0f, 2.0f);
+    }
+    return true;
 }
-
 
 bool Mixer::render() {
     bool changed = false;
