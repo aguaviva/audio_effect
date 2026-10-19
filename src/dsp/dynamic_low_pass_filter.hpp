@@ -2,7 +2,6 @@
 
 #include "module_json.hpp"
 
-#include <atomic>
 #include <cstddef>
 #include <string>
 
@@ -19,6 +18,8 @@ public:
     };
 
     Params params;
+    bool enabled = true;
+    int selected_preset = 0;
 
     // samples: normalized interleaved stereo values, modified in place.
     // num_samples: number of float values, not stereo frames.
@@ -26,8 +27,9 @@ public:
     // Uses params.cutoff_hz.
     void process(float* samples, size_t num_samples, float sample_rate);
     void reset();
-    static void render(std::atomic<bool>& enabled, std::atomic<float>& cutoff_hz,
-                       int& selected_preset, bool& controls_changed);
+
+    // ImGui controls; edits enabled / selected_preset / params. Returns true if changed.
+    bool render();
 
 private:
     float prev_l_{0.0f};

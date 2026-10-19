@@ -30,30 +30,26 @@ void DynamicHighPassFilter::reset() {
     prev_output_r_ = 0.0f;
 }
 
-void DynamicHighPassFilter::render(std::atomic<bool>& enabled,
-                                   std::atomic<float>& cutoff_hz,
-                                   int& selected_preset, bool& controls_changed) {
-    bool active = enabled.load(std::memory_order_relaxed);
-    if (ImGui::Checkbox("High-Pass Filter##enable", &active)) {
-        enabled.store(active, std::memory_order_relaxed);
+bool DynamicHighPassFilter::render() {
+    bool controls_changed = false;
+    if (ImGui::Checkbox("High-Pass Filter##enable", &enabled)) {
         controls_changed = true;
     }
     ImGui::Indent();
-    ImGui::BeginDisabled(!active);
+    ImGui::BeginDisabled(!enabled);
 
     static const char* preset_names[] = {
         "Custom", "Guitar Low Cut (70 Hz)", "Tight Low End (100 Hz)", "Lean Low End (150 Hz)"
     };
-    if (ImGui::Combo("High-Pass Preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names)) && selected_preset != 0) {
+    if (ImGui::Combo("High-Pass Preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names)) &&
+        selected_preset != 0) {
         static const float cutoffs[] = {0.0f, 70.0f, 100.0f, 150.0f};
-        cutoff_hz.store(cutoffs[selected_preset], std::memory_order_relaxed);
-        enabled.store(true, std::memory_order_relaxed);
+        params.cutoff_hz = cutoffs[selected_preset];
+        enabled = true;
         controls_changed = true;
     }
 
-    float cutoff = cutoff_hz.load(std::memory_order_relaxed);
-    if (ImGui::SliderFloat("Cutoff (Hz)##highpass", &cutoff, 20.0f, 1000.0f, "%.0f Hz")) {
-        cutoff_hz.store(cutoff, std::memory_order_relaxed);
+    if (ImGui::SliderFloat("Cutoff (Hz)##highpass", &params.cutoff_hz, 20.0f, 1000.0f, "%.0f Hz")) {
         selected_preset = 0;
         controls_changed = true;
     }
@@ -61,6 +57,7 @@ void DynamicHighPassFilter::render(std::atomic<bool>& enabled,
     ImGui::EndDisabled();
     ImGui::Unindent();
     ImGui::Separator();
+    return controls_changed;
 }
 
 void DynamicHighPassFilter::Params::write(std::string& out, bool& first) const {
