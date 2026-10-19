@@ -65,11 +65,6 @@ std::string name_for_type(NodeType type);
 struct NodeState {
     bool bypassed = false;
     std::array<bool, kMaxMixerInputs> input_muted{};
-    std::array<float, kMaxMixerInputs> input_gain = [] {
-        std::array<float, kMaxMixerInputs> gains{};
-        gains.fill(1.0f);
-        return gains;
-    }();
 
     bool is_input_muted(int slot) const {
         return slot >= 0 && slot < kMaxMixerInputs && input_muted[static_cast<size_t>(slot)];

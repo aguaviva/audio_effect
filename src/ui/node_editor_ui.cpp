@@ -668,13 +668,6 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
                     if (ImGui::IsItemHovered()) {
                         ImGui::SetTooltip(muted ? "Muted (click to unmute)" : "Mute this input");
                     }
-                    ImGui::SameLine(0.0f, 4.0f);
-                    ImGui::SetNextItemWidth(72.0f);
-                    float& gain = node.state().input_gain[static_cast<size_t>(slot)];
-                    ImGui::SliderFloat("##gain", &gain, 0.0f, 2.0f, "%.1fx");
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("Channel gain (0 to 2x)");
-                    }
                     ImGui::PopID();
                 } else if (node_is_dry_wet(node.type())) {
                     ImGui::TextUnformatted(slot == 0 ? "dry" : "wet");

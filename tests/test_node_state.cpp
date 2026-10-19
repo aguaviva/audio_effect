@@ -85,27 +85,6 @@ TEST(node_state_bypass_defaults_off) {
     CHECK(s.bypassed);
 }
 
-TEST(node_state_mixer_input_gain_roundtrip) {
-    NodeState state = NodeState::make(NodeType::mixer);
-    CHECK_NEAR(state.input_gain[0], 1.0f, 1e-6f);
-    state.input_gain[1] = 1.5f;
-
-    const std::string json = state.write_params();
-    CHECK(json.find("\"input_gain\"") != std::string::npos);
-
-    NodeState loaded;
-    size_t i = 0;
-    CHECK(loaded.read_params(NodeType::mixer, json, i));
-    CHECK_NEAR(loaded.input_gain[0], 1.0f, 1e-6f);
-    CHECK_NEAR(loaded.input_gain[1], 1.5f, 1e-6f);
-
-    const std::string old_patch = R"({"muted":[false,true]})";
-    i = 0;
-    CHECK(loaded.read_params(NodeType::mixer, old_patch, i));
-    CHECK_NEAR(loaded.input_gain[0], 1.0f, 1e-6f);
-    CHECK_NEAR(loaded.input_gain[1], 1.0f, 1e-6f);
-}
-
 TEST(node_state_chord_index_clamped_on_read) {
     NodeState s;
     const std::string low = R"({"chord_index":-5})";

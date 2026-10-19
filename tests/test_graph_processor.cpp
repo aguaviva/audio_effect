@@ -101,8 +101,8 @@ TEST(graph_processor_mixer_applies_per_input_gain) {
     const int out = g.add_node(NodeType::output, 0, 0);
     g.find_node(pre_a)->state().as<node_params::Preamp>()->gain_db = 0.0f;  // x1
     g.find_node(pre_b)->state().as<node_params::Preamp>()->gain_db = 6.0f;  // ~x2
-    g.find_node(mix)->state().input_gain[0] = 0.5f;
-    g.find_node(mix)->state().input_gain[1] = 1.5f;
+    g.find_node(mix)->state().as<node_params::Mixer>()->gain[0] = 0.5f;
+    g.find_node(mix)->state().as<node_params::Mixer>()->gain[1] = 1.5f;
     CHECK(g.add_link(in, pre_a));
     CHECK(g.add_link(in, pre_b));
     CHECK(g.add_link(pre_a, mix, 0));
