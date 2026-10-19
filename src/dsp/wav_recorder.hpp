@@ -1,6 +1,6 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -8,27 +8,28 @@
 #include <mutex>
 #include <string>
 
-// Pass-through WAV writer (16-bit PCM stereo). Call set_path before arming.
-class WavRecorder {
+// Graph module: arm flag only (name / save / load / render).
+class WavRecorder : public Module {
 public:
-    static std::string name() { return "wav_recorder"; }
+    bool armed = false;
 
-    struct Params {
-        bool armed = false;
+    std::string name() const override { return "wav_recorder"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
+};
 
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
-
+// Runtime pass-through WAV writer (16-bit PCM stereo). Owned by GraphProcessor.
+class WavRecorderEngine {
+public:
     void set_path(const std::string& path);
     const std::string& path() const { return path_; }
 
-    // When armed becomes true, (re)opens the file. When false, finalizes header.
     void set_armed(bool armed, float sample_rate);
     bool armed() const { return armed_; }
 
-    // Append interleaved float samples; audio is not modified by the caller.
-    void write(const float* interleaved, size_t sample_count);
+    void write_samples(const float* interleaved, size_t sample_count);
 
     std::string status() const;
 

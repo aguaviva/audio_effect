@@ -1,6 +1,7 @@
 #include "test_harness.hpp"
 
 #include "dsp/eq_three_band.hpp"
+#include "dsp/mixer.hpp"
 #include "dsp/noise_gate.hpp"
 #include "dsp/simple_reverb.hpp"
 #include "dsp/wav_recorder.hpp"
@@ -54,10 +55,25 @@ TEST(white_noise_source_produces_energy) {
     CHECK(energy > 1.0e-3f);
 }
 
+TEST(mixer_dsp_averages_sources) {
+    Mixer mixer;
+    CHECK(mixer.name() == "mixer");
+    std::vector<float> a(8, 0.2f);
+    std::vector<float> b(8, 0.6f);
+    std::vector<float> out(8, -1.0f);
+    const float* sources[] = {a.data(), b.data()};
+    mixer.process(sources, 2, out.data(), out.size());
+    CHECK_NEAR(out[0], 0.4f, 1e-5f);
+    CHECK_NEAR(out[7], 0.4f, 1e-5f);
+}
+
 TEST(noise_gate_silences_below_threshold) {
     NoiseGate gate;
     std::vector<float> quiet(64, 0.0001f);
-    gate.process(quiet.data(), quiet.size(), -20.0f, 1.0f, 1.0f, 48000.0f);
+    gate.threshold_db = -20.0f;
+    gate.attack_ms = 1.0f;
+    gate.release_ms = 1.0f;
+    gate.process(quiet.data(), quiet.size(), 48000.0f);
     float max_abs = 0.0f;
     for (float s : quiet) {
         max_abs = std::max(max_abs, std::fabs(s));
@@ -68,7 +84,10 @@ TEST(noise_gate_silences_below_threshold) {
 TEST(eq_three_band_runs_in_place) {
     EqThreeBand eq;
     std::vector<float> block(128, 0.25f);
-    eq.process(block.data(), block.size(), 3.0f, -3.0f, 2.0f, 48000.0f);
+    eq.low_db = 3.0f;
+    eq.mid_db = -3.0f;
+    eq.high_db = 2.0f;
+    eq.process(block.data(), block.size(), 48000.0f);
     CHECK(std::isfinite(block[0]));
 }
 
@@ -79,7 +98,10 @@ TEST(reverb_mix_changes_output) {
     for (size_t i = 0; i < 64; ++i) {
         block[i] = (i % 2 == 0) ? 0.8f : -0.8f;
     }
-    rev.process(block.data(), block.size(), 0.9f, 0.2f, 1.0f, 48000.0f);
+    rev.room = 0.9f;
+    rev.damping = 0.2f;
+    rev.mix = 1.0f;
+    rev.process(block.data(), block.size(), 48000.0f);
     float energy = 0.0f;
     for (size_t i = 512; i < block.size(); ++i) {
         energy += block[i] * block[i];
@@ -120,11 +142,11 @@ TEST(dry_wet_mix_blends_slots) {
 TEST(wav_recorder_writes_file) {
     const char* path = "tests/_tmp_record.wav";
     std::remove(path);
-    WavRecorder rec;
+    WavRecorderEngine rec;
     rec.set_path(path);
     rec.set_armed(true, 48000.0f);
     std::vector<float> block(64, 0.1f);
-    rec.write(block.data(), block.size());
+    rec.write_samples(block.data(), block.size());
     rec.set_armed(false, 48000.0f);
     FILE* f = std::fopen(path, "rb");
     CHECK(f != nullptr);

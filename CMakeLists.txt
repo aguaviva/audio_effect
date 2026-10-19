@@ -42,6 +42,8 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/eq_three_band.cpp
   src/dsp/simple_reverb.cpp
   src/dsp/wav_recorder.cpp
+  src/dsp/graph_modules.cpp
+  src/dsp/mixer.cpp
   third_party/imgui/imgui.cpp
   third_party/imgui/imgui_draw.cpp
   third_party/imgui/imgui_tables.cpp
@@ -125,6 +127,8 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/eq_three_band.cpp
     src/dsp/simple_reverb.cpp
     src/dsp/wav_recorder.cpp
+    src/dsp/graph_modules.cpp
+    src/dsp/mixer.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp
     third_party/imgui/imgui_tables.cpp

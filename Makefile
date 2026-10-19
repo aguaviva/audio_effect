@@ -38,7 +38,9 @@ SRC_EFFECTS := src/dsp/preamp.cpp \
                src/dsp/noise_gate.cpp \
                src/dsp/eq_three_band.cpp \
                src/dsp/simple_reverb.cpp \
-               src/dsp/wav_recorder.cpp
+               src/dsp/wav_recorder.cpp \
+               src/dsp/graph_modules.cpp \
+               src/dsp/mixer.cpp
 
 SRC_IMGUI := third_party/imgui/imgui.cpp \
              third_party/imgui/imgui_draw.cpp \

@@ -5,17 +5,35 @@
 #include <filesystem>
 #include <vector>
 
-void WavRecorder::set_path(const std::string& path) {
+#include "imgui.h"
+
+void WavRecorder::save(std::string& out, bool& first) const {
+    module_json::write_bool(out, first, "armed", armed);
+}
+
+bool WavRecorder::load(const std::string& key, double, bool flag, const std::string&, int kind) {
+    if (key == "armed" && kind == module_json::kKindBool) {
+        armed = flag;
+        return true;
+    }
+    return false;
+}
+
+bool WavRecorder::render() {
+    return ImGui::Checkbox("Arm Record", &armed);
+}
+
+void WavRecorderEngine::set_path(const std::string& path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (armed_) {
-        return; // ignore path changes while recording
+        return;
     }
     if (!path.empty()) {
         path_ = path;
     }
 }
 
-void WavRecorder::set_armed(bool armed, float sample_rate) {
+void WavRecorderEngine::set_armed(bool armed, float sample_rate) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (armed == armed_) {
         return;
@@ -36,7 +54,7 @@ void WavRecorder::set_armed(bool armed, float sample_rate) {
     }
 }
 
-bool WavRecorder::open_file(float /*sample_rate*/) {
+bool WavRecorderEngine::open_file(float /*sample_rate*/) {
     close_file();
     std::error_code ec;
     std::filesystem::path p(path_);
@@ -48,13 +66,12 @@ bool WavRecorder::open_file(float /*sample_rate*/) {
         return false;
     }
     data_bytes_ = 0;
-    // Placeholder 44-byte header; patched on close.
     std::vector<char> header(44, 0);
     file_.write(header.data(), static_cast<std::streamsize>(header.size()));
     return static_cast<bool>(file_);
 }
 
-void WavRecorder::patch_header() {
+void WavRecorderEngine::patch_header() {
     if (!file_) {
         return;
     }
@@ -81,8 +98,8 @@ void WavRecorder::patch_header() {
     h[8] = 'W'; h[9] = 'A'; h[10] = 'V'; h[11] = 'E';
     h[12] = 'f'; h[13] = 'm'; h[14] = 't'; h[15] = ' ';
     write_u32(h + 16, 16);
-    write_u16(h + 20, 1); // PCM
-    write_u16(h + 22, 2); // stereo
+    write_u16(h + 20, 1);
+    write_u16(h + 22, 2);
     write_u32(h + 24, sample_rate_);
     write_u32(h + 28, byte_rate);
     write_u16(h + 32, block_align);
@@ -96,7 +113,7 @@ void WavRecorder::patch_header() {
     file_.seekp(pos);
 }
 
-void WavRecorder::close_file() {
+void WavRecorderEngine::close_file() {
     if (!file_) {
         return;
     }
@@ -105,7 +122,7 @@ void WavRecorder::close_file() {
     file_.close();
 }
 
-void WavRecorder::write(const float* interleaved, size_t sample_count) {
+void WavRecorderEngine::write_samples(const float* interleaved, size_t sample_count) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!armed_ || !file_ || interleaved == nullptr || sample_count == 0) {
         return;
@@ -120,18 +137,7 @@ void WavRecorder::write(const float* interleaved, size_t sample_count) {
     }
 }
 
-std::string WavRecorder::status() const {
+std::string WavRecorderEngine::status() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return status_;
-}
-
-void WavRecorder::Params::write(std::string& out, bool& first) const {
-    module_json::write_bool(out, first, "armed", armed);
-}
-bool WavRecorder::Params::read(const std::string& key, double, bool flag, const std::string&, int kind) {
-    if (key == "armed" && kind == module_json::kKindBool) {
-        armed = flag;
-        return true;
-    }
-    return false;
 }

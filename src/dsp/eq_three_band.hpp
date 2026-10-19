@@ -1,27 +1,30 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
 #include <cstddef>
 #include <string>
 
-// Stereo 3-band EQ: low shelf, mid peak, high shelf (RBJ-style biquads).
-class EqThreeBand {
+class EqThreeBand : public Module {
 public:
-    static std::string name() { return "eq_three_band"; }
+    float low_db = 0.0f;
+    float mid_db = 0.0f;
+    float high_db = 0.0f;
 
-    struct Params {
-        float low_db = 0.0f;
-        float mid_db = 0.0f;
-        float high_db = 0.0f;
+    std::string name() const override { return "eq_three_band"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
 
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
-
-    void process(float* interleaved, size_t sample_count, float low_gain_db,
-                 float mid_gain_db, float high_gain_db, float sample_rate);
+    void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
+
+    void copy_controls_from(const EqThreeBand& other) {
+        low_db = other.low_db;
+        mid_db = other.mid_db;
+        high_db = other.high_db;
+    }
 
 private:
     struct Biquad {

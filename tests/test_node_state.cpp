@@ -44,12 +44,12 @@ TEST(node_state_serialize_roundtrip) {
 }
 
 TEST(module_name_and_json_load_by_name) {
-    CHECK(::Preamp::name() == "preamp");
-    CHECK(EchoEffect::name() == "echo");
-    CHECK(DynamicHighPassFilter::name() == "high_pass");
-    CHECK(DynamicLowPassFilter::name() == "low_pass");
+    CHECK(::Preamp{}.name() == "preamp");
+    CHECK(EchoEffect{}.name() == "echo");
+    CHECK(DynamicHighPassFilter{}.name() == "high_pass");
+    CHECK(DynamicLowPassFilter{}.name() == "low_pass");
 
-    // write/read are called from outside the module (helpers / NodeState).
+    // save/load are called from outside the module (helpers / NodeState).
     node_params::Preamp pre;
     pre.gain_db = 4.25f;
     const std::string fields_json = module_json::save_object(pre);

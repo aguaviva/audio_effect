@@ -1,27 +1,30 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
 #include <cstddef>
 #include <string>
 
-// Simple downward noise gate with attack/release smoothing.
-class NoiseGate {
+class NoiseGate : public Module {
 public:
-    static std::string name() { return "noise_gate"; }
+    float threshold_db = -40.0f;
+    float attack_ms = 5.0f;
+    float release_ms = 80.0f;
 
-    struct Params {
-        float threshold_db = -40.0f;
-        float attack_ms = 5.0f;
-        float release_ms = 80.0f;
+    std::string name() const override { return "noise_gate"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
 
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
-
-    void process(float* interleaved, size_t sample_count, float threshold_db,
-                 float attack_ms, float release_ms, float sample_rate);
+    void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
+
+    void copy_controls_from(const NoiseGate& other) {
+        threshold_db = other.threshold_db;
+        attack_ms = other.attack_ms;
+        release_ms = other.release_ms;
+    }
 
 private:
     float envelope_ = 0.0f;

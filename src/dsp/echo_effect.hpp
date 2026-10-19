@@ -1,40 +1,36 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
-#include <atomic>
 #include <cstddef>
 #include <string>
 #include <vector>
 
-class EchoEffect {
+class EchoEffect : public Module {
 public:
-    static std::string name() { return "echo"; }
+    float delay_ms = 320.0f;
+    float feedback = 0.35f;
+    float mix = 0.25f;
+    int selected_preset = 0; // 0 = Custom
 
-    struct Params {
-        float delay_ms = 320.0f;
-        float feedback = 0.35f;
-        float mix = 0.25f;
+    // Default size is for NodeState copies; audio runtime passes a real capacity.
+    explicit EchoEffect(size_t max_delay_samples = 48000);
 
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
+    std::string name() const override { return "echo"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
 
-    // max_delay_samples: delay-line capacity in samples per channel; allocate at least
-    // sample_rate * the longest delay time you intend to use.
-    explicit EchoEffect(size_t max_delay_samples);
-
-    // samples: normalized interleaved stereo values, modified in place.
-    // sample_count: number of float values, not stereo frames.
-    // delay_ms: time before the repeat; feedback controls how many repeats follow.
-    // mix: 0 is dry/original only, 1 is delayed signal only.
-    // sample_rate: audio samples per second.
-    void process(float* samples, size_t sample_count, float delay_ms,
-                 float feedback, float mix, float sample_rate);
+    void process(float* samples, size_t sample_count, float sample_rate);
     void reset();
-    static void render(std::atomic<bool>& enabled, std::atomic<float>& delay_ms,
-                       std::atomic<float>& feedback, std::atomic<float>& mix,
-                       int& selected_preset, bool& controls_changed);
+
+    void copy_controls_from(const EchoEffect& other) {
+        delay_ms = other.delay_ms;
+        feedback = other.feedback;
+        mix = other.mix;
+        selected_preset = other.selected_preset;
+    }
 
 private:
     std::vector<float> delay_left_;

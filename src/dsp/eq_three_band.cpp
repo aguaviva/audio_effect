@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "imgui.h"
+
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
 }
@@ -88,14 +90,13 @@ void EqThreeBand::design(float sample_rate, float low_gain_db, float mid_gain_db
     high_r_.a1 = high_l_.a1; high_r_.a2 = high_l_.a2;
 }
 
-void EqThreeBand::process(float* interleaved, size_t sample_count, float low_gain_db,
-                          float mid_gain_db, float high_gain_db, float sample_rate) {
+void EqThreeBand::process(float* interleaved, size_t sample_count, float sample_rate) {
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
-    low_gain_db = std::clamp(low_gain_db, -18.0f, 18.0f);
-    mid_gain_db = std::clamp(mid_gain_db, -18.0f, 18.0f);
-    high_gain_db = std::clamp(high_gain_db, -18.0f, 18.0f);
+    float low_gain_db = std::clamp(low_db, -18.0f, 18.0f);
+    float mid_gain_db = std::clamp(mid_db, -18.0f, 18.0f);
+    float high_gain_db = std::clamp(high_db, -18.0f, 18.0f);
     if (sample_rate != last_sr_ || low_gain_db != last_low_ || mid_gain_db != last_mid_ ||
         high_gain_db != last_high_) {
         design(sample_rate, low_gain_db, mid_gain_db, high_gain_db);
@@ -114,12 +115,27 @@ void EqThreeBand::process(float* interleaved, size_t sample_count, float low_gai
     }
 }
 
-void EqThreeBand::Params::write(std::string& out, bool& first) const {
+bool EqThreeBand::render() {
+    bool changed = false;
+    ImGui::TextUnformatted("Low dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_low", &low_db, -18.0f, 18.0f, "%.1f");
+    ImGui::TextUnformatted("Mid dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_mid", &mid_db, -18.0f, 18.0f, "%.1f");
+    ImGui::TextUnformatted("High dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_high", &high_db, -18.0f, 18.0f, "%.1f");
+    return changed;
+}
+
+void EqThreeBand::save(std::string& out, bool& first) const {
     module_json::write_float(out, first, "low_db", low_db);
     module_json::write_float(out, first, "mid_db", mid_db);
     module_json::write_float(out, first, "high_db", high_db);
 }
-bool EqThreeBand::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+
+bool EqThreeBand::load(const std::string& key, double num, bool, const std::string&, int kind) {
     if (kind != module_json::kKindNumber) {
         return false;
     }

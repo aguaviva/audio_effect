@@ -3,8 +3,7 @@
 #include "audio/audio_devices.hpp"
 #include "audio/pipeline.hpp"
 #include "dsp/chord_catalog.hpp"
-#include "dsp/dynamic_high_pass_filter.hpp"
-#include "dsp/dynamic_low_pass_filter.hpp"
+#include "dsp/module.hpp"
 #include "graph/graph_io.hpp"
 #include "graph/visualizer_bus.hpp"
 #include "paths.hpp"
@@ -198,20 +197,11 @@ static bool draw_device_combo(const char* label, std::string& device,
     return false;
 }
 
-// Label above control so ImGui's trailing label can't widen the node past kNodeWidth.
-static void param_slider(const char* label, float* value, float v_min, float v_max, const char* fmt) {
-    ImGui::TextUnformatted(label);
-    ImGui::SetNextItemWidth(kNodeWidth);
-    ImGui::PushID(label);
-    ImGui::SliderFloat("##v", value, v_min, v_max, fmt);
-    ImGui::PopID();
-}
-
-static void param_combo(const char* label, int* current, const char* const items[], int items_count) {
-    ImGui::TextUnformatted(label);
-    ImGui::SetNextItemWidth(kNodeWidth);
-    ImGui::PushID(label);
-    ImGui::Combo("##v", current, items, items_count);
+static void render_module(Module& module, int node_id) {
+    ImGui::PushID(node_id);
+    ImGui::PushItemWidth(kNodeWidth);
+    module.render();
+    ImGui::PopItemWidth();
     ImGui::PopID();
 }
 
@@ -219,33 +209,33 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
     NodeState& st = node.state();
     switch (node.type()) {
     case NodeType::wav_player:
-        if (auto* p = st.as<node_params::WavPlayer>()) {
-            // Show filename only; full path stays in p->path / tooltip / picker.
-            const char* slash = std::strrchr(p->path.c_str(), '/');
-            const char* leaf = slash ? slash + 1 : p->path.c_str();
+        if (auto* m = st.as<node_params::WavPlayer>()) {
+            // File picker uses shared browser state — keep the "..." button here.
+            const char* slash = std::strrchr(m->path.c_str(), '/');
+            const char* leaf = slash ? slash + 1 : m->path.c_str();
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
             ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
             ImGui::PopTextWrapPos();
-            if (ImGui::IsItemHovered() && !p->path.empty()) {
-                ImGui::SetTooltip("%s", p->path.c_str());
+            if (ImGui::IsItemHovered() && !m->path.empty()) {
+                ImGui::SetTooltip("%s", m->path.c_str());
             }
             ImGui::SameLine();
             if (ImGui::SmallButton("...")) {
                 wav_picker_node_id() = node.id();
-                open_browser_near_path(wav_open_browser(), p->path.c_str());
+                open_browser_near_path(wav_open_browser(), m->path.c_str());
             }
-            ImGui::Checkbox("Loop", &p->loop);
+            render_module(*m, node.id());
         }
         break;
     case NodeType::audio_input:
-        if (auto* p = st.as<node_params::AudioInput>()) {
+        if (auto* m = st.as<node_params::AudioInput>()) {
             static std::vector<AudioDevice> devices = list_capture_devices();
             static std::vector<const char*> labels;
             ImGui::TextUnformatted("Device");
             ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##cap_dev", p->device, devices, labels)) {
+            if (draw_device_combo("##cap_dev", m->device, devices, labels)) {
                 std::string err;
-                g_pipeline.set_capture_device(p->device.c_str(), err);
+                g_pipeline.set_capture_device(m->device.c_str(), err);
             }
             if (g_pipeline.offline_mode) {
                 ImGui::TextDisabled("offline");
@@ -253,143 +243,112 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         }
         break;
     case NodeType::chord_generator:
-        if (auto* p = st.as<node_params::Chord>()) {
-            ImGui::TextUnformatted("Chord");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            ImGui::Combo("##chord", &p->index, chord_combo_items(), kChordCount);
-            p->index = std::clamp(p->index, 0, kChordCount - 1);
+        if (auto* m = st.as<node_params::Chord>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::white_noise:
-        if (auto* p = st.as<node_params::WhiteNoise>()) {
-            param_slider("Level", &p->level, 0.0f, 1.0f, "%.2f");
+        if (auto* m = st.as<node_params::WhiteNoise>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::echo:
-        if (auto* p = st.as<node_params::Echo>()) {
-            param_slider("Delay ms", &p->delay_ms, 10.0f, 1000.0f, "%.0f");
-            param_slider("Feedback", &p->feedback, 0.0f, 0.95f, "%.2f");
-            param_slider("Mix", &p->mix, 0.0f, 1.0f, "%.2f");
+        if (auto* m = st.as<node_params::Echo>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::preamp:
-        if (auto* p = st.as<node_params::Preamp>()) {
-            param_slider("Gain dB", &p->gain_db, -12.0f, 24.0f, "%.1f");
+        if (auto* m = st.as<node_params::Preamp>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::high_pass:
-        if (auto* p = st.as<node_params::HighPass>()) {
-            DynamicHighPassFilter ui;
-            ui.params = *p;
-            ImGui::PushID(node.id());
-            ImGui::PushItemWidth(kNodeWidth);
-            if (ui.render()) {
-                *p = ui.params;
-            }
-            ImGui::PopItemWidth();
-            ImGui::PopID();
+        if (auto* m = st.as<node_params::HighPass>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::drive_pedal:
-        if (auto* p = st.as<node_params::Drive>()) {
-            static const char* models[] = {"Tube Screamer", "RAT", "Big Muff"};
-            param_combo("Model", &p->model, models, IM_ARRAYSIZE(models));
-            param_slider("Drive", &p->amount, 0.0f, 10.0f, "%.2f");
-            param_slider("Tone", &p->tone, 0.0f, 1.0f, "%.2f");
+        if (auto* m = st.as<node_params::Drive>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::low_pass:
-        if (auto* p = st.as<node_params::LowPass>()) {
-            DynamicLowPassFilter ui;
-            ui.params = *p;
-            ImGui::PushID(node.id());
-            ImGui::PushItemWidth(kNodeWidth);
-            if (ui.render()) {
-                *p = ui.params;
-            }
-            ImGui::PopItemWidth();
-            ImGui::PopID();
+        if (auto* m = st.as<node_params::LowPass>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::compressor:
-        if (auto* p = st.as<node_params::Compressor>()) {
-            param_slider("Thresh dB", &p->threshold_db, -40.0f, 0.0f, "%.1f");
-            param_slider("Ratio", &p->ratio, 1.0f, 20.0f, "%.1f");
-            param_slider("Attack ms", &p->attack_ms, 1.0f, 100.0f, "%.1f");
-            param_slider("Release ms", &p->release_ms, 10.0f, 500.0f, "%.0f");
-            param_slider("Drive", &p->drive, 0.5f, 5.0f, "%.2f");
-            param_slider("Makeup dB", &p->makeup_db, -12.0f, 24.0f, "%.1f");
+        if (auto* m = st.as<node_params::Compressor>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::noise_gate:
-        if (auto* p = st.as<node_params::NoiseGate>()) {
-            param_slider("Thresh dB", &p->threshold_db, -80.0f, -10.0f, "%.1f");
-            param_slider("Attack ms", &p->attack_ms, 1.0f, 50.0f, "%.1f");
-            param_slider("Release ms", &p->release_ms, 10.0f, 400.0f, "%.0f");
+        if (auto* m = st.as<node_params::NoiseGate>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::eq_three_band:
-        if (auto* p = st.as<node_params::EqThreeBand>()) {
-            param_slider("Low dB", &p->low_db, -18.0f, 18.0f, "%.1f");
-            param_slider("Mid dB", &p->mid_db, -18.0f, 18.0f, "%.1f");
-            param_slider("High dB", &p->high_db, -18.0f, 18.0f, "%.1f");
+        if (auto* m = st.as<node_params::EqThreeBand>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::reverb:
-        if (auto* p = st.as<node_params::Reverb>()) {
-            param_slider("Room", &p->room, 0.0f, 1.0f, "%.2f");
-            param_slider("Damping", &p->damping, 0.0f, 1.0f, "%.2f");
-            param_slider("Mix", &p->mix, 0.0f, 1.0f, "%.2f");
+        if (auto* m = st.as<node_params::Reverb>()) {
+            render_module(*m, node.id());
         }
         break;
     case NodeType::dry_wet_mix:
-        if (auto* p = st.as<node_params::DryWet>()) {
-            param_slider("Wet", &p->mix, 0.0f, 1.0f, "%.2f");
+        if (auto* m = st.as<node_params::DryWet>()) {
+            render_module(*m, node.id());
         }
         ImGui::TextDisabled("dry / wet");
         break;
     case NodeType::wav_recorder:
-        if (auto* p = st.as<node_params::WavRecorder>()) {
-            ImGui::Checkbox("Arm Record", &p->armed);
+        if (auto* m = st.as<node_params::WavRecorder>()) {
+            render_module(*m, node.id());
         }
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
         ImGui::TextUnformatted(graph.record_path().c_str());
         ImGui::PopTextWrapPos();
         break;
     case NodeType::vu_meter:
-        if (auto* p = st.as<node_params::VuMeter>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
-            param_slider("Decay", &p->decay, 0.5f, 0.99f, "%.2f");
+        if (auto* m = st.as<node_params::VuMeter>()) {
+            render_module(*m, node.id());
         }
         draw_vu_widget(node.id());
         break;
     case NodeType::oscilloscope:
-        if (auto* p = st.as<node_params::Oscilloscope>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
+        if (auto* m = st.as<node_params::Oscilloscope>()) {
+            render_module(*m, node.id());
         }
         draw_scope_widget(node.id());
         break;
     case NodeType::spectrum:
-        if (auto* p = st.as<node_params::Spectrum>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
+        if (auto* m = st.as<node_params::Spectrum>()) {
+            render_module(*m, node.id());
         }
         draw_spectrum_widget(node.id());
         break;
     case NodeType::pitch_detector:
+        if (auto* m = st.as<node_params::PitchDetector>()) {
+            render_module(*m, node.id());
+        }
         draw_pitch_widget(node.id());
         break;
     case NodeType::mixer:
-        ImGui::TextDisabled("avg mix");
+        if (auto* m = st.as<node_params::Mixer>()) {
+            render_module(*m, node.id());
+        }
         break;
     case NodeType::output:
-        if (auto* p = st.as<node_params::AudioOutput>()) {
+        if (auto* m = st.as<node_params::AudioOutput>()) {
             static std::vector<AudioDevice> devices = list_playback_devices();
             static std::vector<const char*> labels;
             ImGui::TextUnformatted("Device");
             ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##play_dev", p->device, devices, labels)) {
+            if (draw_device_combo("##play_dev", m->device, devices, labels)) {
                 std::string err;
-                g_pipeline.set_playback_device(p->device.c_str(), err);
+                g_pipeline.set_playback_device(m->device.c_str(), err);
             }
             if (g_pipeline.offline_mode) {
                 ImGui::TextDisabled("offline");

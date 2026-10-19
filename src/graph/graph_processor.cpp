@@ -91,24 +91,35 @@ void GraphProcessor::mix_inputs(const CompiledGraph::Node& node,
                 wet = it->second->data();
             }
         }
-        float mix = 0.5f;
-        if (const auto* p = node.state().as<node_params::DryWet>()) {
-            mix = std::clamp(p->mix, 0.0f, 1.0f);
+        DryWetMix mix;
+        if (const auto* m = node.state().as<node_params::DryWet>()) {
+            mix.mix = m->mix;
         }
-        for (size_t i = 0; i < block_size_; ++i) {
-            const float d = dry ? dry[i] : 0.0f;
-            const float w = wet ? wet[i] : 0.0f;
-            destination[i] = d * (1.0f - mix) + w * mix;
-        }
+        mix.process(dry, wet, destination, block_size_);
         return;
     }
 
-    int connected = 0;
-    for (const auto& in : node.inputs()) {
-        // Per-slot mute is Mixer-only UI; ignore mute flags on other node types.
-        if (node_is_mixer(node.type()) && node.state().is_input_muted(in.to_slot)) {
-            continue;
+    if (node_is_mixer(node.type())) {
+        const float* sources[kMaxMixerInputs]{};
+        size_t source_count = 0;
+        for (const auto& in : node.inputs()) {
+            if (node.state().is_input_muted(in.to_slot)) {
+                continue;
+            }
+            auto it = buffers.find(in.from_node);
+            if (it == buffers.end() || !it->second || it->second->size() != block_size_) {
+                continue;
+            }
+            if (source_count < static_cast<size_t>(kMaxMixerInputs)) {
+                sources[source_count++] = it->second->data();
+            }
         }
+        Mixer{}.process(sources, source_count, destination, block_size_);
+        return;
+    }
+
+    // Single-input (or fan-in sum without averaging) for other node types.
+    for (const auto& in : node.inputs()) {
         auto it = buffers.find(in.from_node);
         if (it == buffers.end() || !it->second) {
             continue;
@@ -126,14 +137,6 @@ void GraphProcessor::mix_inputs(const CompiledGraph::Node& node,
         }
         for (size_t i = 0; i < block_size_; ++i) {
             destination[i] += src[i] * input_gain;
-        }
-        ++connected;
-    }
-
-    if (node_is_mixer(node.type()) && connected > 0) {
-        const float scale = 1.0f / static_cast<float>(connected);
-        for (size_t i = 0; i < block_size_; ++i) {
-            destination[i] *= scale;
         }
     }
 }
@@ -156,15 +159,15 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
         }
         bool loop = true;
         std::string path;
-        if (const auto* p = ns.as<node_params::WavPlayer>()) {
-            loop = p->loop;
-            path = p->path;
+        if (const auto* m = ns.as<node_params::WavPlayer>()) {
+            loop = m->loop;
+            path = m->path;
         }
         if (path != state.wav_path) {
             state.wav_path = path;
             state.wav_clip = clip_for_path(path);
             if (!state.wav_clip) {
-                state.wav_clip = wav_clip_; // legacy global fallback
+                state.wav_clip = wav_clip_;
             }
             state.wav.reset();
         }
@@ -183,8 +186,8 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
             source_scratch_.assign(block_size_, 0);
         }
         int chord = 0;
-        if (const auto* p = ns.as<node_params::Chord>()) {
-            chord = p->index;
+        if (const auto* m = ns.as<node_params::Chord>()) {
+            chord = m->index;
         }
         state.chord.render(chord, source_scratch_.data(), block_size_ / 2, 2,
                            static_cast<uint32_t>(sample_rate_));
@@ -193,100 +196,106 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
         }
         break;
     }
-    case NodeType::white_noise: {
-        float level = 0.2f;
-        if (const auto* p = ns.as<node_params::WhiteNoise>()) {
-            level = std::clamp(p->level, 0.0f, 1.0f);
+    case NodeType::white_noise:
+        if (const auto* m = ns.as<node_params::WhiteNoise>()) {
+            state.white_noise.level = m->level;
         }
-        // LCG white noise, independent per interleaved sample.
-        for (size_t i = 0; i < block_size_; ++i) {
-            state.noise_rng = state.noise_rng * 1664525u + 1013904223u;
-            const float unit = static_cast<float>((state.noise_rng >> 8) & 0x00FFFFFFu) *
-                               (1.0f / 16777216.0f);
-            block[i] = (unit * 2.0f - 1.0f) * level;
-        }
+        state.white_noise.process(block, block_size_);
         break;
-    }
     case NodeType::echo:
-        if (const auto* p = ns.as<node_params::Echo>()) {
-            state.echo.process(block, block_size_, p->delay_ms, p->feedback, p->mix, sample_rate_);
+        if (const auto* m = ns.as<node_params::Echo>()) {
+            state.echo.copy_controls_from(*m);
+            state.echo.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::preamp:
-        if (const auto* p = ns.as<node_params::Preamp>()) {
-            state.preamp.process(block, block_size_, p->gain_db);
+        if (const auto* m = ns.as<node_params::Preamp>()) {
+            state.preamp.gain_db = m->gain_db;
+            state.preamp.selected_preset = m->selected_preset;
+            state.preamp.process(block, block_size_);
         }
         break;
     case NodeType::high_pass:
-        if (const auto* p = ns.as<node_params::HighPass>()) {
-            state.high_pass.params = *p;
+        if (const auto* m = ns.as<node_params::HighPass>()) {
+            state.high_pass.cutoff_hz = m->cutoff_hz;
+            state.high_pass.selected_preset = m->selected_preset;
             state.high_pass.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::low_pass:
-        if (const auto* p = ns.as<node_params::LowPass>()) {
-            state.low_pass.params = *p;
+        if (const auto* m = ns.as<node_params::LowPass>()) {
+            state.low_pass.cutoff_hz = m->cutoff_hz;
+            state.low_pass.selected_preset = m->selected_preset;
             state.low_pass.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::drive_pedal:
-        if (const auto* p = ns.as<node_params::Drive>()) {
-            state.drive.process(block, block_size_,
-                                static_cast<guitar_pedals::DriveModel>(p->model), p->amount,
-                                p->tone, sample_rate_);
+        if (const auto* m = ns.as<node_params::Drive>()) {
+            state.drive.copy_controls_from(*m);
+            state.drive.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::compressor:
-        if (const auto* p = ns.as<node_params::Compressor>()) {
-            state.compressor.process(block, block_size_, p->threshold_db, p->ratio, p->attack_ms,
-                                     p->release_ms, p->drive, p->makeup_db, sample_rate_);
+        if (const auto* m = ns.as<node_params::Compressor>()) {
+            state.compressor.copy_controls_from(*m);
+            state.compressor.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::noise_gate:
-        if (const auto* p = ns.as<node_params::NoiseGate>()) {
-            state.gate.process(block, block_size_, p->threshold_db, p->attack_ms, p->release_ms,
-                               sample_rate_);
+        if (const auto* m = ns.as<node_params::NoiseGate>()) {
+            state.gate.copy_controls_from(*m);
+            state.gate.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::eq_three_band:
-        if (const auto* p = ns.as<node_params::EqThreeBand>()) {
-            state.eq.process(block, block_size_, p->low_db, p->mid_db, p->high_db, sample_rate_);
+        if (const auto* m = ns.as<node_params::EqThreeBand>()) {
+            state.eq.copy_controls_from(*m);
+            state.eq.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::reverb:
-        if (const auto* p = ns.as<node_params::Reverb>()) {
-            state.reverb.process(block, block_size_, p->room, p->damping, p->mix, sample_rate_);
+        if (const auto* m = ns.as<node_params::Reverb>()) {
+            state.reverb.copy_controls_from(*m);
+            state.reverb.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::vu_meter:
-    case NodeType::oscilloscope:
-    case NodeType::spectrum:
-    case NodeType::pitch_detector: {
-        float display_gain = 1.0f;
-        float vu_decay = 0.85f;
-        if (const auto* p = ns.as<node_params::VuMeter>()) {
-            display_gain = p->display_gain;
-            vu_decay = p->decay;
-        } else if (const auto* p = ns.as<node_params::Oscilloscope>()) {
-            display_gain = p->display_gain;
-        } else if (const auto* p = ns.as<node_params::Spectrum>()) {
-            display_gain = p->display_gain;
+        if (const auto* m = ns.as<node_params::VuMeter>()) {
+            state.vu_meter.display_gain = m->display_gain;
+            state.vu_meter.decay = m->decay;
         }
         g_visualizer_bus.analyze(node.id(), node.type(), block, block_size_, sample_rate_,
-                                 display_gain, vu_decay);
+                                 state.vu_meter.display_gain, state.vu_meter.decay);
         break;
-    }
+    case NodeType::oscilloscope:
+        if (const auto* m = ns.as<node_params::Oscilloscope>()) {
+            state.oscilloscope.display_gain = m->display_gain;
+        }
+        g_visualizer_bus.analyze(node.id(), node.type(), block, block_size_, sample_rate_,
+                                 state.oscilloscope.display_gain, 0.85f);
+        break;
+    case NodeType::spectrum:
+        if (const auto* m = ns.as<node_params::Spectrum>()) {
+            state.spectrum.display_gain = m->display_gain;
+        }
+        g_visualizer_bus.analyze(node.id(), node.type(), block, block_size_, sample_rate_,
+                                 state.spectrum.display_gain, 0.85f);
+        break;
+    case NodeType::pitch_detector:
+        g_visualizer_bus.analyze(node.id(), node.type(), block, block_size_, sample_rate_, 1.0f,
+                                 0.85f);
+        break;
     case NodeType::mixer:
     case NodeType::dry_wet_mix:
         break;
     case NodeType::wav_recorder: {
         bool armed = false;
-        if (const auto* p = ns.as<node_params::WavRecorder>()) {
-            armed = p->armed;
+        if (const auto* m = ns.as<node_params::WavRecorder>()) {
+            armed = m->armed;
         }
         state.recorder.set_path(record_path_);
         state.recorder.set_armed(armed, sample_rate_);
-        state.recorder.write(block, block_size_);
+        state.recorder.write_samples(block, block_size_);
         break;
     }
     case NodeType::output:

@@ -6,7 +6,7 @@
 
 void DynamicHighPassFilter::process(float* samples, size_t num_samples, float sample_rate) {
     float dt = 1.0f / sample_rate;
-    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * params.cutoff_hz);
+    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff_hz);
     float alpha = rc / (rc + dt);
 
     for (size_t i = 0; i < num_samples; i += 2) {
@@ -40,31 +40,30 @@ bool DynamicHighPassFilter::render() {
 
     ImGui::TextUnformatted("Preset");
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::Combo("##hpf_preset", &params.selected_preset, preset_names,
-                     IM_ARRAYSIZE(preset_names))) {
-        if (params.selected_preset > 0 &&
-            params.selected_preset < IM_ARRAYSIZE(preset_cutoffs)) {
-            params.cutoff_hz = preset_cutoffs[params.selected_preset];
+    if (ImGui::Combo("##hpf_preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names))) {
+        if (selected_preset > 0 && selected_preset < IM_ARRAYSIZE(preset_cutoffs)) {
+            cutoff_hz = preset_cutoffs[selected_preset];
         }
         changed = true;
     }
 
     ImGui::TextUnformatted("Cutoff Hz");
     ImGui::SetNextItemWidth(-1.0f);
-    if (ImGui::SliderFloat("##hpf_cutoff", &params.cutoff_hz, 20.0f, 1000.0f, "%.0f")) {
-        params.selected_preset = 0; // Custom
+    if (ImGui::SliderFloat("##hpf_cutoff", &cutoff_hz, 20.0f, 1000.0f, "%.0f")) {
+        selected_preset = 0;
         changed = true;
     }
 
     return changed;
 }
 
-void DynamicHighPassFilter::Params::write(std::string& out, bool& first) const {
+void DynamicHighPassFilter::save(std::string& out, bool& first) const {
     module_json::write_float(out, first, "cutoff_hz", cutoff_hz);
     module_json::write_int(out, first, "selected_preset", selected_preset);
 }
-bool DynamicHighPassFilter::Params::read(const std::string& key, double num, bool, const std::string&,
-                                         int kind) {
+
+bool DynamicHighPassFilter::load(const std::string& key, double num, bool, const std::string&,
+                                 int kind) {
     if (kind != module_json::kKindNumber) {
         return false;
     }

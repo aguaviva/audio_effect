@@ -3,7 +3,7 @@
 #include <cctype>
 #include <string>
 
-// Shared JSON field helpers for DSP module Params::{save,load}_json.
+// Shared JSON field helpers for Module::save / Module::load.
 namespace module_json {
 
 inline void append_comma(std::string& out, bool& first) {
@@ -145,17 +145,17 @@ inline bool parse_object(const std::string& text, size_t& i, T& module) {
             if (!parse_string_key(text, i, str)) {
                 return false;
             }
-            module.read(key, 0.0, false, str, kKindString);
+            module.load(key, 0.0, false, str, kKindString);
         } else if (text.compare(i, 4, "true") == 0 || text.compare(i, 5, "false") == 0) {
             const bool flag = text.compare(i, 4, "true") == 0;
             i += flag ? 4 : 5;
-            module.read(key, 0.0, flag, std::string{}, kKindBool);
+            module.load(key, 0.0, flag, std::string{}, kKindBool);
         } else {
             double num = 0.0;
             if (!parse_number_value(text, i, num)) {
                 return false;
             }
-            module.read(key, num, false, std::string{}, kKindNumber);
+            module.load(key, num, false, std::string{}, kKindNumber);
         }
         if (!skip_ws(text, i)) {
             return false;
@@ -176,7 +176,7 @@ template <typename T>
 inline std::string save_object(const T& module) {
     std::string out = "{";
     bool first = true;
-    module.write(out, first);
+    module.save(out, first);
     out += '}';
     return out;
 }

@@ -1,30 +1,34 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
 #include <array>
 #include <cstddef>
 #include <string>
 #include <vector>
 
-// Lightweight stereo Schroeder-style reverb (comb + allpass).
-class SimpleReverb {
+class SimpleReverb : public Module {
 public:
-    static std::string name() { return "reverb"; }
-
-    struct Params {
-        float room = 0.55f;
-        float damping = 0.4f;
-        float mix = 0.25f;
-
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
+    float room = 0.55f;
+    float damping = 0.4f;
+    float mix = 0.25f;
 
     SimpleReverb();
-    void process(float* interleaved, size_t sample_count, float room_size, float damping,
-                 float mix, float sample_rate);
+
+    std::string name() const override { return "reverb"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
+
+    void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
+
+    void copy_controls_from(const SimpleReverb& other) {
+        room = other.room;
+        damping = other.damping;
+        mix = other.mix;
+    }
 
 private:
     struct Comb {

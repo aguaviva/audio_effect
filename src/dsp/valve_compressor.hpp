@@ -1,43 +1,37 @@
 #pragma once
 
-#include "module_json.hpp"
+#include "module.hpp"
 
-#include <atomic>
 #include <cstddef>
 #include <string>
 
-class ValveCompressor {
+class ValveCompressor : public Module {
 public:
-    static std::string name() { return "compressor"; }
+    float threshold_db = -18.0f;
+    float ratio = 3.0f;
+    float attack_ms = 15.0f;
+    float release_ms = 100.0f;
+    float drive = 1.25f;
+    float makeup_db = 0.0f;
+    int selected_preset = 0; // 0 = Custom
 
-    struct Params {
-        float threshold_db = -18.0f;
-        float ratio = 3.0f;
-        float attack_ms = 15.0f;
-        float release_ms = 100.0f;
-        float drive = 1.25f;
-        float makeup_db = 0.0f;
+    std::string name() const override { return "compressor"; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
 
-        void write(std::string& out, bool& first) const;
-        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-    };
+    void process(float* samples, size_t num_samples, float sample_rate);
 
-    // samples: normalized interleaved stereo values, modified in place.
-    // num_samples: number of float values, not stereo frames.
-    // threshold_db: lower values compress more of the signal.
-    // ratio: 1:1 is neutral; larger ratios reduce peaks more strongly.
-    // attack_ms/release_ms: how quickly compression engages and relaxes.
-    // drive adds asymmetric saturation; makeup_db restores post-compression level.
-    // sample_rate: audio samples per second.
-    void process(float* samples, size_t num_samples, float threshold_db, float ratio,
-                 float attack_ms, float release_ms, float drive, float makeup_db,
-                 float sample_rate);
-    static void render(std::atomic<bool>& enabled,
-                       std::atomic<float>& threshold_db, std::atomic<float>& ratio,
-                       std::atomic<float>& attack_ms, std::atomic<float>& release_ms,
-                       std::atomic<float>& drive, std::atomic<float>& makeup_db,
-                       int& selected_preset, bool& controls_changed,
-                       bool& compressor_controls_changed);
+    void copy_controls_from(const ValveCompressor& other) {
+        threshold_db = other.threshold_db;
+        ratio = other.ratio;
+        attack_ms = other.attack_ms;
+        release_ms = other.release_ms;
+        drive = other.drive;
+        makeup_db = other.makeup_db;
+        selected_preset = other.selected_preset;
+    }
 
 private:
     float envelope_{0.0f};

@@ -7,7 +7,9 @@
 #include "dsp/dynamic_low_pass_filter.hpp"
 #include "dsp/echo_effect.hpp"
 #include "dsp/eq_three_band.hpp"
+#include "dsp/graph_modules.hpp"
 #include "dsp/guitar_pedals.hpp"
+#include "dsp/mixer.hpp"
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
@@ -51,12 +53,18 @@ private:
         NoiseGate gate;
         EqThreeBand eq;
         SimpleReverb reverb;
+        WhiteNoise white_noise;
+        DryWetMix dry_wet;
+        VuMeter vu_meter;
+        Oscilloscope oscilloscope;
+        Spectrum spectrum;
+        PitchDetectorModule pitch_detector;
+        Mixer mixer;
         WavFileInput wav;
         ChordGeneratorInput chord;
-        WavRecorder recorder;
+        WavRecorderEngine recorder;
         std::shared_ptr<const WavClip> wav_clip;
         std::string wav_path;
-        uint32_t noise_rng = 0x12345678u;
         std::vector<float> buffer;
 
         explicit NodeRuntime(size_t max_delay_samples)

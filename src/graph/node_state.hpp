@@ -1,12 +1,13 @@
 #pragma once
 
-#include "dsp/chord_catalog.hpp"
 #include "dsp/dynamic_high_pass_filter.hpp"
 #include "dsp/dynamic_low_pass_filter.hpp"
 #include "dsp/echo_effect.hpp"
 #include "dsp/eq_three_band.hpp"
+#include "dsp/graph_modules.hpp"
 #include "dsp/guitar_pedals.hpp"
-#include "dsp/module_json.hpp"
+#include "dsp/mixer.hpp"
+#include "dsp/module.hpp"
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
@@ -19,135 +20,41 @@
 #include <string>
 #include <variant>
 
-// Per-node modules. DSP-backed effects: name() on the DSP class, write/read on
-// Params. Graph-only modules keep name/write/read here.
-// Graph load matches JSON "type" to the DSP/module name(), then fills via read().
+// Graph node modules: each concrete type implements Module
+// (name / save / load / render). Fields live on the class itself.
 namespace node_params {
 
-struct None {
-    static std::string name() { return "none"; }
-
-    void write(std::string& /*out*/, bool& /*first*/) const {}
-    bool read(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
-              int /*kind*/) {
+struct None : Module {
+    std::string name() const override { return "none"; }
+    void save(std::string& /*out*/, bool& /*first*/) const override {}
+    bool load(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
+              int /*kind*/) override {
         return false;
     }
+    bool render() override { return false; }
 };
 
-struct WavPlayer {
-    bool loop = true;
-    std::string path;
-
-    static std::string name() { return "wav_player"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct AudioInput {
-    std::string device = "default";
-
-    static std::string name() { return "audio_input"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct AudioOutput {
-    std::string device = "default";
-
-    static std::string name() { return "output"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct Chord {
-    int index = 0;
-
-    static std::string name() { return "chord_generator"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct WhiteNoise {
-    float level = 0.2f;
-
-    static std::string name() { return "white_noise"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-// DSP-backed modules: Params live on the DSP class.
-using Echo = EchoEffect::Params;
-using Preamp = ::Preamp::Params;
-using HighPass = DynamicHighPassFilter::Params;
-using LowPass = DynamicLowPassFilter::Params;
-using Drive = guitar_pedals::DrivePedal::Params;
-using Compressor = ValveCompressor::Params;
-using NoiseGate = ::NoiseGate::Params;
-using EqThreeBand = ::EqThreeBand::Params;
-using Reverb = SimpleReverb::Params;
-using WavRecorder = ::WavRecorder::Params;
-
-struct DryWet {
-    float mix = 0.5f;
-
-    static std::string name() { return "dry_wet_mix"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct VuMeter {
-    float display_gain = 1.0f;
-    float decay = 0.85f;
-
-    static std::string name() { return "vu_meter"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct Oscilloscope {
-    float display_gain = 1.0f;
-
-    static std::string name() { return "oscilloscope"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct Spectrum {
-    float display_gain = 1.0f;
-
-    static std::string name() { return "spectrum"; }
-
-    void write(std::string& out, bool& first) const;
-    bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
-};
-
-struct PitchDetector {
-    static std::string name() { return "pitch_detector"; }
-
-    void write(std::string& /*out*/, bool& /*first*/) const {}
-    bool read(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
-              int /*kind*/) {
-        return false;
-    }
-};
-
-struct Mixer {
-    static std::string name() { return "mixer"; }
-
-    void write(std::string& /*out*/, bool& /*first*/) const {}
-    bool read(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
-              int /*kind*/) {
-        return false;
-    }
-};
+using WavPlayer = ::WavPlayer;
+using AudioInput = ::AudioInput;
+using AudioOutput = ::AudioOutput;
+using Chord = ::ChordGenerator;
+using WhiteNoise = ::WhiteNoise;
+using Echo = EchoEffect;
+using Preamp = ::Preamp;
+using HighPass = DynamicHighPassFilter;
+using LowPass = DynamicLowPassFilter;
+using Drive = guitar_pedals::DrivePedal;
+using Compressor = ValveCompressor;
+using NoiseGate = ::NoiseGate;
+using EqThreeBand = ::EqThreeBand;
+using Reverb = SimpleReverb;
+using DryWet = ::DryWetMix;
+using WavRecorder = ::WavRecorder;
+using VuMeter = ::VuMeter;
+using Oscilloscope = ::Oscilloscope;
+using Spectrum = ::Spectrum;
+using PitchDetector = ::PitchDetectorModule;
+using Mixer = ::Mixer; // dsp/mixer.hpp
 
 using Variant = std::variant<None, WavPlayer, AudioInput, AudioOutput, Chord, WhiteNoise, Echo,
                              Preamp, HighPass, LowPass, Drive, Compressor, NoiseGate, EqThreeBand,
