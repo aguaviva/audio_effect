@@ -7,21 +7,32 @@
 
 #include "imgui.h"
 
-void WavPlayer::save(std::string& out, bool& first) const {
-    module_json::write_bool(out, first, "loop", loop);
-    module_json::write_string(out, first, "path", path);
+std::string WavPlayer::save() const {
+    std::string out = "{";
+    module_json::write_bool(out, "loop", loop);
+    module_json::write_string(out, "path", path);
+    out += '}';
+    return out;
 }
-bool WavPlayer::load(const std::string& key, double, bool flag, const std::string& str, int kind) {
-    if (key == "loop" && kind == module_json::kKindBool) {
-        loop = flag;
-        return true;
-    }
-    if (key == "path" && kind == module_json::kKindString) {
-        path = str;
-        return true;
-    }
-    return false;
+
+bool WavPlayer::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "loop") {
+            if (!module_json::parse_bool_value(text, i, loop)) {
+                return false;
+            }
+            return true;
+        }
+        if (key == "path") {
+            if (!module_json::parse_string_key(text, i, path)) {
+                return false;
+            }
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool WavPlayer::render() {
     return ImGui::Checkbox("Loop", &loop);
 }
@@ -53,16 +64,28 @@ void WavPlayer::process(ProcessContext& ctx) {
     }
 }
 
-void AudioInput::save(std::string& out, bool& first) const {
-    module_json::write_string(out, first, "device", device);
+std::string AudioInput::save() const {
+    std::string out = "{";
+    module_json::write_string(out, "device", device);
+    out += '}';
+    return out;
 }
-bool AudioInput::load(const std::string& key, double, bool, const std::string& str, int kind) {
-    if (key == "device" && kind == module_json::kKindString) {
-        device = str.empty() ? "default" : str;
-        return true;
-    }
-    return false;
+
+bool AudioInput::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "device") {
+            if (!module_json::parse_string_key(text, i, device)) {
+                return false;
+            }
+            if (device.empty()) {
+                device = "default";
+            }
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool AudioInput::render() {
     ImGui::TextUnformatted(device.c_str());
     return false;
@@ -76,31 +99,54 @@ void AudioInput::process(ProcessContext& ctx) {
     }
 }
 
-void AudioOutput::save(std::string& out, bool& first) const {
-    module_json::write_string(out, first, "device", device);
+std::string AudioOutput::save() const {
+    std::string out = "{";
+    module_json::write_string(out, "device", device);
+    out += '}';
+    return out;
 }
-bool AudioOutput::load(const std::string& key, double, bool, const std::string& str, int kind) {
-    if (key == "device" && kind == module_json::kKindString) {
-        device = str.empty() ? "default" : str;
-        return true;
-    }
-    return false;
+
+bool AudioOutput::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "device") {
+            if (!module_json::parse_string_key(text, i, device)) {
+                return false;
+            }
+            if (device.empty()) {
+                device = "default";
+            }
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool AudioOutput::render() {
     ImGui::TextUnformatted(device.c_str());
     return false;
 }
 
-void ChordGenerator::save(std::string& out, bool& first) const {
-    module_json::write_int(out, first, "chord_index", index);
+std::string ChordGenerator::save() const {
+    std::string out = "{";
+    module_json::write_int(out, "chord_index", index);
+    out += '}';
+    return out;
 }
-bool ChordGenerator::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (key == "chord_index" && kind == module_json::kKindNumber) {
-        index = std::clamp(static_cast<int>(num), 0, kChordCount - 1);
-        return true;
-    }
-    return false;
+
+bool ChordGenerator::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "chord_index") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            index = std::clamp(static_cast<int>(num), 0, kChordCount - 1);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool ChordGenerator::render() {
     ImGui::TextUnformatted("Chord");
     ImGui::SetNextItemWidth(-1.0f);
@@ -125,16 +171,27 @@ void ChordGenerator::process(ProcessContext& ctx) {
     }
 }
 
-void WhiteNoise::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "level", level);
+std::string WhiteNoise::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "level", level);
+    out += '}';
+    return out;
 }
-bool WhiteNoise::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (key == "level" && kind == module_json::kKindNumber) {
-        level = std::clamp(static_cast<float>(num), 0.0f, 1.0f);
-        return true;
-    }
-    return false;
+
+bool WhiteNoise::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "level") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            level = std::clamp(static_cast<float>(num), 0.0f, 1.0f);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool WhiteNoise::render() {
     ImGui::TextUnformatted("Level");
     ImGui::SetNextItemWidth(-1.0f);
@@ -152,16 +209,27 @@ void WhiteNoise::process(ProcessContext& ctx) {
     }
 }
 
-void DryWetMix::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "mix", mix);
+std::string DryWetMix::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "mix", mix);
+    out += '}';
+    return out;
 }
-bool DryWetMix::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (key == "mix" && kind == module_json::kKindNumber) {
-        mix = static_cast<float>(num);
-        return true;
-    }
-    return false;
+
+bool DryWetMix::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "mix") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            mix = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool DryWetMix::render() {
     ImGui::TextUnformatted("Wet");
     ImGui::SetNextItemWidth(-1.0f);
@@ -181,24 +249,36 @@ void DryWetMix::process(ProcessContext& ctx) {
     }
 }
 
-void VuMeter::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "display_gain", display_gain);
-    module_json::write_float(out, first, "decay", decay);
+std::string VuMeter::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "display_gain", display_gain);
+    module_json::write_float(out, "decay", decay);
+    out += '}';
+    return out;
 }
-bool VuMeter::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "display_gain") {
-        display_gain = static_cast<float>(num);
-        return true;
-    }
-    if (key == "decay") {
-        decay = static_cast<float>(num);
-        return true;
-    }
-    return false;
+
+bool VuMeter::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "display_gain") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            display_gain = static_cast<float>(num);
+            return true;
+        }
+        if (key == "decay") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            decay = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool VuMeter::render() {
     bool changed = false;
     ImGui::TextUnformatted("Gain");
@@ -215,16 +295,27 @@ void VuMeter::process(ProcessContext& ctx) {
     }
 }
 
-void Oscilloscope::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "display_gain", display_gain);
+std::string Oscilloscope::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "display_gain", display_gain);
+    out += '}';
+    return out;
 }
-bool Oscilloscope::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (key == "display_gain" && kind == module_json::kKindNumber) {
-        display_gain = static_cast<float>(num);
-        return true;
-    }
-    return false;
+
+bool Oscilloscope::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "display_gain") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            display_gain = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool Oscilloscope::render() {
     ImGui::TextUnformatted("Gain");
     ImGui::SetNextItemWidth(-1.0f);
@@ -236,16 +327,27 @@ void Oscilloscope::process(ProcessContext& ctx) {
     }
 }
 
-void Spectrum::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "display_gain", display_gain);
+std::string Spectrum::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "display_gain", display_gain);
+    out += '}';
+    return out;
 }
-bool Spectrum::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (key == "display_gain" && kind == module_json::kKindNumber) {
-        display_gain = static_cast<float>(num);
-        return true;
-    }
-    return false;
+
+bool Spectrum::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "display_gain") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            display_gain = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 bool Spectrum::render() {
     ImGui::TextUnformatted("Gain");
     ImGui::SetNextItemWidth(-1.0f);

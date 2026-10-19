@@ -7,17 +7,25 @@
 
 #include "imgui.h"
 
-void WavRecorder::save(std::string& out, bool& first) const {
-    module_json::write_bool(out, first, "armed", armed);
+std::string WavRecorder::save() const {
+    std::string out = "{";
+    module_json::write_bool(out, "armed", armed);
+    out += '}';
+    return out;
 }
 
-bool WavRecorder::load(const std::string& key, double, bool flag, const std::string&, int kind) {
-    if (key == "armed" && kind == module_json::kKindBool) {
-        armed = flag;
-        return true;
-    }
-    return false;
+bool WavRecorder::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "armed") {
+            if (!module_json::parse_bool_value(text, i, armed)) {
+                return false;
+            }
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 bool WavRecorder::render() {
     return ImGui::Checkbox("Arm Record", &armed);

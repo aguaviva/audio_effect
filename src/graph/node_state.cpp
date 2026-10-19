@@ -192,8 +192,7 @@ bool NodeState::load_by_module_name(const std::string& module_name, const std::s
 
 std::string NodeState::write_params() const {
     std::string out = "{";
-    bool first = true;
-    module_json::write_bool(out, first, "bypassed", bypassed);
+    module_json::write_bool(out, "bypassed", bypassed);
     bool any_muted = false;
     for (bool m : input_muted) {
         if (m) {
@@ -202,7 +201,7 @@ std::string NodeState::write_params() const {
         }
     }
     if (any_muted) {
-        module_json::append_comma(out, first);
+        module_json::append_comma(out);
         out += "\"muted\":[";
         for (size_t i = 0; i < input_muted.size(); ++i) {
             if (i > 0) {
@@ -212,117 +211,79 @@ std::string NodeState::write_params() const {
         }
         out += ']';
     }
-    std::visit([&](const auto& m) { m.save(out, first); }, params);
+    std::visit(
+        [&](const auto& m) { module_json::append_object_members(out, m.save()); }, params);
     out += '}';
     return out;
 }
 
 bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
     *this = make(type);
-    if (!module_json::expect_char(text, i, '{')) {
+    if (!module_json::skip_ws(text, i) || text[i] != '{') {
         return false;
     }
+    const size_t start = i;
+    if (!module_json::skip_value(text, i)) {
+        return false;
+    }
+    const std::string obj = text.substr(start, i - start);
 
-    while (true) {
-        if (!module_json::skip_ws(text, i)) {
-            return false;
-        }
-        if (text[i] == '}') {
-            ++i;
-            return true;
-        }
-        std::string key;
-        if (!module_json::parse_string_key(text, i, key) || !module_json::expect_char(text, i, ':')) {
-            return false;
-        }
-        if (!module_json::skip_ws(text, i)) {
-            return false;
-        }
-
-        if (key == "muted") {
-            if (!module_json::expect_char(text, i, '[')) {
-                return false;
-            }
-            int idx = 0;
-            while (true) {
-                if (!module_json::skip_ws(text, i)) {
+    const bool node_ok = module_json::for_each_member(
+        obj, [&](const std::string& key, const std::string& body, size_t& j) -> bool {
+            if (key == "bypassed") {
+                bool flag = false;
+                if (module_json::parse_bool_value(body, j, flag)) {
+                    bypassed = flag;
+                    return true;
+                }
+                double num = 0.0;
+                if (!module_json::parse_number_value(body, j, num)) {
                     return false;
                 }
-                if (text[i] == ']') {
-                    ++i;
-                    break;
+                bypassed = num != 0.0;
+                return true;
+            }
+            if (key == "muted") {
+                if (!module_json::expect_char(body, j, '[')) {
+                    return false;
                 }
-                if (text.compare(i, 4, "true") == 0) {
-                    if (idx >= 0 && idx < kMaxMixerInputs) {
-                        input_muted[static_cast<size_t>(idx)] = true;
-                    }
-                    i += 4;
-                } else if (text.compare(i, 5, "false") == 0) {
-                    if (idx >= 0 && idx < kMaxMixerInputs) {
-                        input_muted[static_cast<size_t>(idx)] = false;
-                    }
-                    i += 5;
-                } else {
-                    double num = 0.0;
-                    if (!module_json::parse_number_value(text, i, num)) {
+                int idx = 0;
+                while (true) {
+                    if (!module_json::skip_ws(body, j)) {
                         return false;
                     }
-                    if (idx >= 0 && idx < kMaxMixerInputs) {
-                        input_muted[static_cast<size_t>(idx)] = num != 0.0;
+                    if (body[j] == ']') {
+                        ++j;
+                        break;
+                    }
+                    bool flag = false;
+                    if (module_json::parse_bool_value(body, j, flag)) {
+                        if (idx >= 0 && idx < kMaxMixerInputs) {
+                            input_muted[static_cast<size_t>(idx)] = flag;
+                        }
+                    } else {
+                        double num = 0.0;
+                        if (!module_json::parse_number_value(body, j, num)) {
+                            return false;
+                        }
+                        if (idx >= 0 && idx < kMaxMixerInputs) {
+                            input_muted[static_cast<size_t>(idx)] = num != 0.0;
+                        }
+                    }
+                    ++idx;
+                    if (!module_json::skip_ws(body, j)) {
+                        return false;
+                    }
+                    if (body[j] == ',') {
+                        ++j;
                     }
                 }
-                ++idx;
-                if (!module_json::skip_ws(text, i)) {
-                    return false;
-                }
-                if (text[i] == ',') {
-                    ++i;
-                }
+                return true;
             }
-        } else if (text[i] == '"') {
-            std::string str;
-            if (!module_json::parse_string_key(text, i, str)) {
-                return false;
-            }
-            std::visit([&](auto& m) { m.load(key, 0.0, false, str, module_json::kKindString); },
-                       params);
-        } else if (text.compare(i, 4, "true") == 0 || text.compare(i, 5, "false") == 0) {
-            const bool flag = text.compare(i, 4, "true") == 0;
-            i += flag ? 4 : 5;
-            if (key == "bypassed") {
-                bypassed = flag;
-            } else {
-                std::visit(
-                    [&](auto& m) { m.load(key, 0.0, flag, std::string{}, module_json::kKindBool); },
-                    params);
-            }
-        } else {
-            double num = 0.0;
-            if (!module_json::parse_number_value(text, i, num)) {
-                return false;
-            }
-            if (key == "bypassed") {
-                bypassed = num != 0.0;
-            } else {
-                std::visit(
-                    [&](auto& m) {
-                        m.load(key, num, false, std::string{}, module_json::kKindNumber);
-                    },
-                    params);
-            }
-        }
-
-        if (!module_json::skip_ws(text, i)) {
-            return false;
-        }
-        if (text[i] == ',') {
-            ++i;
-            continue;
-        }
-        if (text[i] == '}') {
-            ++i;
-            return true;
-        }
+            return module_json::skip_value(body, j);
+        });
+    if (!node_ok) {
         return false;
     }
+    return std::visit([&](auto& m) { return m.load(obj); }, params);
 }

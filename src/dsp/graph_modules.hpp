@@ -17,9 +17,8 @@ public:
 
     std::string name() const override { return "wav_player"; }
     Role role() const override { return Role::source; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 
@@ -36,9 +35,8 @@ public:
 
     std::string name() const override { return "audio_input"; }
     Role role() const override { return Role::source; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 };
@@ -49,9 +47,8 @@ public:
 
     std::string name() const override { return "output"; }
     Role role() const override { return Role::sink; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& /*ctx*/) override {}
 };
@@ -62,9 +59,8 @@ public:
 
     std::string name() const override { return "chord_generator"; }
     Role role() const override { return Role::source; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 
@@ -79,9 +75,8 @@ public:
 
     std::string name() const override { return "white_noise"; }
     Role role() const override { return Role::source; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 
@@ -95,9 +90,8 @@ public:
 
     std::string name() const override { return "dry_wet_mix"; }
     Role role() const override { return Role::multi_in; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 };
@@ -109,9 +103,8 @@ public:
 
     std::string name() const override { return "vu_meter"; }
     Role role() const override { return Role::visualizer; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 };
@@ -122,9 +115,8 @@ public:
 
     std::string name() const override { return "oscilloscope"; }
     Role role() const override { return Role::visualizer; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 };
@@ -135,9 +127,8 @@ public:
 
     std::string name() const override { return "spectrum"; }
     Role role() const override { return Role::visualizer; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
+    std::string save() const override;
+    bool load(const std::string& json) override;
     bool render() override;
     void process(ProcessContext& ctx) override;
 };
@@ -146,11 +137,8 @@ class PitchDetectorModule : public Module {
 public:
     std::string name() const override { return "pitch_detector"; }
     Role role() const override { return Role::visualizer; }
-    void save(std::string& /*out*/, bool& /*first*/) const override {}
-    bool load(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
-              int /*kind*/) override {
-        return false;
-    }
+    std::string save() const override { return "{}"; }
+    bool load(const std::string& /*json*/) override { return true; }
     bool render() override { return false; }
     void process(ProcessContext& ctx) override;
 };

@@ -57,26 +57,36 @@ bool DynamicHighPassFilter::render() {
     return changed;
 }
 
-void DynamicHighPassFilter::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "cutoff_hz", cutoff_hz);
-    module_json::write_int(out, first, "selected_preset", selected_preset);
+std::string DynamicHighPassFilter::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "cutoff_hz", cutoff_hz);
+    module_json::write_int(out, "selected_preset", selected_preset);
+    out += '}';
+    return out;
 }
 
-bool DynamicHighPassFilter::load(const std::string& key, double num, bool, const std::string&,
-                                 int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "cutoff_hz") {
-        cutoff_hz = static_cast<float>(num);
-        return true;
-    }
-    if (key == "selected_preset") {
-        selected_preset = static_cast<int>(num);
-        return true;
-    }
-    return false;
+bool DynamicHighPassFilter::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "cutoff_hz") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            cutoff_hz = static_cast<float>(num);
+            return true;
+        }
+        if (key == "selected_preset") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            selected_preset = static_cast<int>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 void DynamicHighPassFilter::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

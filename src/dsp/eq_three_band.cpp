@@ -129,21 +129,45 @@ bool EqThreeBand::render() {
     return changed;
 }
 
-void EqThreeBand::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "low_db", low_db);
-    module_json::write_float(out, first, "mid_db", mid_db);
-    module_json::write_float(out, first, "high_db", high_db);
+std::string EqThreeBand::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "low_db", low_db);
+    module_json::write_float(out, "mid_db", mid_db);
+    module_json::write_float(out, "high_db", high_db);
+    out += '}';
+    return out;
 }
 
-bool EqThreeBand::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "low_db") { low_db = static_cast<float>(num); return true; }
-    if (key == "mid_db") { mid_db = static_cast<float>(num); return true; }
-    if (key == "high_db") { high_db = static_cast<float>(num); return true; }
-    return false;
+bool EqThreeBand::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "low_db") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            low_db = static_cast<float>(num);
+            return true;
+        }
+        if (key == "mid_db") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            mid_db = static_cast<float>(num);
+            return true;
+        }
+        if (key == "high_db") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            high_db = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 void EqThreeBand::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

@@ -19,50 +19,8 @@ void Module::apply_controls(const Module& from) {
     if (name() != from.name()) {
         return;
     }
-    // Field round-trip via save/load — keeps GraphProcessor free of concrete types.
-    std::string json = "{";
-    bool first = true;
-    from.save(json, first);
-    json += '}';
-    size_t i = 0;
-    if (!module_json::expect_char(json, i, '{')) {
-        return;
-    }
-    while (true) {
-        if (!module_json::skip_ws(json, i) || json[i] == '}') {
-            return;
-        }
-        std::string key;
-        if (!module_json::parse_string_key(json, i, key) ||
-            !module_json::expect_char(json, i, ':') || !module_json::skip_ws(json, i)) {
-            return;
-        }
-        if (json[i] == '"') {
-            std::string str;
-            if (!module_json::parse_string_key(json, i, str)) {
-                return;
-            }
-            load(key, 0.0, false, str, module_json::kKindString);
-        } else if (json.compare(i, 4, "true") == 0 || json.compare(i, 5, "false") == 0) {
-            const bool flag = json.compare(i, 4, "true") == 0;
-            i += flag ? 4 : 5;
-            load(key, 0.0, flag, std::string{}, module_json::kKindBool);
-        } else {
-            double num = 0.0;
-            if (!module_json::parse_number_value(json, i, num)) {
-                return;
-            }
-            load(key, num, false, std::string{}, module_json::kKindNumber);
-        }
-        if (!module_json::skip_ws(json, i)) {
-            return;
-        }
-        if (json[i] == ',') {
-            ++i;
-            continue;
-        }
-        return;
-    }
+    // Round-trip via Module::save/load — keeps GraphProcessor free of concrete types.
+    load(from.save());
 }
 
 int Module::max_inputs() const {

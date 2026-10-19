@@ -128,21 +128,45 @@ bool SimpleReverb::render() {
     return changed;
 }
 
-void SimpleReverb::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "room", room);
-    module_json::write_float(out, first, "damping", damping);
-    module_json::write_float(out, first, "mix", mix);
+std::string SimpleReverb::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "room", room);
+    module_json::write_float(out, "damping", damping);
+    module_json::write_float(out, "mix", mix);
+    out += '}';
+    return out;
 }
 
-bool SimpleReverb::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "room") { room = static_cast<float>(num); return true; }
-    if (key == "damping") { damping = static_cast<float>(num); return true; }
-    if (key == "mix") { mix = static_cast<float>(num); return true; }
-    return false;
+bool SimpleReverb::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "room") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            room = static_cast<float>(num);
+            return true;
+        }
+        if (key == "damping") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            damping = static_cast<float>(num);
+            return true;
+        }
+        if (key == "mix") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            mix = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 void SimpleReverb::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

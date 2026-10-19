@@ -74,30 +74,45 @@ bool DrivePedal::render() {
     return changed;
 }
 
-void DrivePedal::save(std::string& out, bool& first) const {
-    module_json::write_int(out, first, "model", model);
-    module_json::write_float(out, first, "amount", amount);
-    module_json::write_float(out, first, "tone", tone);
+std::string DrivePedal::save() const {
+    std::string out = "{";
+    module_json::write_int(out, "model", model);
+    module_json::write_float(out, "amount", amount);
+    module_json::write_float(out, "tone", tone);
+    out += '}';
+    return out;
 }
 
-bool DrivePedal::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "model") {
-        model = static_cast<int>(num);
-        return true;
-    }
-    if (key == "amount") {
-        amount = static_cast<float>(num);
-        return true;
-    }
-    if (key == "tone") {
-        tone = static_cast<float>(num);
-        return true;
-    }
-    return false;
+bool DrivePedal::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "model") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            model = static_cast<int>(num);
+            return true;
+        }
+        if (key == "amount") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            amount = static_cast<float>(num);
+            return true;
+        }
+        if (key == "tone") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            tone = static_cast<float>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 } // namespace guitar_pedals
 

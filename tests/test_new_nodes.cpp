@@ -76,15 +76,12 @@ TEST(mixer_gains_save_load_and_scale) {
     Mixer mixer;
     mixer.gain[0] = 0.5f;
     mixer.gain[1] = 1.5f;
-    std::string fields;
-    bool first = true;
-    mixer.save(fields, first);
+    const std::string fields = mixer.save();
     CHECK(fields.find("\"gain_0\"") != std::string::npos);
     CHECK(fields.find("\"gain_1\"") != std::string::npos);
 
     Mixer loaded;
-    CHECK(loaded.load("gain_0", 0.25, false, "", module_json::kKindNumber));
-    CHECK(loaded.load("gain_1", 2.0, false, "", module_json::kKindNumber));
+    CHECK(loaded.load(R"({"gain_0":0.25,"gain_1":2.0})"));
     CHECK_NEAR(loaded.gain[0], 0.25f, 1e-5f);
     CHECK_NEAR(loaded.gain[1], 2.0f, 1e-5f);
 

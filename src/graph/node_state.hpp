@@ -27,11 +27,8 @@ namespace node_params {
 struct None : Module {
     std::string name() const override { return "none"; }
     Role role() const override { return Role::effect; }
-    void save(std::string& /*out*/, bool& /*first*/) const override {}
-    bool load(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
-              int /*kind*/) override {
-        return false;
-    }
+    std::string save() const override { return "{}"; }
+    bool load(const std::string& /*json*/) override { return true; }
     bool render() override { return false; }
     void process(ProcessContext& /*ctx*/) override {}
 };

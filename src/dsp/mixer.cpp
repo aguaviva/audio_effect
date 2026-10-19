@@ -5,28 +5,34 @@
 
 #include "imgui.h"
 
-void Mixer::save(std::string& out, bool& first) const {
+std::string Mixer::save() const {
+    std::string out = "{";
     char key[16];
     for (int i = 0; i < kChannels; ++i) {
         std::snprintf(key, sizeof(key), "gain_%d", i);
-        module_json::write_float(out, first, key, gain[static_cast<size_t>(i)]);
+        module_json::write_float(out, key, gain[static_cast<size_t>(i)]);
     }
+    out += '}';
+    return out;
 }
 
-bool Mixer::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key.rfind("gain_", 0) != 0) {
-        return false;
-    }
-    const int index = std::atoi(key.c_str() + 5);
-    if (index < 0 || index >= kChannels) {
-        return false;
-    }
-    gain[static_cast<size_t>(index)] = std::clamp(static_cast<float>(num), 0.0f, 2.0f);
-    return true;
+bool Mixer::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key.rfind("gain_", 0) == 0) {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            const int index = std::atoi(key.c_str() + 5);
+            if (index >= 0 && index < kChannels) {
+                gain[static_cast<size_t>(index)] = std::clamp(static_cast<float>(num), 0.0f, 2.0f);
+            }
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 bool Mixer::render() {
     bool changed = false;

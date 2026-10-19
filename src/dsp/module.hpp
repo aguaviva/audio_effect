@@ -51,9 +51,9 @@ public:
     virtual ~Module() = default;
 
     virtual std::string name() const = 0;
-    virtual void save(std::string& out, bool& first) const = 0;
-    virtual bool load(const std::string& key, double num, bool flag, const std::string& str,
-                      int kind) = 0;
+    // Serialize / parse this module's own JSON object ("{...}").
+    virtual std::string save() const = 0;
+    virtual bool load(const std::string& json) = 0;
     virtual bool render() = 0;
 
     virtual Role role() const = 0;

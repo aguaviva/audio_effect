@@ -38,25 +38,36 @@ bool Preamp::render() {
     return changed;
 }
 
-void Preamp::save(std::string& out, bool& first) const {
-    module_json::write_float(out, first, "gain_db", gain_db);
-    module_json::write_int(out, first, "selected_preset", selected_preset);
+std::string Preamp::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "gain_db", gain_db);
+    module_json::write_int(out, "selected_preset", selected_preset);
+    out += '}';
+    return out;
 }
 
-bool Preamp::load(const std::string& key, double num, bool, const std::string&, int kind) {
-    if (kind != module_json::kKindNumber) {
-        return false;
-    }
-    if (key == "gain_db") {
-        gain_db = static_cast<float>(num);
-        return true;
-    }
-    if (key == "selected_preset") {
-        selected_preset = static_cast<int>(num);
-        return true;
-    }
-    return false;
+bool Preamp::load(const std::string& json) {
+    return module_json::for_each_member(json, [&](const std::string& key, const std::string& text, size_t& i) -> bool {
+        if (key == "gain_db") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            gain_db = static_cast<float>(num);
+            return true;
+        }
+        if (key == "selected_preset") {
+            double num = 0.0;
+            if (!module_json::parse_number_value(text, i, num)) {
+                return false;
+            }
+            selected_preset = static_cast<int>(num);
+            return true;
+        }
+        return module_json::skip_value(text, i);
+    });
 }
+
 
 void Preamp::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {

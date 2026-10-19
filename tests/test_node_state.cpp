@@ -49,15 +49,13 @@ TEST(module_name_and_json_load_by_name) {
     CHECK(DynamicHighPassFilter{}.name() == "high_pass");
     CHECK(DynamicLowPassFilter{}.name() == "low_pass");
 
-    // save/load are called from outside the module (helpers / NodeState).
     node_params::Preamp pre;
     pre.gain_db = 4.25f;
-    const std::string fields_json = module_json::save_object(pre);
+    const std::string fields_json = pre.save();
     CHECK(fields_json.find("\"gain_db\"") != std::string::npos);
 
     node_params::Preamp loaded_mod;
-    size_t mi = 0;
-    CHECK(module_json::parse_object(fields_json, mi, loaded_mod));
+    CHECK(loaded_mod.load(fields_json));
     CHECK_NEAR(loaded_mod.gain_db, 4.25f, 1e-4f);
 
     NodeType resolved = NodeType::count;

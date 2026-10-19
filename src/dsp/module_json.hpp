@@ -3,42 +3,45 @@
 #include <cctype>
 #include <string>
 
-// Shared JSON field helpers for Module::save / Module::load.
+// Shared JSON helpers used inside Module::save / Module::load.
 namespace module_json {
 
-inline void append_comma(std::string& out, bool& first) {
-    if (!first) {
+inline void append_comma(std::string& out) {
+    if (out.empty()) {
+        return;
+    }
+    const char last = out.back();
+    if (last != '{' && last != '[' && last != ',') {
         out.push_back(',');
     }
-    first = false;
 }
 
-inline void write_bool(std::string& out, bool& first, const char* key, bool value) {
-    append_comma(out, first);
+inline void write_bool(std::string& out, const char* key, bool value) {
+    append_comma(out);
     out += '"';
     out += key;
     out += "\":";
     out += value ? "true" : "false";
 }
 
-inline void write_float(std::string& out, bool& first, const char* key, float value) {
-    append_comma(out, first);
+inline void write_float(std::string& out, const char* key, float value) {
+    append_comma(out);
     out += '"';
     out += key;
     out += "\":";
     out += std::to_string(value);
 }
 
-inline void write_int(std::string& out, bool& first, const char* key, int value) {
-    append_comma(out, first);
+inline void write_int(std::string& out, const char* key, int value) {
+    append_comma(out);
     out += '"';
     out += key;
     out += "\":";
     out += std::to_string(value);
 }
 
-inline void write_string(std::string& out, bool& first, const char* key, const std::string& value) {
-    append_comma(out, first);
+inline void write_string(std::string& out, const char* key, const std::string& value) {
+    append_comma(out);
     out += '"';
     out += key;
     out += "\":\"";
@@ -50,10 +53,6 @@ inline void write_string(std::string& out, bool& first, const char* key, const s
     }
     out += '"';
 }
-
-constexpr int kKindNumber = 0;
-constexpr int kKindBool = 1;
-constexpr int kKindString = 2;
 
 inline bool skip_ws(const std::string& text, size_t& i) {
     while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
@@ -120,8 +119,81 @@ inline bool parse_number_value(const std::string& text, size_t& i, double& out) 
     return true;
 }
 
-template <typename T>
-inline bool parse_object(const std::string& text, size_t& i, T& module) {
+inline bool parse_bool_value(const std::string& text, size_t& i, bool& out) {
+    if (!skip_ws(text, i)) {
+        return false;
+    }
+    if (text.compare(i, 4, "true") == 0) {
+        i += 4;
+        out = true;
+        return true;
+    }
+    if (text.compare(i, 5, "false") == 0) {
+        i += 5;
+        out = false;
+        return true;
+    }
+    return false;
+}
+
+// Skip one JSON value (scalar, array, or object) starting at i.
+inline bool skip_value(const std::string& text, size_t& i) {
+    if (!skip_ws(text, i)) {
+        return false;
+    }
+    const char c = text[i];
+    if (c == '"') {
+        std::string tmp;
+        return parse_string_key(text, i, tmp);
+    }
+    if (c == 't' || c == 'f') {
+        bool flag = false;
+        return parse_bool_value(text, i, flag);
+    }
+    if (c == 'n' && text.compare(i, 4, "null") == 0) {
+        i += 4;
+        return true;
+    }
+    if (c == '-' || c == '+' || std::isdigit(static_cast<unsigned char>(c))) {
+        double num = 0.0;
+        return parse_number_value(text, i, num);
+    }
+    if (c == '{' || c == '[') {
+        const char open = c;
+        const char close = (c == '{') ? '}' : ']';
+        ++i;
+        int depth = 1;
+        bool in_string = false;
+        bool escape = false;
+        while (i < text.size() && depth > 0) {
+            const char ch = text[i++];
+            if (in_string) {
+                if (escape) {
+                    escape = false;
+                } else if (ch == '\\') {
+                    escape = true;
+                } else if (ch == '"') {
+                    in_string = false;
+                }
+                continue;
+            }
+            if (ch == '"') {
+                in_string = true;
+            } else if (ch == open) {
+                ++depth;
+            } else if (ch == close) {
+                --depth;
+            }
+        }
+        return depth == 0;
+    }
+    return false;
+}
+
+// Walk members of a JSON object. Fn(key, text, i) must consume the value at i.
+template <typename Fn>
+inline bool for_each_member(const std::string& text, Fn&& fn) {
+    size_t i = 0;
     if (!expect_char(text, i, '{')) {
         return false;
     }
@@ -130,32 +202,14 @@ inline bool parse_object(const std::string& text, size_t& i, T& module) {
             return false;
         }
         if (text[i] == '}') {
-            ++i;
             return true;
         }
         std::string key;
         if (!parse_string_key(text, i, key) || !expect_char(text, i, ':')) {
             return false;
         }
-        if (!skip_ws(text, i)) {
+        if (!fn(key, text, i)) {
             return false;
-        }
-        if (text[i] == '"') {
-            std::string str;
-            if (!parse_string_key(text, i, str)) {
-                return false;
-            }
-            module.load(key, 0.0, false, str, kKindString);
-        } else if (text.compare(i, 4, "true") == 0 || text.compare(i, 5, "false") == 0) {
-            const bool flag = text.compare(i, 4, "true") == 0;
-            i += flag ? 4 : 5;
-            module.load(key, 0.0, flag, std::string{}, kKindBool);
-        } else {
-            double num = 0.0;
-            if (!parse_number_value(text, i, num)) {
-                return false;
-            }
-            module.load(key, num, false, std::string{}, kKindNumber);
         }
         if (!skip_ws(text, i)) {
             return false;
@@ -165,20 +219,37 @@ inline bool parse_object(const std::string& text, size_t& i, T& module) {
             continue;
         }
         if (text[i] == '}') {
-            ++i;
             return true;
         }
         return false;
     }
 }
 
-template <typename T>
-inline std::string save_object(const T& module) {
-    std::string out = "{";
-    bool first = true;
-    module.save(out, first);
-    out += '}';
-    return out;
+// Append members from a JSON object (without its braces) into out.
+inline void append_object_members(std::string& out, const std::string& object) {
+    size_t i = 0;
+    if (!expect_char(object, i, '{')) {
+        return;
+    }
+    if (!skip_ws(object, i) || object[i] == '}') {
+        return;
+    }
+    const size_t begin = i;
+    size_t end = object.size();
+    while (end > begin && std::isspace(static_cast<unsigned char>(object[end - 1]))) {
+        --end;
+    }
+    if (end > begin && object[end - 1] == '}') {
+        --end;
+    }
+    while (end > begin && std::isspace(static_cast<unsigned char>(object[end - 1]))) {
+        --end;
+    }
+    if (end <= begin) {
+        return;
+    }
+    append_comma(out);
+    out.append(object, begin, end - begin);
 }
 
 } // namespace module_json
