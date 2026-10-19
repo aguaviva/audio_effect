@@ -214,10 +214,10 @@ void AudioGraph::reset_to_default_chain() {
         p->amount = 3.0f;
         p->tone = 0.65f;
     }
-    if (auto* p = find_node(hpf)->state().as<node_params::CutoffFilter>()) {
+    if (auto* p = find_node(hpf)->state().as<node_params::HighPass>()) {
         p->cutoff_hz = 70.0f;
     }
-    if (auto* p = find_node(lpf)->state().as<node_params::CutoffFilter>()) {
+    if (auto* p = find_node(lpf)->state().as<node_params::LowPass>()) {
         p->cutoff_hz = 8000.0f;
     }
 

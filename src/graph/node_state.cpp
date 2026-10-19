@@ -240,17 +240,31 @@ void Preamp::from_legacy(const float* f, const int*, const bool*) {
     gain_db = f[0];
 }
 
-void CutoffFilter::write(std::string& out, bool& first) const {
+void HighPass::write(std::string& out, bool& first) const {
     write_float(out, first, "cutoff_hz", cutoff_hz);
 }
-bool CutoffFilter::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
+bool HighPass::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
     if (key == "cutoff_hz" && kind == kKindNumber) {
         cutoff_hz = static_cast<float>(num);
         return true;
     }
     return false;
 }
-void CutoffFilter::from_legacy(const float* f, const int*, const bool*) {
+void HighPass::from_legacy(const float* f, const int*, const bool*) {
+    cutoff_hz = f[0];
+}
+
+void LowPass::write(std::string& out, bool& first) const {
+    write_float(out, first, "cutoff_hz", cutoff_hz);
+}
+bool LowPass::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
+    if (key == "cutoff_hz" && kind == kKindNumber) {
+        cutoff_hz = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}
+void LowPass::from_legacy(const float* f, const int*, const bool*) {
     cutoff_hz = f[0];
 }
 
@@ -468,18 +482,174 @@ void VuMeter::from_legacy(const float* f, const int*, const bool*) {
     decay = f[1];
 }
 
-void DisplayGain::write(std::string& out, bool& first) const {
+void Oscilloscope::write(std::string& out, bool& first) const {
     write_float(out, first, "display_gain", display_gain);
 }
-bool DisplayGain::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
+bool Oscilloscope::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
     if (key == "display_gain" && kind == kKindNumber) {
         display_gain = static_cast<float>(num);
         return true;
     }
     return false;
 }
-void DisplayGain::from_legacy(const float* f, const int*, const bool*) {
+void Oscilloscope::from_legacy(const float* f, const int*, const bool*) {
     display_gain = f[0];
+}
+
+void Spectrum::write(std::string& out, bool& first) const {
+    write_float(out, first, "display_gain", display_gain);
+}
+bool Spectrum::read(const std::string& key, double num, bool, const std::string& /*str*/, int kind) {
+    if (key == "display_gain" && kind == kKindNumber) {
+        display_gain = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}
+void Spectrum::from_legacy(const float* f, const int*, const bool*) {
+    display_gain = f[0];
+}
+
+// --- module JSON object save/load (fields only) ---
+
+template <typename T>
+bool parse_module_object(const std::string& text, size_t& i, T& module) {
+    if (!expect_char(text, i, '{')) {
+        return false;
+    }
+    while (true) {
+        if (!skip_ws(text, i)) {
+            return false;
+        }
+        if (text[i] == '}') {
+            ++i;
+            return true;
+        }
+        std::string key;
+        if (!parse_string_key(text, i, key) || !expect_char(text, i, ':')) {
+            return false;
+        }
+        if (!skip_ws(text, i)) {
+            return false;
+        }
+        if (text[i] == '"') {
+            std::string str;
+            if (!parse_string_key(text, i, str)) {
+                return false;
+            }
+            module.read(key, 0.0, false, str, kKindString);
+        } else if (text.compare(i, 4, "true") == 0 || text.compare(i, 5, "false") == 0) {
+            const bool flag = text.compare(i, 4, "true") == 0;
+            i += flag ? 4 : 5;
+            module.read(key, 0.0, flag, std::string{}, kKindBool);
+        } else {
+            double num = 0.0;
+            if (!parse_number_value(text, i, num)) {
+                return false;
+            }
+            module.read(key, num, false, std::string{}, kKindNumber);
+        }
+        if (!skip_ws(text, i)) {
+            return false;
+        }
+        if (text[i] == ',') {
+            ++i;
+            continue;
+        }
+        if (text[i] == '}') {
+            ++i;
+            return true;
+        }
+        return false;
+    }
+}
+
+template <typename T>
+std::string save_module_json(const T& module) {
+    std::string out = "{";
+    bool first = true;
+    module.write(out, first);
+    out += '}';
+    return out;
+}
+
+#define DEFINE_MODULE_JSON(Type)                                                                   \
+    std::string Type::save_json() const { return save_module_json(*this); }                        \
+    bool Type::load_json(const std::string& text, size_t& i) { return parse_module_object(text, i, *this); }
+
+DEFINE_MODULE_JSON(None)
+DEFINE_MODULE_JSON(WavPlayer)
+DEFINE_MODULE_JSON(AudioInput)
+DEFINE_MODULE_JSON(AudioOutput)
+DEFINE_MODULE_JSON(Chord)
+DEFINE_MODULE_JSON(WhiteNoise)
+DEFINE_MODULE_JSON(Echo)
+DEFINE_MODULE_JSON(Preamp)
+DEFINE_MODULE_JSON(HighPass)
+DEFINE_MODULE_JSON(LowPass)
+DEFINE_MODULE_JSON(Drive)
+DEFINE_MODULE_JSON(Compressor)
+DEFINE_MODULE_JSON(NoiseGate)
+DEFINE_MODULE_JSON(EqThreeBand)
+DEFINE_MODULE_JSON(Reverb)
+DEFINE_MODULE_JSON(DryWet)
+DEFINE_MODULE_JSON(WavRecorder)
+DEFINE_MODULE_JSON(VuMeter)
+DEFINE_MODULE_JSON(Oscilloscope)
+DEFINE_MODULE_JSON(Spectrum)
+DEFINE_MODULE_JSON(PitchDetector)
+DEFINE_MODULE_JSON(Mixer)
+
+bool try_resolve_name(const std::string& module_name, NodeType& out) {
+    if (module_name == WavPlayer::name()) { out = NodeType::wav_player; return true; }
+    if (module_name == AudioInput::name()) { out = NodeType::audio_input; return true; }
+    if (module_name == AudioOutput::name()) { out = NodeType::output; return true; }
+    if (module_name == Chord::name()) { out = NodeType::chord_generator; return true; }
+    if (module_name == WhiteNoise::name()) { out = NodeType::white_noise; return true; }
+    if (module_name == Echo::name()) { out = NodeType::echo; return true; }
+    if (module_name == Preamp::name()) { out = NodeType::preamp; return true; }
+    if (module_name == HighPass::name()) { out = NodeType::high_pass; return true; }
+    if (module_name == LowPass::name()) { out = NodeType::low_pass; return true; }
+    if (module_name == Drive::name()) { out = NodeType::drive_pedal; return true; }
+    if (module_name == Compressor::name()) { out = NodeType::compressor; return true; }
+    if (module_name == NoiseGate::name()) { out = NodeType::noise_gate; return true; }
+    if (module_name == EqThreeBand::name()) { out = NodeType::eq_three_band; return true; }
+    if (module_name == Reverb::name()) { out = NodeType::reverb; return true; }
+    if (module_name == DryWet::name()) { out = NodeType::dry_wet_mix; return true; }
+    if (module_name == WavRecorder::name()) { out = NodeType::wav_recorder; return true; }
+    if (module_name == VuMeter::name()) { out = NodeType::vu_meter; return true; }
+    if (module_name == Oscilloscope::name()) { out = NodeType::oscilloscope; return true; }
+    if (module_name == Spectrum::name()) { out = NodeType::spectrum; return true; }
+    if (module_name == PitchDetector::name()) { out = NodeType::pitch_detector; return true; }
+    if (module_name == Mixer::name()) { out = NodeType::mixer; return true; }
+    return false;
+}
+
+std::string name_for_type(NodeType type) {
+    switch (type) {
+    case NodeType::wav_player: return WavPlayer::name();
+    case NodeType::audio_input: return AudioInput::name();
+    case NodeType::output: return AudioOutput::name();
+    case NodeType::chord_generator: return Chord::name();
+    case NodeType::white_noise: return WhiteNoise::name();
+    case NodeType::echo: return Echo::name();
+    case NodeType::preamp: return Preamp::name();
+    case NodeType::high_pass: return HighPass::name();
+    case NodeType::low_pass: return LowPass::name();
+    case NodeType::drive_pedal: return Drive::name();
+    case NodeType::compressor: return Compressor::name();
+    case NodeType::noise_gate: return NoiseGate::name();
+    case NodeType::eq_three_band: return EqThreeBand::name();
+    case NodeType::reverb: return Reverb::name();
+    case NodeType::dry_wet_mix: return DryWet::name();
+    case NodeType::wav_recorder: return WavRecorder::name();
+    case NodeType::vu_meter: return VuMeter::name();
+    case NodeType::oscilloscope: return Oscilloscope::name();
+    case NodeType::spectrum: return Spectrum::name();
+    case NodeType::pitch_detector: return PitchDetector::name();
+    case NodeType::mixer: return Mixer::name();
+    default: return None::name();
+    }
 }
 
 } // namespace node_params
@@ -509,10 +679,10 @@ NodeState NodeState::make(NodeType type) {
         s.params = node_params::Preamp{};
         break;
     case NodeType::high_pass:
-        s.params = node_params::CutoffFilter{70.0f};
+        s.params = node_params::HighPass{};
         break;
     case NodeType::low_pass:
-        s.params = node_params::CutoffFilter{8000.0f};
+        s.params = node_params::LowPass{};
         break;
     case NodeType::drive_pedal:
         s.params = node_params::Drive{};
@@ -539,14 +709,35 @@ NodeState NodeState::make(NodeType type) {
         s.params = node_params::VuMeter{};
         break;
     case NodeType::oscilloscope:
+        s.params = node_params::Oscilloscope{};
+        break;
     case NodeType::spectrum:
-        s.params = node_params::DisplayGain{};
+        s.params = node_params::Spectrum{};
+        break;
+    case NodeType::pitch_detector:
+        s.params = node_params::PitchDetector{};
+        break;
+    case NodeType::mixer:
+        s.params = node_params::Mixer{};
         break;
     default:
         s.params = node_params::None{};
         break;
     }
     return s;
+}
+
+std::string NodeState::module_name() const {
+    return std::visit([](const auto& p) { return p.name(); }, params);
+}
+
+bool NodeState::load_by_module_name(const std::string& module_name, const std::string& text,
+                                    size_t& i) {
+    NodeType type = NodeType::preamp;
+    if (!node_params::try_resolve_name(module_name, type)) {
+        return false;
+    }
+    return read_params(type, text, i);
 }
 
 std::string NodeState::write_params() const {

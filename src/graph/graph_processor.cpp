@@ -218,13 +218,13 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
         }
         break;
     case NodeType::high_pass:
+        if (const auto* p = ns.as<node_params::HighPass>()) {
+            state.high_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
+        }
+        break;
     case NodeType::low_pass:
-        if (const auto* p = ns.as<node_params::CutoffFilter>()) {
-            if (node.type() == NodeType::high_pass) {
-                state.high_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
-            } else {
-                state.low_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
-            }
+        if (const auto* p = ns.as<node_params::LowPass>()) {
+            state.low_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
         }
         break;
     case NodeType::drive_pedal:
@@ -265,7 +265,9 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
         if (const auto* p = ns.as<node_params::VuMeter>()) {
             display_gain = p->display_gain;
             vu_decay = p->decay;
-        } else if (const auto* p = ns.as<node_params::DisplayGain>()) {
+        } else if (const auto* p = ns.as<node_params::Oscilloscope>()) {
+            display_gain = p->display_gain;
+        } else if (const auto* p = ns.as<node_params::Spectrum>()) {
             display_gain = p->display_gain;
         }
         g_visualizer_bus.analyze(node.id(), node.type(), block, block_size_, sample_rate_,

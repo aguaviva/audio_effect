@@ -102,7 +102,7 @@ std::string serialize(const AudioGraph& graph) {
     for (size_t n = 0; n < nodes.size(); ++n) {
         const auto& node = nodes[n];
         oss << "    {\"id\":" << node.id()
-            << ",\"type\":\"" << node_type_key(node.type()) << "\""
+            << ",\"type\":\"" << escape_string(node_params::name_for_type(node.type())) << "\""
             << ",\"x\":" << node.x()
             << ",\"y\":" << node.y()
             << ",\"params\":" << node.state().write_params() << "}";
@@ -223,8 +223,10 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                         if (nkey == "y") node.set_y(static_cast<float>(value));
                     } else if (nkey == "type") {
                         std::string type_key;
-                        if (!parse_string(text, i, type_key) || !try_parse_node_type(type_key, parsed_type)) {
-                            error = "Unknown node type";
+                        // Match JSON type against each module's name().
+                        if (!parse_string(text, i, type_key) ||
+                            !node_params::try_resolve_name(type_key, parsed_type)) {
+                            error = "Unknown module name";
                             return false;
                         }
                         have_type = true;
@@ -234,8 +236,14 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                         }
                     } else if (nkey == "params") {
                         NodeState state;
-                        const NodeType param_type = have_type ? parsed_type : node.type();
-                        if (!state.read_params(param_type, text, i)) {
+                        if (have_type) {
+                            // Prefer name-dispatched load once the module id is known.
+                            if (!state.load_by_module_name(node_params::name_for_type(parsed_type),
+                                                           text, i)) {
+                                error = "Invalid params";
+                                return false;
+                            }
+                        } else if (!state.read_params(node.type(), text, i)) {
                             error = "Invalid params";
                             return false;
                         }

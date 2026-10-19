@@ -276,7 +276,7 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         }
         break;
     case NodeType::high_pass:
-        if (auto* p = st.as<node_params::CutoffFilter>()) {
+        if (auto* p = st.as<node_params::HighPass>()) {
             param_slider("Cutoff Hz", &p->cutoff_hz, 20.0f, 500.0f, "%.0f");
         }
         break;
@@ -289,7 +289,7 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         }
         break;
     case NodeType::low_pass:
-        if (auto* p = st.as<node_params::CutoffFilter>()) {
+        if (auto* p = st.as<node_params::LowPass>()) {
             param_slider("Cutoff Hz", &p->cutoff_hz, 200.0f, 16000.0f, "%.0f");
         }
         break;
@@ -346,13 +346,13 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         draw_vu_widget(node.id());
         break;
     case NodeType::oscilloscope:
-        if (auto* p = st.as<node_params::DisplayGain>()) {
+        if (auto* p = st.as<node_params::Oscilloscope>()) {
             param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
         }
         draw_scope_widget(node.id());
         break;
     case NodeType::spectrum:
-        if (auto* p = st.as<node_params::DisplayGain>()) {
+        if (auto* p = st.as<node_params::Spectrum>()) {
             param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
         }
         draw_spectrum_widget(node.id());

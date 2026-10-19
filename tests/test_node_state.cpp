@@ -43,6 +43,42 @@ TEST(node_state_serialize_roundtrip) {
     CHECK_NEAR(loaded.as<node_params::Preamp>()->gain_db, 3.5f, 1e-4f);
 }
 
+TEST(module_name_and_json_load_by_name) {
+    CHECK(node_params::Preamp::name() == "preamp");
+    CHECK(node_params::Echo::name() == "echo");
+    CHECK(node_params::HighPass::name() == "high_pass");
+    CHECK(node_params::LowPass::name() == "low_pass");
+
+    node_params::Preamp pre;
+    pre.gain_db = 4.25f;
+    const std::string module_json = pre.save_json();
+    CHECK(module_json.find("\"gain_db\"") != std::string::npos);
+
+    node_params::Preamp loaded_mod;
+    size_t mi = 0;
+    CHECK(loaded_mod.load_json(module_json, mi));
+    CHECK_NEAR(loaded_mod.gain_db, 4.25f, 1e-4f);
+
+    NodeType resolved = NodeType::count;
+    CHECK(node_params::try_resolve_name("preamp", resolved));
+    CHECK(resolved == NodeType::preamp);
+    CHECK(!node_params::try_resolve_name("not_a_module", resolved));
+
+    NodeState s = NodeState::make(NodeType::echo);
+    s.as<node_params::Echo>()->delay_ms = 100.0f;
+    const std::string params = s.write_params();
+    CHECK(s.module_name() == "echo");
+
+    NodeState by_name;
+    size_t i = 0;
+    CHECK(by_name.load_by_module_name("echo", params, i));
+    CHECK(by_name.module_name() == "echo");
+    CHECK_NEAR(by_name.as<node_params::Echo>()->delay_ms, 100.0f, 1e-4f);
+
+    i = 0;
+    CHECK(!by_name.load_by_module_name("nope", params, i));
+}
+
 TEST(node_state_bypass_defaults_off) {
     NodeState s = NodeState::make(NodeType::preamp);
     CHECK(!s.bypassed);

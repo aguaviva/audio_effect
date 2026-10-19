@@ -62,6 +62,7 @@ inline const char* node_type_label(NodeType type) {
     }
 }
 
+// Stable JSON ids — must match node_params::<Module>::name() for each type.
 inline const char* node_type_key(NodeType type) {
     switch (type) {
     case NodeType::audio_input: return "audio_input";
@@ -89,6 +90,8 @@ inline const char* node_type_key(NodeType type) {
     }
 }
 
+// Keys match each module's node_params::*::name(). Prefer
+// node_params::try_resolve_name / NodeState::load_by_module_name for load paths.
 inline bool try_parse_node_type(const std::string& key, NodeType& out) {
     for (int i = 0; i < static_cast<int>(NodeType::count); ++i) {
         auto type = static_cast<NodeType>(i);
