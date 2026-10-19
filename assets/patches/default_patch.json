@@ -1,20 +1,21 @@
 {
-  "version":1,
+  "version":2,
   "wav_path":"assets/audio/danano.wav",
+  "record_path":"assets/recordings/capture.wav",
   "next_node_id":12,
   "next_link_id":12,
   "nodes":[
-    {"id":1,"type":"wav_player","x":40,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[true,false,false,false]}},
-    {"id":2,"type":"preamp","x":280,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":3,"type":"echo","x":520,"y":80,"params":{"f":[320,0.35,0.25,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":4,"type":"drive_pedal","x":520,"y":360,"params":{"f":[3,0.65,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":5,"type":"mixer","x":760,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":6,"type":"high_pass","x":1000,"y":220,"params":{"f":[70,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":7,"type":"low_pass","x":1240,"y":220,"params":{"f":[8000,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":8,"type":"vu_meter","x":1480,"y":80,"params":{"f":[1,0.85,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":9,"type":"oscilloscope","x":1480,"y":280,"params":{"f":[1,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":10,"type":"spectrum","x":1480,"y":480,"params":{"f":[1,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":11,"type":"output","x":1720,"y":220,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}}
+    {"id":1,"type":"wav_player","x":40,"y":220,"params":{"bypassed":false,"loop":true,"path":"assets/audio/danano.wav"}},
+    {"id":2,"type":"preamp","x":280,"y":220,"params":{"bypassed":false,"gain_db":0.000000,"selected_preset":0}},
+    {"id":3,"type":"echo","x":520,"y":80,"params":{"bypassed":false,"delay_ms":320.000000,"feedback":0.350000,"mix":0.250000,"selected_preset":0}},
+    {"id":4,"type":"drive_pedal","x":520,"y":360,"params":{"bypassed":false,"model":0,"amount":3.000000,"tone":0.650000}},
+    {"id":5,"type":"mixer","x":760,"y":220,"params":{"bypassed":false,"gain_0":1.000000,"gain_1":1.000000,"gain_2":1.000000,"gain_3":1.000000,"gain_4":1.000000,"gain_5":1.000000,"gain_6":1.000000,"gain_7":1.000000}},
+    {"id":6,"type":"high_pass","x":1000,"y":220,"params":{"bypassed":false,"cutoff_hz":70.000000,"selected_preset":0}},
+    {"id":7,"type":"low_pass","x":1240,"y":220,"params":{"bypassed":false,"cutoff_hz":8000.000000,"selected_preset":0}},
+    {"id":8,"type":"vu_meter","x":1480,"y":80,"params":{"bypassed":false,"display_gain":1.000000,"decay":0.850000}},
+    {"id":9,"type":"oscilloscope","x":1480,"y":280,"params":{"bypassed":false,"display_gain":1.000000}},
+    {"id":10,"type":"spectrum","x":1480,"y":480,"params":{"bypassed":false,"display_gain":1.000000}},
+    {"id":11,"type":"output","x":1720,"y":220,"params":{"bypassed":false,"device":"default"}}
   ],
   "links":[
     {"id":1,"from":1,"to":2,"to_slot":0},

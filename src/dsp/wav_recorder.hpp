@@ -11,6 +11,11 @@
 
 class WavRecorderEngine {
 public:
+    WavRecorderEngine() = default;
+    WavRecorderEngine(const WavRecorderEngine&) = delete;
+    WavRecorderEngine& operator=(const WavRecorderEngine&) = delete;
+    ~WavRecorderEngine();
+
     void set_path(const std::string& path);
     const std::string& path() const { return path_; }
 
@@ -39,6 +44,7 @@ private:
 // NodeState copies stay light / copyable.
 class WavRecorder : public Module {
 public:
+    // Runtime-only: not saved, so opening a patch never starts overwriting a recording.
     bool armed = false;
 
     std::string name() const override { return "wav_recorder"; }

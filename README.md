@@ -77,9 +77,16 @@ You can delete links/nodes, add stages from the context menu, and rewire arbitra
 
 Toolbar **Save Graph** / **Load Graph** read and write a small JSON document containing:
 
-- `nodes[]`: `id`, `type`, `x`, `y`, `params` (`f` / `i` / `b` arrays)
-- `links[]`: `id`, `from`, `to`
-- `wav_path`, `next_node_id`, `next_link_id`, `version`
+- `version`: currently `2`
+- `nodes[]`: `id`, `type`, `x`, `y`, `params`. `params` is a JSON object holding
+  `bypassed`, optional `muted` (Mixer), and the module's own named settings, e.g.
+  `{"bypassed":false,"delay_ms":320,"feedback":0.35,"mix":0.35}` for Echo.
+- `links[]`: `id`, `from`, `to`, `to_slot`
+- `wav_path`, `record_path`, `next_node_id`, `next_link_id`
+
+Node and link ids must be unique; the id counters are raised past the largest loaded id.
+Version 1 patches (positional `"f"` / `"i"` / `"b"` arrays) still load and are re-saved
+in the named form.
 
 ## Layout
 

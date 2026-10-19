@@ -9,7 +9,9 @@ namespace guitar_pedals {
 
 void DrivePedal::process(float* samples, size_t sample_count, float sample_rate) {
     const DriveModel mdl = static_cast<DriveModel>(std::clamp(model, 0, 2));
-    const float drive = amount;
+    // Pre-gain is 1 + amount so amount 0 is a clean-ish unity stage. A raw gain of 0
+    // made the tube-screamer normalization divide 0 by 0 and silenced RAT / Big Muff.
+    const float drive = 1.0f + std::max(0.0f, amount);
     float cutoff = 1800.0f + tone * 10000.0f;
     float alpha = 1.0f - std::exp(-2.0f * static_cast<float>(M_PI) * cutoff / sample_rate);
     constexpr float bias = 0.06f;

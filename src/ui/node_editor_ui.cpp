@@ -197,6 +197,16 @@ static bool draw_device_combo(const char* label, std::string& device,
     return false;
 }
 
+static void draw_device_error(const char* stream_prefix) {
+    const std::string& error = g_pipeline.last_device_error;
+    if (error.rfind(stream_prefix, 0) != 0) {
+        return;
+    }
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
+    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", error.c_str());
+    ImGui::PopTextWrapPos();
+}
+
 static void render_module(Module& module, int node_id) {
     ImGui::PushID(node_id);
     ImGui::PushItemWidth(kNodeWidth);
@@ -235,8 +245,11 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
             ImGui::SetNextItemWidth(kNodeWidth);
             if (draw_device_combo("##cap_dev", m->device, devices, labels)) {
                 std::string err;
-                g_pipeline.set_capture_device(m->device.c_str(), err);
+                if (!g_pipeline.set_capture_device(m->device.c_str(), err)) {
+                    m->device = g_pipeline.capture_device();
+                }
             }
+            draw_device_error("Capture");
             if (g_pipeline.offline_mode) {
                 ImGui::TextDisabled("offline");
             }
@@ -349,8 +362,11 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
             ImGui::SetNextItemWidth(kNodeWidth);
             if (draw_device_combo("##play_dev", m->device, devices, labels)) {
                 std::string err;
-                g_pipeline.set_playback_device(m->device.c_str(), err);
+                if (!g_pipeline.set_playback_device(m->device.c_str(), err)) {
+                    m->device = g_pipeline.playback_device();
+                }
             }
+            draw_device_error("Playback");
             if (g_pipeline.offline_mode) {
                 ImGui::TextDisabled("offline");
             }
@@ -439,6 +455,9 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
             }
             node_editor_publish(graph);
             state.status_message = std::string("Loaded ") + state.graph_path;
+            if (!g_pipeline.last_device_error.empty()) {
+                state.status_message += " | " + g_pipeline.last_device_error;
+            }
         } else {
             state.status_message = error;
         }
@@ -726,8 +745,11 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         node_editor_publish(graph);
     }
 
+    // Delete inside a text field or while dragging a slider edits that widget, not the graph.
+    const bool delete_pressed = ImGui::IsKeyPressed(ImGuiKey_Delete) &&
+                                !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive();
     const int selected_links = ImNodes::NumSelectedLinks();
-    if (selected_links > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+    if (selected_links > 0 && delete_pressed) {
         static std::vector<int> link_ids;
         link_ids.resize(static_cast<size_t>(selected_links));
         ImNodes::GetSelectedLinks(link_ids.data());
@@ -738,7 +760,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     }
 
     const int selected_nodes = ImNodes::NumSelectedNodes();
-    if (selected_nodes > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+    if (selected_nodes > 0 && delete_pressed) {
         static std::vector<int> node_ids;
         node_ids.resize(static_cast<size_t>(selected_nodes));
         ImNodes::GetSelectedNodes(node_ids.data());

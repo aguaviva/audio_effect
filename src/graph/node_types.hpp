@@ -132,9 +132,10 @@ inline bool node_is_mixer(NodeType type) {
     return type == NodeType::mixer;
 }
 
-// Mixer uses per-input mute instead of a whole-node bypass.
+// Mixer uses per-input mute instead of a whole-node bypass. Output is the speaker
+// endpoint; "bypassing" it has no meaningful signal to pass through.
 inline bool node_supports_bypass(NodeType type) {
-    return !node_is_mixer(type);
+    return !node_is_mixer(type) && type != NodeType::output;
 }
 
 inline bool node_is_dry_wet(NodeType type) {

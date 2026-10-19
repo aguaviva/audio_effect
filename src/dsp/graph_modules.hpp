@@ -54,6 +54,7 @@ public:
     std::string name() const override { return "output"; }
     Role role() const override { return Role::sink; }
     bool is_output_sink() const override { return true; }
+    bool supports_bypass() const override { return false; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;

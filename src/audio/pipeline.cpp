@@ -1,5 +1,6 @@
 #include "pipeline.hpp"
 
+#include "dsp/denormals.hpp"
 #include "dsp/wav_generator.hpp"
 
 #include <algorithm>
@@ -148,7 +149,43 @@ bool init_device(AudioPipeline& pipe, ma_device_type type, const std::string& na
     return true;
 }
 
+// Sleeps until start + n * period, so per-wakeup lateness does not accumulate.
+class PeriodClock {
+public:
+    explicit PeriodClock(size_t frames_per_period)
+        : frames_per_period_(frames_per_period), start_(Clock::now()) {}
+
+    void wait_next() {
+        ++periods_;
+        const auto due = start_ + elapsed(periods_);
+        const auto now = Clock::now();
+        if (now > due + elapsed(kMaxLagPeriods)) {
+            // Stalled (debugger, suspend): restart instead of bursting to catch up.
+            start_ = now;
+            periods_ = 0;
+            return;
+        }
+        std::this_thread::sleep_until(due);
+    }
+
+private:
+    using Clock = std::chrono::steady_clock;
+    static constexpr uint64_t kMaxLagPeriods = 8;
+
+    std::chrono::nanoseconds elapsed(uint64_t periods) const {
+        constexpr uint64_t kNsPerSecond = 1000000000ull;
+        const uint64_t frames = periods * frames_per_period_;
+        return std::chrono::nanoseconds((frames / SAMPLE_RATE) * kNsPerSecond +
+                                        (frames % SAMPLE_RATE) * kNsPerSecond / SAMPLE_RATE);
+    }
+
+    uint64_t frames_per_period_;
+    Clock::time_point start_;
+    uint64_t periods_ = 0;
+};
+
 void filter_processor() {
+    enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
     processor.set_block_size(block_size);
@@ -180,9 +217,7 @@ void filter_processor() {
             produced = processor.process(*compiled, chunk->samples.data(), out, block_size);
         }
         if (!produced) {
-            for (size_t i = 0; i < block_size; ++i) {
-                out[i] = static_cast<float>(chunk->samples[i]) / 2147483648.0f;
-            }
+            std::fill(out, out + block_size, 0.0f);
         }
 
         constexpr double pcm_scale = 2147483648.0;
@@ -207,18 +242,15 @@ void filter_processor() {
 }
 
 void offline_processor() {
+    enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
     processor.set_block_size(block_size);
     std::vector<int32_t> live(block_size, 0);
     std::vector<float> out(block_size, 0.0f);
 
-    const auto period = std::chrono::microseconds(
-        static_cast<long long>(1.0e6 * static_cast<double>(g_pipeline.period_size) /
-                               static_cast<double>(SAMPLE_RATE)));
-
+    PeriodClock clock(g_pipeline.period_size);
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
-        const auto t0 = std::chrono::steady_clock::now();
         auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
         auto wav = std::atomic_load_explicit(&g_pipeline.loaded_wav, std::memory_order_acquire);
         processor.set_loaded_wav(wav);
@@ -228,17 +260,14 @@ void offline_processor() {
         if (compiled) {
             processor.process(*compiled, live.data(), out.data(), block_size);
         }
-        std::this_thread::sleep_until(t0 + period);
+        clock.wait_next();
     }
 }
 
 void silent_capture_producer() {
-    // When capture device is unavailable but playback is live, feed silence.
-    const auto period = std::chrono::microseconds(
-        static_cast<long long>(1.0e6 * static_cast<double>(g_pipeline.period_size) /
-                               static_cast<double>(SAMPLE_RATE)));
-    while (g_pipeline.running.load(std::memory_order_relaxed)) {
-        const auto t0 = std::chrono::steady_clock::now();
+    PeriodClock clock(g_pipeline.period_size);
+    while (g_pipeline.running.load(std::memory_order_relaxed) &&
+           g_pipeline.silent_running.load(std::memory_order_relaxed)) {
         auto chunk = g_pipeline.free_pool.pop();
         if (chunk) {
             std::fill(chunk->samples.begin(), chunk->samples.end(), 0);
@@ -246,7 +275,7 @@ void silent_capture_producer() {
                 g_pipeline.dropped_capture_reads.fetch_add(1, std::memory_order_relaxed);
             }
         }
-        std::this_thread::sleep_until(t0 + period);
+        clock.wait_next();
     }
 }
 
@@ -385,14 +414,45 @@ bool AudioPipeline::open_audio(const char* capture_device, const char* playback_
     return true;
 }
 
+void AudioPipeline::start_silent_capture() {
+    if (silent_capture.joinable()) {
+        return;
+    }
+    silent_running.store(true, std::memory_order_relaxed);
+    silent_capture = std::thread(silent_capture_producer);
+}
+
+void AudioPipeline::stop_silent_capture() {
+    silent_running.store(false, std::memory_order_relaxed);
+    if (silent_capture.joinable()) {
+        silent_capture.join();
+    }
+}
+
+bool AudioPipeline::open_stream(ma_device_type type, const std::string& name, std::string& error) {
+    const bool is_capture = type == ma_device_type_capture;
+    ma_device* device = is_capture ? &capture : &playback;
+    if (!init_device(*this, type, name, device, error)) {
+        return false;
+    }
+    if (running.load(std::memory_order_relaxed) && ma_device_start(device) != MA_SUCCESS) {
+        error = is_capture ? "Failed to start capture device" : "Failed to start playback device";
+        ma_device_uninit(device);
+        return false;
+    }
+    return true;
+}
+
 bool AudioPipeline::set_capture_device(const char* device, std::string& error) {
     const std::string name = (device && device[0] != '\0') ? device : "default";
+    std::lock_guard<std::mutex> lock(device_mutex);
+    const std::string previous = capture_device_;
     capture_device_ = name;
-    if (offline_mode || !playback_ready) {
+    if (offline_mode || !context_ready) {
         return true;
     }
 
-    std::lock_guard<std::mutex> lock(device_mutex);
+    stop_silent_capture();
     if (capture_ready) {
         ma_device_stop(&capture);
         ma_device_uninit(&capture);
@@ -400,45 +460,57 @@ bool AudioPipeline::set_capture_device(const char* device, std::string& error) {
     }
     capture_staging.clear();
 
-    if (!init_device(*this, ma_device_type_capture, capture_device_, &capture, error)) {
+    capture_ready = open_stream(ma_device_type_capture, name, error);
+    if (!capture_ready && previous != name) {
+        std::string ignored;
+        capture_ready = open_stream(ma_device_type_capture, previous, ignored);
+        if (capture_ready) {
+            capture_device_ = previous;
+        }
+    }
+    if (!capture_ready && running.load(std::memory_order_relaxed)) {
+        start_silent_capture();
+    }
+    if (!capture_ready || capture_device_ != name) {
+        last_device_error = "Capture '" + name + "': " + error;
         return false;
     }
-    capture_ready = true;
-    if (running.load(std::memory_order_relaxed) && !offline_mode) {
-        if (ma_device_start(&capture) != MA_SUCCESS) {
-            error = "Failed to start capture device";
-            ma_device_uninit(&capture);
-            capture_ready = false;
-            return false;
-        }
+    if (last_device_error.rfind("Capture", 0) == 0) {
+        last_device_error.clear();
     }
     return true;
 }
 
 bool AudioPipeline::set_playback_device(const char* device, std::string& error) {
     const std::string name = (device && device[0] != '\0') ? device : "default";
+    std::lock_guard<std::mutex> lock(device_mutex);
+    const std::string previous = playback_device_;
     playback_device_ = name;
-    if (offline_mode || !playback_ready) {
+    if (offline_mode || !context_ready) {
         return true;
     }
 
-    std::lock_guard<std::mutex> lock(device_mutex);
-    ma_device_stop(&playback);
-    ma_device_uninit(&playback);
-    playback_ready = false;
+    if (playback_ready) {
+        ma_device_stop(&playback);
+        ma_device_uninit(&playback);
+        playback_ready = false;
+    }
     playback_staging.clear();
 
-    if (!init_device(*this, ma_device_type_playback, playback_device_, &playback, error)) {
+    playback_ready = open_stream(ma_device_type_playback, name, error);
+    if (!playback_ready && previous != name) {
+        std::string ignored;
+        playback_ready = open_stream(ma_device_type_playback, previous, ignored);
+        if (playback_ready) {
+            playback_device_ = previous;
+        }
+    }
+    if (!playback_ready || playback_device_ != name) {
+        last_device_error = "Playback '" + name + "': " + error;
         return false;
     }
-    playback_ready = true;
-    if (running.load(std::memory_order_relaxed) && !offline_mode) {
-        if (ma_device_start(&playback) != MA_SUCCESS) {
-            error = "Failed to start playback device";
-            ma_device_uninit(&playback);
-            playback_ready = false;
-            return false;
-        }
+    if (last_device_error.rfind("Playback", 0) == 0) {
+        last_device_error.clear();
     }
     return true;
 }
@@ -448,6 +520,7 @@ void AudioPipeline::start() {
     running.store(true, std::memory_order_relaxed);
     filter = std::thread(filter_processor);
 
+    std::lock_guard<std::mutex> lock(device_mutex);
     if (capture_ready) {
         if (ma_device_start(&capture) != MA_SUCCESS) {
             std::fprintf(stderr, "Failed to start capture; using silent capture\n");
@@ -456,7 +529,7 @@ void AudioPipeline::start() {
         }
     }
     if (!capture_ready) {
-        silent_capture = std::thread(silent_capture_producer);
+        start_silent_capture();
     }
 
     if (playback_ready) {
@@ -496,9 +569,7 @@ void AudioPipeline::stop() {
         }
     }
 
-    if (silent_capture.joinable()) {
-        silent_capture.join();
-    }
+    stop_silent_capture();
     if (filter.joinable()) {
         filter.join();
     }

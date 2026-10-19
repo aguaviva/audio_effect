@@ -71,6 +71,10 @@ int main(int argc, char** argv) {
                 g_pipeline.load_wav(graph.wav_path());
             }
             load_status = std::string("Loaded graph ") + graph_path;
+            if (!g_pipeline.last_device_error.empty()) {
+                std::fprintf(stderr, "%s\n", g_pipeline.last_device_error.c_str());
+                load_status += " | " + g_pipeline.last_device_error;
+            }
         } else if (argc > 1) {
             load_status = std::string("Failed to load graph: ") + load_error;
             std::fprintf(stderr, "%s\n", load_status.c_str());

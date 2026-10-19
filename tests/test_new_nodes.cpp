@@ -1,6 +1,8 @@
 #include "test_harness.hpp"
 
+#include "dsp/denormals.hpp"
 #include "dsp/eq_three_band.hpp"
+#include "dsp/guitar_pedals.hpp"
 #include "dsp/mixer.hpp"
 #include "dsp/noise_gate.hpp"
 #include "dsp/simple_reverb.hpp"
@@ -13,6 +15,8 @@
 
 #include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <thread>
 #include <vector>
 
 TEST(new_node_types_parse_and_labels) {
@@ -192,4 +196,74 @@ TEST(wav_recorder_writes_file) {
     }
     std::remove(path);
     CHECK_STREQ(kDefaultRecordPath, "assets/recordings/capture.wav");
+}
+
+TEST(wav_recorder_patches_header_when_destroyed_while_armed) {
+    const char* path = "tests/_tmp_record_destroyed.wav";
+    std::remove(path);
+    {
+        WavRecorderEngine rec;
+        rec.set_path(path);
+        rec.set_armed(true, 48000.0f);
+        std::vector<float> block(64, 0.1f);
+        rec.write_samples(block.data(), block.size());
+    }
+    FILE* f = std::fopen(path, "rb");
+    CHECK(f != nullptr);
+    if (f) {
+        unsigned char h[44]{};
+        CHECK_EQ(static_cast<int>(std::fread(h, 1, 44, f)), 44);
+        CHECK(std::memcmp(h, "RIFF", 4) == 0);
+        const uint32_t data_size = h[40] | (h[41] << 8) | (h[42] << 16) | (uint32_t{h[43]} << 24);
+        CHECK_EQ(static_cast<int>(data_size), 128);
+        std::fclose(f);
+    }
+    std::remove(path);
+}
+
+TEST(wav_recorder_armed_is_not_persisted) {
+    WavRecorder rec;
+    rec.armed = true;
+    CHECK(rec.save().find("armed") == std::string::npos);
+    WavRecorder loaded;
+    CHECK(loaded.load(R"({"armed":true})"));
+    CHECK(!loaded.armed);
+}
+
+TEST(drive_pedal_amount_zero_is_clean_for_every_model) {
+    for (int model = 0; model < 3; ++model) {
+        guitar_pedals::DrivePedal pedal;
+        pedal.model = model;
+        pedal.amount = 0.0f;
+        pedal.tone = 1.0f;
+        std::vector<float> block(4096, 0.01f);
+        pedal.process(block.data(), block.size(), 48000.0f);
+        float peak = 0.0f;
+        bool finite = true;
+        for (float s : block) {
+            finite = finite && std::isfinite(s);
+            peak = std::max(peak, std::fabs(s));
+        }
+        CHECK(finite);
+        // Small signals stay small (no full-scale square) and are not muted.
+        CHECK(peak < 0.05f);
+        CHECK(std::fabs(block.back()) > 0.005f);
+    }
+}
+
+TEST(flush_denormals_to_zero_applies_to_calling_thread) {
+    bool flushed = false;
+    std::thread worker([&] {
+        enable_flush_denormals_to_zero();
+        volatile float tiny = 1.0e-38f;
+        volatile float half = 0.5f;
+        const float product = tiny * half;
+        flushed = product == 0.0f;
+    });
+    worker.join();
+#if defined(__SSE__) || defined(_M_X64) || defined(__aarch64__)
+    CHECK(flushed);
+#else
+    (void)flushed;
+#endif
 }

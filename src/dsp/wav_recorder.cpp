@@ -7,15 +7,19 @@
 
 #include "imgui.h"
 
+namespace {
+
+constexpr uint64_t kWavHeaderBytes = 44;
+// RIFF sizes are 32-bit and count everything after the first 8 bytes.
+constexpr uint64_t kMaxDataBytes = 0xffffffffull - (kWavHeaderBytes - 8);
+
+} // namespace
+
 std::string WavRecorder::save() const {
-    std::string out = "{";
-    module_json::write_bool(out, "armed", armed);
-    out += '}';
-    return out;
+    return "{}";
 }
 
-bool WavRecorder::load(const std::string& json) {
-    module_json::read(json, "armed", armed);
+bool WavRecorder::load(const std::string& /*json*/) {
     return true;
 }
 
@@ -32,6 +36,11 @@ void WavRecorder::process(ProcessContext& ctx) {
     }
     engine_->set_armed(armed, ctx.sample_rate);
     engine_->write_samples(ctx.buffer, ctx.num_samples);
+}
+
+WavRecorderEngine::~WavRecorderEngine() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    close_file();
 }
 
 void WavRecorderEngine::set_path(const std::string& path) {
@@ -88,9 +97,8 @@ void WavRecorderEngine::patch_header() {
     }
     const uint32_t byte_rate = sample_rate_ * 2 * 16 / 8;
     const uint16_t block_align = 2 * 16 / 8;
-    const uint32_t data_size = static_cast<uint32_t>(
-        std::min<uint64_t>(data_bytes_, 0xffffffffu));
-    const uint32_t riff_size = 36u + data_size;
+    const uint32_t data_size = static_cast<uint32_t>(std::min(data_bytes_, kMaxDataBytes));
+    const uint32_t riff_size = static_cast<uint32_t>(kWavHeaderBytes - 8) + data_size;
 
     auto write_u16 = [](char* d, uint16_t v) {
         d[0] = static_cast<char>(v & 0xff);
@@ -138,6 +146,8 @@ void WavRecorderEngine::write_samples(const float* interleaved, size_t sample_co
     if (!armed_ || !file_ || interleaved == nullptr || sample_count == 0) {
         return;
     }
+    const uint64_t room_samples = (kMaxDataBytes - std::min(data_bytes_, kMaxDataBytes)) / 2;
+    sample_count = static_cast<size_t>(std::min<uint64_t>(sample_count, room_samples));
     for (size_t i = 0; i < sample_count; ++i) {
         const float x = std::clamp(interleaved[i], -1.0f, 1.0f);
         const int16_t pcm = static_cast<int16_t>(std::lrint(x * 32767.0f));

@@ -70,7 +70,8 @@ struct AudioPipeline {
     float ui_input_waveform[WAVEFORM_POINTS]{};
     float ui_output_waveform[WAVEFORM_POINTS]{};
 
-    std::atomic<bool> running{true};
+    std::atomic<bool> running{false};
+    std::atomic<bool> silent_running{false};
     std::atomic<size_t> live_chunks{0};
     std::atomic<uint64_t> xrun_count{0};
     std::atomic<uint64_t> dropped_capture_reads{0};
@@ -88,18 +89,23 @@ struct AudioPipeline {
     bool playback_ready = false;
 
     std::thread filter;
-    std::thread silent_capture; // used when playback is live but capture failed
+    // Feeds silence while there is no capture device. Never runs at the same time as
+    // the capture callback: both push into the single-producer cap_to_filter queue.
+    std::thread silent_capture;
 
     // Open capture + playback via miniaudio. Returns false if either stream fails.
     bool open_audio(const char* capture_device, const char* playback_device, std::string& error);
     bool open_audio(const char* device, std::string& error) {
         return open_audio(device, device, error);
     }
-    // Reopen one stream on a different device. Offline: store preference only.
+    // Reopen one stream on a different device. If the new device fails, the previous
+    // one is reopened and the error is returned (and kept in last_device_error).
+    // Offline: store preference only.
     bool set_capture_device(const char* device, std::string& error);
     bool set_playback_device(const char* device, std::string& error);
     const std::string& capture_device() const { return capture_device_; }
     const std::string& playback_device() const { return playback_device_; }
+    std::string last_device_error;
 
     void start();
     // Drive the graph from WAV/chord with silent "live" input when devices are unavailable
@@ -116,6 +122,11 @@ struct AudioPipeline {
     std::vector<int32_t> capture_staging;
     std::vector<int32_t> playback_staging;
     std::mutex device_mutex;
+
+private:
+    void start_silent_capture();
+    void stop_silent_capture();
+    bool open_stream(ma_device_type type, const std::string& name, std::string& error);
 };
 
 extern AudioPipeline g_pipeline;

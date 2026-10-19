@@ -1,11 +1,14 @@
 #include "graph_io.hpp"
 
+#include "dsp/module_json.hpp"
 #include "node_state.hpp"
 #include "paths.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <sstream>
+#include <unordered_set>
 
 namespace graph_io {
 namespace {
@@ -138,6 +141,8 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     int next_node = 1;
     int next_link = 1;
     int file_version = 1;
+    std::unordered_set<int> node_ids;
+    std::unordered_set<int> link_ids;
     bool have_nodes = false;
     bool have_links = false;
 
@@ -198,7 +203,7 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                     return false;
                 }
                 GraphNode node;
-                bool have_params = false;
+                std::string params_text;
                 NodeType parsed_type = NodeType::preamp;
                 bool have_type = false;
                 while (true) {
@@ -231,24 +236,15 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                         }
                         have_type = true;
                         node.set_type(parsed_type);
-                        if (!have_params) {
-                            node.set_state(NodeState::make(parsed_type));
-                        }
                     } else if (nkey == "params") {
-                        NodeState state;
-                        if (have_type) {
-                            // Prefer name-dispatched load once the module id is known.
-                            if (!state.load_by_module_name(node_params::name_for_type(parsed_type),
-                                                           text, i)) {
-                                error = "Invalid params";
-                                return false;
-                            }
-                        } else if (!state.read_params(node.type(), text, i)) {
+                        // Parsed once the node object is closed, so "type" may come later.
+                        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
+                        const size_t start = i;
+                        if (!module_json::skip_value(text, i)) {
                             error = "Invalid params";
                             return false;
                         }
-                        node.set_state(state);
-                        have_params = true;
+                        params_text = text.substr(start, i - start);
                     } else {
                         error = "Unknown node field: " + nkey;
                         return false;
@@ -269,8 +265,24 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                     error = "Node missing id";
                     return false;
                 }
-                if (have_type && !have_params) {
-                    node.set_state(NodeState::make(node.type()));
+                if (!node_ids.insert(node.id()).second) {
+                    error = "Duplicate node id " + std::to_string(node.id());
+                    return false;
+                }
+                if (!have_type) {
+                    error = "Node " + std::to_string(node.id()) + " missing type";
+                    return false;
+                }
+                if (params_text.empty()) {
+                    node.set_state(NodeState::make(parsed_type));
+                } else {
+                    NodeState state;
+                    size_t pi = 0;
+                    if (!state.read_params(parsed_type, params_text, pi)) {
+                        error = "Invalid params on node " + std::to_string(node.id());
+                        return false;
+                    }
+                    node.set_state(state);
                 }
                 loaded.nodes().push_back(node);
                 while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
@@ -329,6 +341,14 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                     error = "Malformed link";
                     return false;
                 }
+                if (link.id() <= 0) {
+                    error = "Link missing id";
+                    return false;
+                }
+                if (!link_ids.insert(link.id()).second) {
+                    error = "Duplicate link id " + std::to_string(link.id());
+                    return false;
+                }
                 loaded.links().push_back(link);
                 while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
                 if (i < text.size() && text[i] == ',') ++i;
@@ -356,6 +376,9 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         return false;
     }
     (void)have_links;
+    // The stored counters are only a hint; reusing a live id would alias two nodes/links.
+    for (int id : node_ids) next_node = std::max(next_node, id + 1);
+    for (int id : link_ids) next_link = std::max(next_link, id + 1);
     loaded.set_next_node_id(next_node);
     loaded.set_next_link_id(next_link);
 
