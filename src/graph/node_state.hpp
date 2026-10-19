@@ -19,9 +19,9 @@
 #include <string>
 #include <variant>
 
-// Per-node modules. DSP-backed effects expose Params on the DSP class
-// (name / write / read). Graph-only modules are defined here.
-// Graph load matches JSON "type" to name(), then fills fields via read().
+// Per-node modules. DSP-backed effects: name() on the DSP class, write/read on
+// Params. Graph-only modules keep name/write/read here.
+// Graph load matches JSON "type" to the DSP/module name(), then fills via read().
 namespace node_params {
 
 struct None {

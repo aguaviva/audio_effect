@@ -44,10 +44,10 @@ TEST(node_state_serialize_roundtrip) {
 }
 
 TEST(module_name_and_json_load_by_name) {
-    CHECK(node_params::Preamp::name() == "preamp");
-    CHECK(node_params::Echo::name() == "echo");
-    CHECK(node_params::HighPass::name() == "high_pass");
-    CHECK(node_params::LowPass::name() == "low_pass");
+    CHECK(::Preamp::name() == "preamp");
+    CHECK(EchoEffect::name() == "echo");
+    CHECK(DynamicHighPassFilter::name() == "high_pass");
+    CHECK(DynamicLowPassFilter::name() == "low_pass");
 
     // write/read are called from outside the module (helpers / NodeState).
     node_params::Preamp pre;

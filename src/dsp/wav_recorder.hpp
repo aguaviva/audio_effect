@@ -11,10 +11,10 @@
 // Pass-through WAV writer (16-bit PCM stereo). Call set_path before arming.
 class WavRecorder {
 public:
+    static std::string name() { return "wav_recorder"; }
+
     struct Params {
         bool armed = false;
-
-        static std::string name() { return "wav_recorder"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

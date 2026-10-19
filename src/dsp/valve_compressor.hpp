@@ -8,6 +8,8 @@
 
 class ValveCompressor {
 public:
+    static std::string name() { return "compressor"; }
+
     struct Params {
         float threshold_db = -18.0f;
         float ratio = 3.0f;
@@ -15,8 +17,6 @@ public:
         float release_ms = 100.0f;
         float drive = 1.25f;
         float makeup_db = 0.0f;
-
-        static std::string name() { return "compressor"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

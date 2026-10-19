@@ -8,12 +8,12 @@
 // Simple downward noise gate with attack/release smoothing.
 class NoiseGate {
 public:
+    static std::string name() { return "noise_gate"; }
+
     struct Params {
         float threshold_db = -40.0f;
         float attack_ms = 5.0f;
         float release_ms = 80.0f;
-
-        static std::string name() { return "noise_gate"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

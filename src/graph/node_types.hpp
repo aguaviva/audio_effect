@@ -62,7 +62,7 @@ inline const char* node_type_label(NodeType type) {
     }
 }
 
-// Stable JSON ids — must match node_params::<Module>::name() for each type.
+// Stable JSON ids — must match each DSP/module name() for the type.
 inline const char* node_type_key(NodeType type) {
     switch (type) {
     case NodeType::audio_input: return "audio_input";

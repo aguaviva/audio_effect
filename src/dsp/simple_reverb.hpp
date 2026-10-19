@@ -10,12 +10,12 @@
 // Lightweight stereo Schroeder-style reverb (comb + allpass).
 class SimpleReverb {
 public:
+    static std::string name() { return "reverb"; }
+
     struct Params {
         float room = 0.55f;
         float damping = 0.4f;
         float mix = 0.25f;
-
-        static std::string name() { return "reverb"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

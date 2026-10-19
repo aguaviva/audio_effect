@@ -7,11 +7,11 @@
 
 class DynamicLowPassFilter {
 public:
-    // Controllable module state: name() + write/read (JSON assembled outside).
+    static std::string name() { return "low_pass"; }
+
+    // Controllable fields: write/read (JSON assembled outside).
     struct Params {
         float cutoff_hz = 8000.0f;
-
-        static std::string name() { return "low_pass"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

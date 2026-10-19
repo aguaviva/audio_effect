@@ -139,39 +139,39 @@ bool try_resolve_name(const std::string& module_name, NodeType& out) {
         out = NodeType::white_noise;
         return true;
     }
-    if (module_name == Echo::name()) {
+    if (module_name == EchoEffect::name()) {
         out = NodeType::echo;
         return true;
     }
-    if (module_name == Preamp::name()) {
+    if (module_name == ::Preamp::name()) {
         out = NodeType::preamp;
         return true;
     }
-    if (module_name == HighPass::name()) {
+    if (module_name == DynamicHighPassFilter::name()) {
         out = NodeType::high_pass;
         return true;
     }
-    if (module_name == LowPass::name()) {
+    if (module_name == DynamicLowPassFilter::name()) {
         out = NodeType::low_pass;
         return true;
     }
-    if (module_name == Drive::name()) {
+    if (module_name == guitar_pedals::DrivePedal::name()) {
         out = NodeType::drive_pedal;
         return true;
     }
-    if (module_name == Compressor::name()) {
+    if (module_name == ValveCompressor::name()) {
         out = NodeType::compressor;
         return true;
     }
-    if (module_name == NoiseGate::name()) {
+    if (module_name == ::NoiseGate::name()) {
         out = NodeType::noise_gate;
         return true;
     }
-    if (module_name == EqThreeBand::name()) {
+    if (module_name == ::EqThreeBand::name()) {
         out = NodeType::eq_three_band;
         return true;
     }
-    if (module_name == Reverb::name()) {
+    if (module_name == SimpleReverb::name()) {
         out = NodeType::reverb;
         return true;
     }
@@ -179,7 +179,7 @@ bool try_resolve_name(const std::string& module_name, NodeType& out) {
         out = NodeType::dry_wet_mix;
         return true;
     }
-    if (module_name == WavRecorder::name()) {
+    if (module_name == ::WavRecorder::name()) {
         out = NodeType::wav_recorder;
         return true;
     }
@@ -219,27 +219,27 @@ std::string name_for_type(NodeType type) {
     case NodeType::white_noise:
         return WhiteNoise::name();
     case NodeType::echo:
-        return Echo::name();
+        return EchoEffect::name();
     case NodeType::preamp:
-        return Preamp::name();
+        return ::Preamp::name();
     case NodeType::high_pass:
-        return HighPass::name();
+        return DynamicHighPassFilter::name();
     case NodeType::low_pass:
-        return LowPass::name();
+        return DynamicLowPassFilter::name();
     case NodeType::drive_pedal:
-        return Drive::name();
+        return guitar_pedals::DrivePedal::name();
     case NodeType::compressor:
-        return Compressor::name();
+        return ValveCompressor::name();
     case NodeType::noise_gate:
-        return NoiseGate::name();
+        return ::NoiseGate::name();
     case NodeType::eq_three_band:
-        return EqThreeBand::name();
+        return ::EqThreeBand::name();
     case NodeType::reverb:
-        return Reverb::name();
+        return SimpleReverb::name();
     case NodeType::dry_wet_mix:
         return DryWet::name();
     case NodeType::wav_recorder:
-        return WavRecorder::name();
+        return ::WavRecorder::name();
     case NodeType::vu_meter:
         return VuMeter::name();
     case NodeType::oscilloscope:
@@ -330,8 +330,35 @@ NodeState NodeState::make(NodeType type) {
     return s;
 }
 
+namespace {
+
+std::string name_of(const node_params::None&) { return node_params::None::name(); }
+std::string name_of(const node_params::WavPlayer&) { return node_params::WavPlayer::name(); }
+std::string name_of(const node_params::AudioInput&) { return node_params::AudioInput::name(); }
+std::string name_of(const node_params::AudioOutput&) { return node_params::AudioOutput::name(); }
+std::string name_of(const node_params::Chord&) { return node_params::Chord::name(); }
+std::string name_of(const node_params::WhiteNoise&) { return node_params::WhiteNoise::name(); }
+std::string name_of(const node_params::Echo&) { return EchoEffect::name(); }
+std::string name_of(const node_params::Preamp&) { return ::Preamp::name(); }
+std::string name_of(const node_params::HighPass&) { return DynamicHighPassFilter::name(); }
+std::string name_of(const node_params::LowPass&) { return DynamicLowPassFilter::name(); }
+std::string name_of(const node_params::Drive&) { return guitar_pedals::DrivePedal::name(); }
+std::string name_of(const node_params::Compressor&) { return ValveCompressor::name(); }
+std::string name_of(const node_params::NoiseGate&) { return ::NoiseGate::name(); }
+std::string name_of(const node_params::EqThreeBand&) { return ::EqThreeBand::name(); }
+std::string name_of(const node_params::Reverb&) { return SimpleReverb::name(); }
+std::string name_of(const node_params::DryWet&) { return node_params::DryWet::name(); }
+std::string name_of(const node_params::WavRecorder&) { return ::WavRecorder::name(); }
+std::string name_of(const node_params::VuMeter&) { return node_params::VuMeter::name(); }
+std::string name_of(const node_params::Oscilloscope&) { return node_params::Oscilloscope::name(); }
+std::string name_of(const node_params::Spectrum&) { return node_params::Spectrum::name(); }
+std::string name_of(const node_params::PitchDetector&) { return node_params::PitchDetector::name(); }
+std::string name_of(const node_params::Mixer&) { return node_params::Mixer::name(); }
+
+} // namespace
+
 std::string NodeState::module_name() const {
-    return std::visit([](const auto& p) { return p.name(); }, params);
+    return std::visit([](const auto& p) { return name_of(p); }, params);
 }
 
 bool NodeState::load_by_module_name(const std::string& module_name, const std::string& text,

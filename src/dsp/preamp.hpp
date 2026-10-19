@@ -8,10 +8,10 @@
 
 class Preamp {
 public:
+    static std::string name() { return "preamp"; }
+
     struct Params {
         float gain_db = 0.0f;
-
-        static std::string name() { return "preamp"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

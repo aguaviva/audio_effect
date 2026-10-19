@@ -9,12 +9,12 @@
 
 class EchoEffect {
 public:
+    static std::string name() { return "echo"; }
+
     struct Params {
         float delay_ms = 320.0f;
         float feedback = 0.35f;
         float mix = 0.25f;
-
-        static std::string name() { return "echo"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);

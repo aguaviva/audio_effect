@@ -18,12 +18,12 @@ enum class DriveModel : int {
 
 class DrivePedal {
 public:
+    static std::string name() { return "drive_pedal"; }
+
     struct Params {
         int model = 0;
         float amount = 3.0f;
         float tone = 0.65f;
-
-        static std::string name() { return "drive_pedal"; }
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
