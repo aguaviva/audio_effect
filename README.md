@@ -82,11 +82,10 @@ Toolbar **Save Graph** / **Load Graph** read and write a small JSON document con
   `bypassed`, optional `muted` (Mixer), and the module's own named settings, e.g.
   `{"bypassed":false,"delay_ms":320,"feedback":0.35,"mix":0.35}` for Echo.
 - `links[]`: `id`, `from`, `to`, `to_slot`
-- `wav_path`, `record_path`, `next_node_id`, `next_link_id`
+- `record_path`
 
-Node and link ids must be unique; the id counters are raised past the largest loaded id.
-Version 1 patches (positional `"f"` / `"i"` / `"b"` arrays) still load and are re-saved
-in the named form.
+Node and link ids must be unique. A new node or link gets the largest existing id + 1.
+Only version 2 files load.
 
 ## Layout
 

@@ -10,12 +10,21 @@ GraphNode::GraphNode(int id, NodeType type, float x, float y)
 GraphLink::GraphLink(int id, int from_node, int to_node, int to_slot)
     : id_(id), from_node_(from_node), to_node_(to_node), to_slot_(to_slot) {}
 
+template <typename T>
+static int next_free_id(const std::vector<T>& items) {
+    int max_id = 0;
+    for (const auto& item : items) {
+        max_id = std::max(max_id, item.id());
+    }
+    return max_id + 1;
+}
+
 AudioGraph::AudioGraph() {
     reset_to_default_chain();
 }
 
 int AudioGraph::add_node(NodeType type, float x, float y) {
-    const int id = next_node_id_++;
+    const int id = next_free_id(nodes_);
     nodes_.emplace_back(id, type, x, y);
     return id;
 }
@@ -87,7 +96,7 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
         }
     }
 
-    links_.emplace_back(next_link_id_++, from_node, to_node, to_slot);
+    links_.emplace_back(next_free_id(links_), from_node, to_node, to_slot);
     return true;
 }
 
@@ -168,15 +177,11 @@ const GraphNode* AudioGraph::find_node(int node_id) const {
 void AudioGraph::clear() {
     nodes_.clear();
     links_.clear();
-    next_node_id_ = 1;
-    next_link_id_ = 1;
 }
 
 void AudioGraph::copy_structure_from(const AudioGraph& other) {
     nodes_ = other.nodes_;
     links_ = other.links_;
-    next_node_id_ = other.next_node_id_;
-    next_link_id_ = other.next_link_id_;
     wav_path_ = other.wav_path_;
     record_path_ = other.record_path_;
 }

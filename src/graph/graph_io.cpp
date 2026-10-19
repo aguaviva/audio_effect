@@ -4,7 +4,6 @@
 #include "node_state.hpp"
 #include "paths.hpp"
 
-#include <algorithm>
 #include <cctype>
 #include <fstream>
 #include <sstream>
@@ -12,6 +11,8 @@
 
 namespace graph_io {
 namespace {
+
+constexpr int kFileVersion = 2;
 
 std::string escape_string(const std::string& value) {
     std::string out;
@@ -95,10 +96,8 @@ bool parse_number(const std::string& text, size_t& i, double& out) {
 std::string serialize(const AudioGraph& graph) {
     std::ostringstream oss;
     oss << "{\n";
-    oss << "  \"version\":2,\n";
-    oss << "  \"wav_path\":\"" << escape_string(graph.wav_path()) << "\",\n";
+    oss << "  \"version\":" << kFileVersion << ",\n";
     oss << "  \"record_path\":\"" << escape_string(graph.record_path()) << "\",\n";
-    oss << "  \"next_node_id\":" << graph.next_node_id() << ",\n";
     oss << "  \"nodes\":[\n";
     const auto& nodes = graph.nodes();
     for (size_t n = 0; n < nodes.size(); ++n) {
@@ -112,7 +111,6 @@ std::string serialize(const AudioGraph& graph) {
         oss << '\n';
     }
     oss << "  ],\n";
-    oss << "  \"next_link_id\":" << graph.next_link_id() << ",\n";
     oss << "  \"links\":[\n";
     const auto& links = graph.links();
     for (size_t n = 0; n < links.size(); ++n) {
@@ -137,11 +135,8 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
 
     AudioGraph loaded;
     loaded.clear();
-    loaded.set_wav_path(kDefaultWavPath);
     loaded.set_record_path(kDefaultRecordPath);
-    int next_node = 1;
-    int next_link = 1;
-    int file_version = 1;
+    int file_version = 0;
     std::unordered_set<int> node_ids;
     std::unordered_set<int> link_ids;
     bool have_nodes = false;
@@ -166,13 +161,6 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                 return false;
             }
             file_version = static_cast<int>(version);
-        } else if (key == "wav_path") {
-            std::string path;
-            if (!parse_string(text, i, path)) {
-                error = "Invalid wav_path";
-                return false;
-            }
-            loaded.set_wav_path(path);
         } else if (key == "record_path") {
             std::string path;
             if (!parse_string(text, i, path)) {
@@ -180,14 +168,6 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                 return false;
             }
             loaded.set_record_path(path);
-        } else if (key == "next_node_id" || key == "next_link_id") {
-            double value = 0;
-            if (!parse_number(text, i, value)) {
-                error = "Invalid id counter";
-                return false;
-            }
-            if (key == "next_node_id") next_node = static_cast<int>(value);
-            else next_link = static_cast<int>(value);
         } else if (key == "nodes") {
             if (!expect(text, i, '[')) {
                 error = "nodes must be an array";
@@ -372,16 +352,16 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         if (i >= text.size()) break;
     }
 
+    if (file_version != kFileVersion) {
+        error = "Unsupported patch version " + std::to_string(file_version) + " (expected " +
+                std::to_string(kFileVersion) + ")";
+        return false;
+    }
     if (!have_nodes) {
         error = "Graph file missing nodes";
         return false;
     }
     (void)have_links;
-    // The stored counters are only a hint; reusing a live id would alias two nodes/links.
-    for (int id : node_ids) next_node = std::max(next_node, id + 1);
-    for (int id : link_ids) next_link = std::max(next_link, id + 1);
-    loaded.set_next_node_id(next_node);
-    loaded.set_next_link_id(next_link);
 
     // Validate link endpoints exist; drop broken ones rather than failing hard.
     std::vector<GraphLink> valid_links;
@@ -391,17 +371,6 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         }
     }
     loaded.links() = std::move(valid_links);
-
-    // v1 patches kept the WAV on the graph; copy onto each WavPlayer.
-    if (file_version < 2) {
-        for (auto& node : loaded.nodes()) {
-            if (node.type() == NodeType::wav_player) {
-                if (auto* p = node.state().as<node_params::WavPlayer>()) {
-                    p->set_path(loaded.wav_path());
-                }
-            }
-        }
-    }
 
     graph.copy_structure_from(loaded);
     return true;

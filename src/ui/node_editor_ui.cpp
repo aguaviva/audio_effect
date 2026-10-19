@@ -756,6 +756,8 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         for (int id : link_ids) {
             graph.remove_link(id);
         }
+        // Ids are reused after deletion, so a stale selection would carry over to new links.
+        ImNodes::ClearLinkSelection();
         node_editor_publish(graph);
     }
 

@@ -123,11 +123,6 @@ public:
     std::vector<GraphNode>& nodes() { return nodes_; }
     std::vector<GraphLink>& links() { return links_; }
 
-    int next_node_id() const { return next_node_id_; }
-    int next_link_id() const { return next_link_id_; }
-    void set_next_node_id(int id) { next_node_id_ = id; }
-    void set_next_link_id(int id) { next_link_id_ = id; }
-
     const std::string& wav_path() const { return wav_path_; }
     void set_wav_path(const std::string& path) { wav_path_ = path; }
 
@@ -145,8 +140,6 @@ public:
 private:
     std::vector<GraphNode> nodes_;
     std::vector<GraphLink> links_;
-    int next_node_id_ = 1;
-    int next_link_id_ = 1;
     std::string wav_path_{kDefaultWavPath};
     std::string record_path_{kDefaultRecordPath};
 

@@ -160,71 +160,6 @@ bool parse_scalar_array(const std::string& body, size_t& j, Fn&& fn) {
     }
 }
 
-// Version-1 patches stored params positionally as {"f":[8],"i":[4],"b":[4]}.
-struct LegacyParams {
-    float f[8]{};
-    int i[4]{};
-    bool b[4]{};
-    bool present = false;
-};
-
-// Maps the v1 positional slots onto the named keys each module's load() reads.
-std::string legacy_params_json(NodeType type, const LegacyParams& p) {
-    using namespace module_json;
-    std::string out = "{";
-    switch (type) {
-    case NodeType::wav_player: write_bool(out, "loop", p.b[0]); break;
-    case NodeType::chord_generator: write_int(out, "chord_index", p.i[0]); break;
-    case NodeType::white_noise: write_float(out, "level", p.f[0]); break;
-    case NodeType::echo:
-        write_float(out, "delay_ms", p.f[0]);
-        write_float(out, "feedback", p.f[1]);
-        write_float(out, "mix", p.f[2]);
-        break;
-    case NodeType::preamp: write_float(out, "gain_db", p.f[0]); break;
-    case NodeType::high_pass:
-    case NodeType::low_pass: write_float(out, "cutoff_hz", p.f[0]); break;
-    case NodeType::drive_pedal:
-        write_int(out, "model", p.i[0]);
-        write_float(out, "amount", p.f[0]);
-        write_float(out, "tone", p.f[1]);
-        break;
-    case NodeType::compressor:
-        write_float(out, "threshold_db", p.f[0]);
-        write_float(out, "ratio", p.f[1]);
-        write_float(out, "attack_ms", p.f[2]);
-        write_float(out, "release_ms", p.f[3]);
-        write_float(out, "drive", p.f[4]);
-        write_float(out, "makeup_db", p.f[5]);
-        break;
-    case NodeType::noise_gate:
-        write_float(out, "threshold_db", p.f[0]);
-        write_float(out, "attack_ms", p.f[2]);
-        write_float(out, "release_ms", p.f[3]);
-        break;
-    case NodeType::eq_three_band:
-        write_float(out, "low_db", p.f[0]);
-        write_float(out, "mid_db", p.f[1]);
-        write_float(out, "high_db", p.f[2]);
-        break;
-    case NodeType::reverb:
-        write_float(out, "room", p.f[0]);
-        write_float(out, "damping", p.f[1]);
-        write_float(out, "mix", p.f[2]);
-        break;
-    case NodeType::dry_wet_mix: write_float(out, "mix", p.f[0]); break;
-    case NodeType::vu_meter:
-        write_float(out, "display_gain", p.f[0]);
-        write_float(out, "decay", p.f[1]);
-        break;
-    case NodeType::oscilloscope:
-    case NodeType::spectrum: write_float(out, "display_gain", p.f[0]); break;
-    default: break;
-    }
-    out += '}';
-    return out;
-}
-
 } // namespace
 
 bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
@@ -238,7 +173,6 @@ bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
     }
     const std::string obj = text.substr(start, i - start);
 
-    LegacyParams legacy;
     const bool node_ok = module_json::for_each_member(
         obj, [&](const std::string& key, const std::string& body, size_t& j) -> bool {
             if (key == "bypassed") {
@@ -261,23 +195,10 @@ bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
                     }
                 });
             }
-            if (key == "f" || key == "i" || key == "b") {
-                legacy.present = true;
-                const char slot = key[0];
-                return parse_scalar_array(body, j, [&](int idx, double v) {
-                    if (slot == 'f' && idx < 8) legacy.f[idx] = static_cast<float>(v);
-                    if (slot == 'i' && idx < 4) legacy.i[idx] = static_cast<int>(v);
-                    if (slot == 'b' && idx < 4) legacy.b[idx] = v != 0.0;
-                });
-            }
             return module_json::skip_value(body, j);
         });
     if (!node_ok) {
         return false;
-    }
-    if (legacy.present) {
-        bypassed = legacy.b[3];
-        return module_->load(legacy_params_json(type, legacy));
     }
     return module_->load(obj);
 }

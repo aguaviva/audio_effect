@@ -95,18 +95,18 @@ TEST(graph_io_rejects_duplicate_ids) {
     CHECK(error.find("Duplicate link id") != std::string::npos);
 }
 
-TEST(graph_io_next_ids_never_reuse_loaded_ids) {
-    const char* text = R"({"version":2,"next_node_id":1,"next_link_id":1,"nodes":[
+TEST(graph_io_new_ids_follow_largest_loaded_id) {
+    const char* text = R"({"version":2,"nodes":[
         {"id":7,"type":"preamp","x":0,"y":0},
         {"id":9,"type":"output","x":0,"y":0}],
         "links":[{"id":4,"from":7,"to":9,"to_slot":0}]})";
     AudioGraph g;
     std::string error;
     CHECK(graph_io::deserialize(g, text, error));
-    CHECK_EQ(g.next_node_id(), 10);
-    CHECK_EQ(g.next_link_id(), 5);
     const int added = g.add_node(NodeType::preamp, 0, 0);
     CHECK_EQ(added, 10);
+    CHECK(g.add_link(added, 9));
+    CHECK_EQ(g.links().back().id(), 5);
 }
 
 TEST(graph_io_params_may_precede_type) {
@@ -118,47 +118,12 @@ TEST(graph_io_params_may_precede_type) {
     CHECK_NEAR(g.find_node(1)->state().as<node_params::Preamp>()->gain_db, 4.5f, 1e-5f);
 }
 
-TEST(graph_io_migrates_v1_positional_params) {
-    const char* text = R"({"version":1,"wav_path":"assets/audio/x.wav","nodes":[
-        {"id":1,"type":"wav_player","x":0,"y":0,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-        {"id":2,"type":"echo","x":0,"y":0,"params":{"f":[320,0.35,0.4,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,true]}},
-        {"id":3,"type":"drive_pedal","x":0,"y":0,"params":{"f":[3.5,0.65,0,0,0,0,0,0],"i":[2,0,0,0],"b":[false,false,false,false]}},
-        {"id":4,"type":"noise_gate","x":0,"y":0,"params":{"f":[-50,99,2,80,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-        {"id":5,"type":"vu_meter","x":0,"y":0,"params":{"f":[1.5,0.85,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}}
-        ],"links":[]})";
+TEST(graph_io_rejects_other_versions) {
     AudioGraph g;
     std::string error;
-    CHECK(graph_io::deserialize(g, text, error));
-
-    const auto* wav = g.find_node(1)->state().as<node_params::WavPlayer>();
-    CHECK(wav && !wav->loop);
-    CHECK(wav && wav->path() == "assets/audio/x.wav");
-
-    const auto& echo_state = g.find_node(2)->state();
-    const auto* echo = echo_state.as<node_params::Echo>();
-    CHECK(echo_state.bypassed);
-    CHECK_NEAR(echo->delay_ms, 320.0f, 1e-4f);
-    CHECK_NEAR(echo->feedback, 0.35f, 1e-5f);
-    CHECK_NEAR(echo->mix, 0.4f, 1e-5f);
-
-    const auto* drive = g.find_node(3)->state().as<node_params::Drive>();
-    CHECK_EQ(drive->model, 2);
-    CHECK_NEAR(drive->amount, 3.5f, 1e-5f);
-    CHECK_NEAR(drive->tone, 0.65f, 1e-5f);
-
-    const auto* gate = g.find_node(4)->state().as<node_params::NoiseGate>();
-    CHECK_NEAR(gate->threshold_db, -50.0f, 1e-4f);
-    CHECK_NEAR(gate->attack_ms, 2.0f, 1e-5f);
-    CHECK_NEAR(gate->release_ms, 80.0f, 1e-4f);
-
-    const auto* vu = g.find_node(5)->state().as<node_params::VuMeter>();
-    CHECK_NEAR(vu->display_gain, 1.5f, 1e-5f);
-    CHECK_NEAR(vu->decay, 0.85f, 1e-5f);
-
-    // Re-saving writes named keys, not the positional arrays.
-    const std::string resaved = graph_io::serialize(g);
-    CHECK(resaved.find("\"f\":") == std::string::npos);
-    CHECK(resaved.find("\"delay_ms\"") != std::string::npos);
+    CHECK(!graph_io::deserialize(g, R"({"version":1,"nodes":[],"links":[]})", error));
+    CHECK(error.find("Unsupported patch version 1") != std::string::npos);
+    CHECK(!graph_io::deserialize(g, R"({"nodes":[],"links":[]})", error));
 }
 
 TEST(graph_io_bundled_patches_load) {
@@ -172,14 +137,12 @@ TEST(graph_io_bundled_patches_load) {
     }
 }
 
-TEST(graph_io_saves_all_node_data_before_link_data) {
+TEST(graph_io_saves_nodes_before_links) {
     AudioGraph g;
     g.reset_to_default_chain();
     const std::string text = graph_io::serialize(g);
-    const size_t nodes = text.find("\"nodes\"");
-    const size_t next_link = text.find("\"next_link_id\"");
-    const size_t links = text.find("\"links\"");
-    CHECK(text.find("\"next_node_id\"") < nodes);
-    CHECK(nodes < next_link);
-    CHECK(next_link < links);
+    CHECK(text.find("\"nodes\"") < text.find("\"links\""));
+    CHECK(text.find("next_node_id") == std::string::npos);
+    CHECK(text.find("next_link_id") == std::string::npos);
+    CHECK(text.find("wav_path") == std::string::npos);
 }
