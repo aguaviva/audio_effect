@@ -12,10 +12,12 @@ public:
     float release_ms = 80.0f;
 
     std::string name() const override { return "noise_gate"; }
+    Role role() const override { return Role::effect; }
     void save(std::string& out, bool& first) const override;
     bool load(const std::string& key, double num, bool flag, const std::string& str,
               int kind) override;
     bool render() override;
+    void process(ProcessContext& ctx) override;
 
     void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();

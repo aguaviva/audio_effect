@@ -109,3 +109,10 @@ bool EchoEffect::load(const std::string& key, double num, bool, const std::strin
     }
     return false;
 }
+
+void EchoEffect::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

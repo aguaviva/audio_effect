@@ -9,32 +9,34 @@ bool Mixer::render() {
     return false;
 }
 
-void Mixer::process(const float* const* sources, size_t source_count, float* destination,
-                    size_t num_samples) const {
-    if (destination == nullptr || num_samples == 0) {
+void Mixer::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
         return;
     }
-    std::fill(destination, destination + num_samples, 0.0f);
-    if (sources == nullptr || source_count == 0) {
+    std::fill(ctx.buffer, ctx.buffer + ctx.num_samples, 0.0f);
+    if (ctx.inputs == nullptr || ctx.input_count == 0) {
         return;
     }
 
     size_t connected = 0;
-    for (size_t s = 0; s < source_count; ++s) {
-        const float* src = sources[s];
+    for (size_t s = 0; s < ctx.input_count; ++s) {
+        if (ctx.input_muted && ctx.input_muted[s]) {
+            continue;
+        }
+        const float* src = ctx.inputs[s];
         if (src == nullptr) {
             continue;
         }
-        for (size_t i = 0; i < num_samples; ++i) {
-            destination[i] += src[i];
+        for (size_t i = 0; i < ctx.num_samples; ++i) {
+            ctx.buffer[i] += src[i];
         }
         ++connected;
     }
 
     if (connected > 0) {
         const float scale = 1.0f / static_cast<float>(connected);
-        for (size_t i = 0; i < num_samples; ++i) {
-            destination[i] *= scale;
+        for (size_t i = 0; i < ctx.num_samples; ++i) {
+            ctx.buffer[i] *= scale;
         }
     }
 }

@@ -5,22 +5,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <string>
 
-// Graph module: arm flag only (name / save / load / render).
-class WavRecorder : public Module {
-public:
-    bool armed = false;
-
-    std::string name() const override { return "wav_recorder"; }
-    void save(std::string& out, bool& first) const override;
-    bool load(const std::string& key, double num, bool flag, const std::string& str,
-              int kind) override;
-    bool render() override;
-};
-
-// Runtime pass-through WAV writer (16-bit PCM stereo). Owned by GraphProcessor.
 class WavRecorderEngine {
 public:
     void set_path(const std::string& path);
@@ -45,4 +33,22 @@ private:
     uint32_t sample_rate_ = 48000;
     uint64_t data_bytes_ = 0;
     std::string status_{"Idle"};
+};
+
+// Graph module. Runtime file I/O lives in a lazily created shared engine so
+// NodeState copies stay light / copyable.
+class WavRecorder : public Module {
+public:
+    bool armed = false;
+
+    std::string name() const override { return "wav_recorder"; }
+    Role role() const override { return Role::sink; }
+    void save(std::string& out, bool& first) const override;
+    bool load(const std::string& key, double num, bool flag, const std::string& str,
+              int kind) override;
+    bool render() override;
+    void process(ProcessContext& ctx) override;
+
+private:
+    std::shared_ptr<WavRecorderEngine> engine_;
 };

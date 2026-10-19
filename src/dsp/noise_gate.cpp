@@ -68,3 +68,10 @@ bool NoiseGate::load(const std::string& key, double num, bool, const std::string
     if (key == "release_ms") { release_ms = static_cast<float>(num); return true; }
     return false;
 }
+
+void NoiseGate::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

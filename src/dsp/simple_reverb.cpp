@@ -143,3 +143,10 @@ bool SimpleReverb::load(const std::string& key, double num, bool, const std::str
     if (key == "mix") { mix = static_cast<float>(num); return true; }
     return false;
 }
+
+void SimpleReverb::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

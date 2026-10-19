@@ -144,3 +144,10 @@ bool EqThreeBand::load(const std::string& key, double num, bool, const std::stri
     if (key == "high_db") { high_db = static_cast<float>(num); return true; }
     return false;
 }
+
+void EqThreeBand::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

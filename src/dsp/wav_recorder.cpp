@@ -23,6 +23,17 @@ bool WavRecorder::render() {
     return ImGui::Checkbox("Arm Record", &armed);
 }
 
+void WavRecorder::process(ProcessContext& ctx) {
+    if (!engine_) {
+        engine_ = std::make_shared<WavRecorderEngine>();
+    }
+    if (ctx.host) {
+        engine_->set_path(ctx.host->record_path());
+    }
+    engine_->set_armed(armed, ctx.sample_rate);
+    engine_->write_samples(ctx.buffer, ctx.num_samples);
+}
+
 void WavRecorderEngine::set_path(const std::string& path) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (armed_) {

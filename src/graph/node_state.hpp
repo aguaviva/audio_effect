@@ -26,12 +26,14 @@ namespace node_params {
 
 struct None : Module {
     std::string name() const override { return "none"; }
+    Role role() const override { return Role::effect; }
     void save(std::string& /*out*/, bool& /*first*/) const override {}
     bool load(const std::string& /*key*/, double /*num*/, bool /*flag*/, const std::string& /*str*/,
               int /*kind*/) override {
         return false;
     }
     bool render() override { return false; }
+    void process(ProcessContext& /*ctx*/) override {}
 };
 
 using WavPlayer = ::WavPlayer;
@@ -101,5 +103,13 @@ struct NodeState {
     template <typename T>
     const T* as() const {
         return std::get_if<T>(&params);
+    }
+
+    // Polymorphic view of the active module (for GraphProcessor / UI).
+    Module& module() {
+        return std::visit([](auto& m) -> Module& { return m; }, params);
+    }
+    const Module& module() const {
+        return std::visit([](const auto& m) -> const Module& { return m; }, params);
     }
 };

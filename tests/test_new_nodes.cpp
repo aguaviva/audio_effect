@@ -62,7 +62,12 @@ TEST(mixer_dsp_averages_sources) {
     std::vector<float> b(8, 0.6f);
     std::vector<float> out(8, -1.0f);
     const float* sources[] = {a.data(), b.data()};
-    mixer.process(sources, 2, out.data(), out.size());
+    ProcessContext ctx;
+    ctx.buffer = out.data();
+    ctx.num_samples = out.size();
+    ctx.inputs = sources;
+    ctx.input_count = 2;
+    mixer.process(ctx);
     CHECK_NEAR(out[0], 0.4f, 1e-5f);
     CHECK_NEAR(out[7], 0.4f, 1e-5f);
 }

@@ -100,3 +100,10 @@ bool DrivePedal::load(const std::string& key, double num, bool, const std::strin
 }
 
 } // namespace guitar_pedals
+
+void guitar_pedals::DrivePedal::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

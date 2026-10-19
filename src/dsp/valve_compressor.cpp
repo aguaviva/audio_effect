@@ -149,3 +149,10 @@ bool ValveCompressor::load(const std::string& key, double num, bool, const std::
     if (key == "selected_preset") { selected_preset = static_cast<int>(num); return true; }
     return false;
 }
+
+void ValveCompressor::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

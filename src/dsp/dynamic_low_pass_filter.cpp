@@ -72,3 +72,10 @@ bool DynamicLowPassFilter::load(const std::string& key, double num, bool, const 
     }
     return false;
 }
+
+void DynamicLowPassFilter::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
+}

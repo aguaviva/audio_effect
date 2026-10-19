@@ -44,6 +44,7 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/wav_recorder.cpp
   src/dsp/graph_modules.cpp
   src/dsp/mixer.cpp
+  src/dsp/module_factory.cpp
   third_party/imgui/imgui.cpp
   third_party/imgui/imgui_draw.cpp
   third_party/imgui/imgui_tables.cpp
@@ -129,6 +130,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/wav_recorder.cpp
     src/dsp/graph_modules.cpp
     src/dsp/mixer.cpp
+    src/dsp/module_factory.cpp
     third_party/imgui/imgui.cpp
     third_party/imgui/imgui_draw.cpp
     third_party/imgui/imgui_tables.cpp

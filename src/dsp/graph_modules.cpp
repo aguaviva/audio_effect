@@ -23,11 +23,34 @@ bool WavPlayer::load(const std::string& key, double, bool flag, const std::strin
     return false;
 }
 bool WavPlayer::render() {
-    bool changed = false;
-    if (ImGui::Checkbox("Loop", &loop)) {
-        changed = true;
+    return ImGui::Checkbox("Loop", &loop);
+}
+void WavPlayer::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
     }
-    return changed;
+    if (scratch_.size() != ctx.num_samples) {
+        scratch_.assign(ctx.num_samples, 0);
+    }
+    if (path != loaded_path_) {
+        loaded_path_ = path;
+        clip_.reset();
+        if (ctx.host) {
+            clip_ = ctx.host->load_wav(path);
+            if (!clip_) {
+                clip_ = ctx.host->fallback_wav();
+            }
+        }
+        wav_.reset();
+    }
+    if (clip_ && clip_->frame_count() > 0) {
+        wav_.render(clip_, loop, scratch_.data(), ctx.num_samples / 2);
+    } else {
+        std::fill(scratch_.begin(), scratch_.end(), 0);
+    }
+    for (size_t i = 0; i < ctx.num_samples; ++i) {
+        ctx.buffer[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
+    }
 }
 
 void AudioInput::save(std::string& out, bool& first) const {
@@ -43,6 +66,14 @@ bool AudioInput::load(const std::string& key, double, bool, const std::string& s
 bool AudioInput::render() {
     ImGui::TextUnformatted(device.c_str());
     return false;
+}
+void AudioInput::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.live_pcm == nullptr) {
+        return;
+    }
+    for (size_t i = 0; i < ctx.num_samples; ++i) {
+        ctx.buffer[i] = static_cast<float>(ctx.live_pcm[i]) / 2147483648.0f;
+    }
 }
 
 void AudioOutput::save(std::string& out, bool& first) const {
@@ -80,6 +111,19 @@ bool ChordGenerator::render() {
     index = std::clamp(index, 0, kChordCount - 1);
     return false;
 }
+void ChordGenerator::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
+        return;
+    }
+    if (scratch_.size() != ctx.num_samples) {
+        scratch_.assign(ctx.num_samples, 0);
+    }
+    chord_.render(index, scratch_.data(), ctx.num_samples / 2, 2,
+                  static_cast<uint32_t>(ctx.sample_rate));
+    for (size_t i = 0; i < ctx.num_samples; ++i) {
+        ctx.buffer[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
+    }
+}
 
 void WhiteNoise::save(std::string& out, bool& first) const {
     module_json::write_float(out, first, "level", level);
@@ -91,18 +135,21 @@ bool WhiteNoise::load(const std::string& key, double num, bool, const std::strin
     }
     return false;
 }
-void WhiteNoise::process(float* samples, size_t num_samples) {
-    const float amp = std::clamp(level, 0.0f, 1.0f);
-    for (size_t i = 0; i < num_samples; ++i) {
-        rng_ = rng_ * 1664525u + 1013904223u;
-        const float unit = static_cast<float>((rng_ >> 8) & 0x00FFFFFFu) * (1.0f / 16777216.0f);
-        samples[i] = (unit * 2.0f - 1.0f) * amp;
-    }
-}
 bool WhiteNoise::render() {
     ImGui::TextUnformatted("Level");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##wn_level", &level, 0.0f, 1.0f, "%.2f");
+}
+void WhiteNoise::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr) {
+        return;
+    }
+    const float amp = std::clamp(level, 0.0f, 1.0f);
+    for (size_t i = 0; i < ctx.num_samples; ++i) {
+        rng_ = rng_ * 1664525u + 1013904223u;
+        const float unit = static_cast<float>((rng_ >> 8) & 0x00FFFFFFu) * (1.0f / 16777216.0f);
+        ctx.buffer[i] = (unit * 2.0f - 1.0f) * amp;
+    }
 }
 
 void DryWetMix::save(std::string& out, bool& first) const {
@@ -115,19 +162,23 @@ bool DryWetMix::load(const std::string& key, double num, bool, const std::string
     }
     return false;
 }
-void DryWetMix::process(const float* dry, const float* wet, float* destination,
-                        size_t num_samples) const {
-    const float wet_amt = std::clamp(mix, 0.0f, 1.0f);
-    for (size_t i = 0; i < num_samples; ++i) {
-        const float d = dry ? dry[i] : 0.0f;
-        const float w = wet ? wet[i] : 0.0f;
-        destination[i] = d * (1.0f - wet_amt) + w * wet_amt;
-    }
-}
 bool DryWetMix::render() {
     ImGui::TextUnformatted("Wet");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##dw_mix", &mix, 0.0f, 1.0f, "%.2f");
+}
+void DryWetMix::process(ProcessContext& ctx) {
+    if (ctx.buffer == nullptr) {
+        return;
+    }
+    const float* dry = (ctx.input_count > 0 && ctx.inputs) ? ctx.inputs[0] : nullptr;
+    const float* wet = (ctx.input_count > 1 && ctx.inputs) ? ctx.inputs[1] : nullptr;
+    const float wet_amt = std::clamp(mix, 0.0f, 1.0f);
+    for (size_t i = 0; i < ctx.num_samples; ++i) {
+        const float d = dry ? dry[i] : 0.0f;
+        const float w = wet ? wet[i] : 0.0f;
+        ctx.buffer[i] = d * (1.0f - wet_amt) + w * wet_amt;
+    }
 }
 
 void VuMeter::save(std::string& out, bool& first) const {
@@ -158,6 +209,11 @@ bool VuMeter::render() {
     changed |= ImGui::SliderFloat("##vu_decay", &decay, 0.5f, 0.99f, "%.2f");
     return changed;
 }
+void VuMeter::process(ProcessContext& ctx) {
+    if (ctx.host) {
+        ctx.host->analyze(ctx.node_id, name(), ctx.buffer, ctx.num_samples, display_gain, decay);
+    }
+}
 
 void Oscilloscope::save(std::string& out, bool& first) const {
     module_json::write_float(out, first, "display_gain", display_gain);
@@ -174,6 +230,11 @@ bool Oscilloscope::render() {
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##scope_gain", &display_gain, 0.25f, 4.0f, "%.2f");
 }
+void Oscilloscope::process(ProcessContext& ctx) {
+    if (ctx.host) {
+        ctx.host->analyze(ctx.node_id, name(), ctx.buffer, ctx.num_samples, display_gain, 0.85f);
+    }
+}
 
 void Spectrum::save(std::string& out, bool& first) const {
     module_json::write_float(out, first, "display_gain", display_gain);
@@ -189,4 +250,15 @@ bool Spectrum::render() {
     ImGui::TextUnformatted("Gain");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##spec_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+}
+void Spectrum::process(ProcessContext& ctx) {
+    if (ctx.host) {
+        ctx.host->analyze(ctx.node_id, name(), ctx.buffer, ctx.num_samples, display_gain, 0.85f);
+    }
+}
+
+void PitchDetectorModule::process(ProcessContext& ctx) {
+    if (ctx.host) {
+        ctx.host->analyze(ctx.node_id, name(), ctx.buffer, ctx.num_samples, 1.0f, 0.85f);
+    }
 }

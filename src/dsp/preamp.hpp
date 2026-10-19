@@ -11,10 +11,12 @@ public:
     int selected_preset = 0; // 0 = Custom
 
     std::string name() const override { return "preamp"; }
+    Role role() const override { return Role::effect; }
     void save(std::string& out, bool& first) const override;
     bool load(const std::string& key, double num, bool flag, const std::string& str,
               int kind) override;
     bool render() override;
+    void process(ProcessContext& ctx) override;
 
     void process(float* samples, size_t num_samples);
 };
