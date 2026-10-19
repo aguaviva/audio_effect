@@ -3,6 +3,8 @@
 #include "audio/audio_devices.hpp"
 #include "audio/pipeline.hpp"
 #include "dsp/chord_catalog.hpp"
+#include "dsp/dynamic_high_pass_filter.hpp"
+#include "dsp/dynamic_low_pass_filter.hpp"
 #include "graph/graph_io.hpp"
 #include "graph/visualizer_bus.hpp"
 #include "paths.hpp"
@@ -277,7 +279,15 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         break;
     case NodeType::high_pass:
         if (auto* p = st.as<node_params::HighPass>()) {
-            param_slider("Cutoff Hz", &p->cutoff_hz, 20.0f, 500.0f, "%.0f");
+            DynamicHighPassFilter ui;
+            ui.params = *p;
+            ImGui::PushID(node.id());
+            ImGui::PushItemWidth(kNodeWidth);
+            if (ui.render()) {
+                *p = ui.params;
+            }
+            ImGui::PopItemWidth();
+            ImGui::PopID();
         }
         break;
     case NodeType::drive_pedal:
@@ -290,7 +300,15 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         break;
     case NodeType::low_pass:
         if (auto* p = st.as<node_params::LowPass>()) {
-            param_slider("Cutoff Hz", &p->cutoff_hz, 200.0f, 16000.0f, "%.0f");
+            DynamicLowPassFilter ui;
+            ui.params = *p;
+            ImGui::PushID(node.id());
+            ImGui::PushItemWidth(kNodeWidth);
+            if (ui.render()) {
+                *p = ui.params;
+            }
+            ImGui::PopItemWidth();
+            ImGui::PopID();
         }
         break;
     case NodeType::compressor:

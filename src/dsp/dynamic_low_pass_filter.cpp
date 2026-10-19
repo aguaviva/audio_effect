@@ -23,43 +23,52 @@ void DynamicLowPassFilter::reset() {
 }
 
 bool DynamicLowPassFilter::render() {
-    bool controls_changed = false;
-    if (ImGui::Checkbox("Low-Pass Filter##enable", &enabled)) {
-        controls_changed = true;
-    }
-    ImGui::Indent();
-    ImGui::BeginDisabled(!enabled);
+    bool changed = false;
 
     static const char* preset_names[] = {
         "Custom", "Open (12 kHz)", "Bright (10 kHz)", "Guitar Bright (8 kHz)",
         "Vintage (6.5 kHz)", "RAT Tone (5.5 kHz)", "Fuzz Tone (5 kHz)"
     };
-    if (ImGui::Combo("Low-Pass Preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names)) &&
-        selected_preset != 0) {
-        static const float cutoffs[] = {0.0f, 12000.0f, 10000.0f, 8000.0f, 6500.0f, 5500.0f, 5000.0f};
-        params.cutoff_hz = cutoffs[selected_preset];
-        enabled = true;
-        controls_changed = true;
+    static const float preset_cutoffs[] = {
+        0.0f, 12000.0f, 10000.0f, 8000.0f, 6500.0f, 5500.0f, 5000.0f
+    };
+
+    ImGui::TextUnformatted("Preset");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("##lpf_preset", &params.selected_preset, preset_names,
+                     IM_ARRAYSIZE(preset_names))) {
+        if (params.selected_preset > 0 &&
+            params.selected_preset < IM_ARRAYSIZE(preset_cutoffs)) {
+            params.cutoff_hz = preset_cutoffs[params.selected_preset];
+        }
+        changed = true;
     }
 
-    if (ImGui::SliderFloat("Cutoff (Hz)##lowpass", &params.cutoff_hz, 100.0f, 18000.0f, "%.0f Hz")) {
-        selected_preset = 0;
-        controls_changed = true;
+    ImGui::TextUnformatted("Cutoff Hz");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderFloat("##lpf_cutoff", &params.cutoff_hz, 100.0f, 18000.0f, "%.0f")) {
+        params.selected_preset = 0; // Custom
+        changed = true;
     }
 
-    ImGui::EndDisabled();
-    ImGui::Unindent();
-    ImGui::Separator();
-    return controls_changed;
+    return changed;
 }
 
 void DynamicLowPassFilter::Params::write(std::string& out, bool& first) const {
     module_json::write_float(out, first, "cutoff_hz", cutoff_hz);
+    module_json::write_int(out, first, "selected_preset", selected_preset);
 }
 bool DynamicLowPassFilter::Params::read(const std::string& key, double num, bool, const std::string&,
                                         int kind) {
-    if (key == "cutoff_hz" && kind == module_json::kKindNumber) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "cutoff_hz") {
         cutoff_hz = static_cast<float>(num);
+        return true;
+    }
+    if (key == "selected_preset") {
+        selected_preset = static_cast<int>(num);
         return true;
     }
     return false;

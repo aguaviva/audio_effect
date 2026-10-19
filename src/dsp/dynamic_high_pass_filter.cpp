@@ -31,42 +31,49 @@ void DynamicHighPassFilter::reset() {
 }
 
 bool DynamicHighPassFilter::render() {
-    bool controls_changed = false;
-    if (ImGui::Checkbox("High-Pass Filter##enable", &enabled)) {
-        controls_changed = true;
-    }
-    ImGui::Indent();
-    ImGui::BeginDisabled(!enabled);
+    bool changed = false;
 
     static const char* preset_names[] = {
         "Custom", "Guitar Low Cut (70 Hz)", "Tight Low End (100 Hz)", "Lean Low End (150 Hz)"
     };
-    if (ImGui::Combo("High-Pass Preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names)) &&
-        selected_preset != 0) {
-        static const float cutoffs[] = {0.0f, 70.0f, 100.0f, 150.0f};
-        params.cutoff_hz = cutoffs[selected_preset];
-        enabled = true;
-        controls_changed = true;
+    static const float preset_cutoffs[] = {0.0f, 70.0f, 100.0f, 150.0f};
+
+    ImGui::TextUnformatted("Preset");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("##hpf_preset", &params.selected_preset, preset_names,
+                     IM_ARRAYSIZE(preset_names))) {
+        if (params.selected_preset > 0 &&
+            params.selected_preset < IM_ARRAYSIZE(preset_cutoffs)) {
+            params.cutoff_hz = preset_cutoffs[params.selected_preset];
+        }
+        changed = true;
     }
 
-    if (ImGui::SliderFloat("Cutoff (Hz)##highpass", &params.cutoff_hz, 20.0f, 1000.0f, "%.0f Hz")) {
-        selected_preset = 0;
-        controls_changed = true;
+    ImGui::TextUnformatted("Cutoff Hz");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderFloat("##hpf_cutoff", &params.cutoff_hz, 20.0f, 1000.0f, "%.0f")) {
+        params.selected_preset = 0; // Custom
+        changed = true;
     }
 
-    ImGui::EndDisabled();
-    ImGui::Unindent();
-    ImGui::Separator();
-    return controls_changed;
+    return changed;
 }
 
 void DynamicHighPassFilter::Params::write(std::string& out, bool& first) const {
     module_json::write_float(out, first, "cutoff_hz", cutoff_hz);
+    module_json::write_int(out, first, "selected_preset", selected_preset);
 }
 bool DynamicHighPassFilter::Params::read(const std::string& key, double num, bool, const std::string&,
                                          int kind) {
-    if (key == "cutoff_hz" && kind == module_json::kKindNumber) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "cutoff_hz") {
         cutoff_hz = static_cast<float>(num);
+        return true;
+    }
+    if (key == "selected_preset") {
+        selected_preset = static_cast<int>(num);
         return true;
     }
     return false;

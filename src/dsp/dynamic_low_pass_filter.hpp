@@ -12,14 +12,13 @@ public:
     // Controllable fields: write/read (JSON assembled outside).
     struct Params {
         float cutoff_hz = 8000.0f;
+        int selected_preset = 0; // 0 = Custom
 
         void write(std::string& out, bool& first) const;
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
     };
 
     Params params;
-    bool enabled = true;
-    int selected_preset = 0;
 
     // samples: normalized interleaved stereo values, modified in place.
     // num_samples: number of float values, not stereo frames.
@@ -28,7 +27,7 @@ public:
     void process(float* samples, size_t num_samples, float sample_rate);
     void reset();
 
-    // ImGui controls; edits enabled / selected_preset / params. Returns true if changed.
+    // ImGui: preset combo + cutoff slider (kept in sync). Returns true if changed.
     bool render();
 
 private:
