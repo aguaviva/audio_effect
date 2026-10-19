@@ -4,9 +4,9 @@
 
 #include "imgui.h"
 
-void DynamicHighPassFilter::process(float* samples, size_t num_samples, float cutoff, float sample_rate) {
+void DynamicHighPassFilter::process(float* samples, size_t num_samples, float sample_rate) {
     float dt = 1.0f / sample_rate;
-    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff);
+    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * params.cutoff_hz);
     float alpha = rc / (rc + dt);
 
     for (size_t i = 0; i < num_samples; i += 2) {

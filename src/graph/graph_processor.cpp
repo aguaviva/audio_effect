@@ -219,12 +219,14 @@ void GraphProcessor::run_effect_or_io(NodeRuntime& state,
         break;
     case NodeType::high_pass:
         if (const auto* p = ns.as<node_params::HighPass>()) {
-            state.high_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
+            state.high_pass.params = *p;
+            state.high_pass.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::low_pass:
         if (const auto* p = ns.as<node_params::LowPass>()) {
-            state.low_pass.process(block, block_size_, p->cutoff_hz, sample_rate_);
+            state.low_pass.params = *p;
+            state.low_pass.process(block, block_size_, sample_rate_);
         }
         break;
     case NodeType::drive_pedal:

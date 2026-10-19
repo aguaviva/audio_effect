@@ -18,11 +18,13 @@ public:
         bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
     };
 
+    Params params;
+
     // samples: normalized interleaved stereo values, modified in place.
     // num_samples: number of float values, not stereo frames.
-    // cutoff: raise in Hz to remove more bass and rumble.
     // sample_rate: audio samples per second.
-    void process(float* samples, size_t num_samples, float cutoff, float sample_rate);
+    // Uses params.cutoff_hz.
+    void process(float* samples, size_t num_samples, float sample_rate);
     void reset();
     static void render(std::atomic<bool>& enabled, std::atomic<float>& cutoff_hz,
                        int& selected_preset, bool& controls_changed);
