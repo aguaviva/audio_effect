@@ -37,6 +37,31 @@ TEST(graph_processor_preamp_applies_gain) {
     CHECK_NEAR(output[0], 0.998f, 0.05f);
 }
 
+TEST(graph_processor_sees_ui_edits_without_recompile) {
+    AudioGraph g;
+    g.clear();
+    const int in = g.add_node(NodeType::audio_input, 0, 0);
+    const int pre = g.add_node(NodeType::preamp, 0, 0);
+    const int out = g.add_node(NodeType::output, 0, 0);
+    CHECK(g.add_link(in, pre));
+    CHECK(g.add_link(pre, out));
+
+    constexpr size_t block = 64;
+    std::vector<int32_t> live(block, 1073741824); // 0.5 float
+    std::vector<float> output(block, 0.0f);
+
+    GraphProcessor proc(48000.0f);
+    proc.set_block_size(block);
+    auto compiled = compile_chain(g);
+    CHECK(proc.process(*compiled, live.data(), output.data(), block));
+    CHECK_NEAR(output[0], 0.5f, 0.02f);
+
+    // Same snapshot: the processor runs the module the UI edits.
+    g.find_node(pre)->state().as<node_params::Preamp>()->gain_db = 6.0f;
+    CHECK(proc.process(*compiled, live.data(), output.data(), block));
+    CHECK_NEAR(output[0], 0.998f, 0.05f);
+}
+
 TEST(graph_processor_bypass_skips_preamp_gain) {
     AudioGraph g;
     g.clear();

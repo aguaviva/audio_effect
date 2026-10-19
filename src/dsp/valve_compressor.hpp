@@ -24,15 +24,6 @@ public:
 
     void process(float* samples, size_t num_samples, float sample_rate);
 
-    void copy_controls_from(const ValveCompressor& other) {
-        threshold_db = other.threshold_db;
-        ratio = other.ratio;
-        attack_ms = other.attack_ms;
-        release_ms = other.release_ms;
-        drive = other.drive;
-        makeup_db = other.makeup_db;
-        selected_preset = other.selected_preset;
-    }
 
 private:
     float envelope_{0.0f};

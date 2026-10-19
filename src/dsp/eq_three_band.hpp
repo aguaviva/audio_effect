@@ -21,11 +21,6 @@ public:
     void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
 
-    void copy_controls_from(const EqThreeBand& other) {
-        low_db = other.low_db;
-        mid_db = other.mid_db;
-        high_db = other.high_db;
-    }
 
 private:
     struct Biquad {

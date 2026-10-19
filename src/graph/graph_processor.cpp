@@ -13,9 +13,9 @@ void GraphProcessor::set_block_size(size_t block_size) {
         return;
     }
     block_size_ = block_size;
-    for (auto& [id, state] : states_) {
+    for (auto& [id, buffer] : buffers_) {
         (void)id;
-        state->buffer.assign(block_size_, 0.0f);
+        buffer.assign(block_size_, 0.0f);
     }
 }
 
@@ -53,28 +53,21 @@ void GraphProcessor::analyze(int node_id, const std::string& module_name, const 
                              vu_decay);
 }
 
-void GraphProcessor::ensure_state(const CompiledGraph& graph) {
+void GraphProcessor::ensure_buffers(const CompiledGraph& graph) {
     assert(block_size_ > 0 && "graph block size must be set before process");
 
-    std::unordered_map<int, bool> alive;
     for (const auto& node : graph.order) {
-        alive[node.id()] = true;
-        const std::string name = node.state().module_name();
-        auto it = states_.find(node.id());
-        if (it == states_.end() || it->second->module_name != name || !it->second->module) {
-            auto state = std::make_unique<NodeRuntime>();
-            state->module_name = name;
-            state->module = make_runtime_module(name, sample_rate_);
-            state->buffer.assign(block_size_, 0.0f);
-            states_[node.id()] = std::move(state);
-        } else if (it->second->buffer.size() != block_size_) {
-            it->second->buffer.assign(block_size_, 0.0f);
+        auto& buffer = buffers_[node.id()];
+        if (buffer.size() != block_size_) {
+            buffer.assign(block_size_, 0.0f);
         }
     }
-
-    for (auto it = states_.begin(); it != states_.end();) {
-        if (!alive.count(it->first)) {
-            it = states_.erase(it);
+    if (buffers_.size() == graph.order.size()) {
+        return;
+    }
+    for (auto it = buffers_.begin(); it != buffers_.end();) {
+        if (!graph.index_by_id.count(it->first)) {
+            it = buffers_.erase(it);
         } else {
             ++it;
         }
@@ -148,14 +141,14 @@ bool GraphProcessor::process(const CompiledGraph& graph,
         return false;
     }
 
-    ensure_state(graph);
+    ensure_buffers(graph);
 
     std::vector<int> alive_ids;
     alive_ids.reserve(graph.order.size());
     std::unordered_map<int, std::vector<float>*> buffers;
     buffers.reserve(graph.order.size());
     for (const auto& node : graph.order) {
-        buffers[node.id()] = &states_[node.id()]->buffer;
+        buffers[node.id()] = &buffers_[node.id()];
         alive_ids.push_back(node.id());
     }
     g_visualizer_bus.retain_only(alive_ids);
@@ -165,14 +158,8 @@ bool GraphProcessor::process(const CompiledGraph& graph,
 
     const float* input_ptrs[kMaxMixerInputs]{};
     for (const auto& node : graph.order) {
-        NodeRuntime& runtime = *states_[node.id()];
-        if (!runtime.module) {
-            continue;
-        }
-        Module& mod = *runtime.module;
-        mod.apply_controls(node.state().module());
-
-        float* block = runtime.buffer.data();
+        Module& mod = node.state().shared_module();
+        float* block = buffers_[node.id()].data();
         const bool bypassed = mod.supports_bypass() && node.state().bypassed;
 
         size_t input_count = 0;

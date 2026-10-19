@@ -25,11 +25,6 @@ public:
     void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
 
-    void copy_controls_from(const SimpleReverb& other) {
-        room = other.room;
-        damping = other.damping;
-        mix = other.mix;
-    }
 
 private:
     struct Comb {

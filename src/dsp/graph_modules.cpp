@@ -7,17 +7,24 @@
 
 #include "imgui.h"
 
+void WavPlayer::set_path(const std::string& path) {
+    std::lock_guard<std::mutex> lock(path_mutex_);
+    path_ = path;
+}
+
 std::string WavPlayer::save() const {
     std::string out = "{";
     module_json::write_bool(out, "loop", loop);
-    module_json::write_string(out, "path", path);
+    module_json::write_string(out, "path", path_);
     out += '}';
     return out;
 }
 
 bool WavPlayer::load(const std::string& json) {
     module_json::read(json, "loop", loop);
+    std::string path = path_;
     module_json::read(json, "path", path);
+    set_path(path);
     return true;
 }
 
@@ -31,11 +38,13 @@ void WavPlayer::process(ProcessContext& ctx) {
     if (scratch_.size() != ctx.num_samples) {
         scratch_.assign(ctx.num_samples, 0);
     }
-    if (path != loaded_path_) {
-        loaded_path_ = path;
+    std::unique_lock<std::mutex> lock(path_mutex_, std::try_to_lock);
+    if (lock.owns_lock() && path_ != loaded_path_) {
+        loaded_path_ = path_;
+        lock.unlock();
         clip_.reset();
         if (ctx.host) {
-            clip_ = ctx.host->load_wav(path);
+            clip_ = ctx.host->load_wav(loaded_path_);
             if (!clip_) {
                 clip_ = ctx.host->fallback_wav();
             }

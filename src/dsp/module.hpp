@@ -59,14 +59,7 @@ public:
     virtual Role role() const = 0;
     virtual void process(ProcessContext& ctx) = 0;
 
-    // Copy controllable fields from another module of the same name (UI → runtime).
-    virtual void apply_controls(const Module& from);
-
-    virtual bool supports_bypass() const { return name() != "mixer"; }
-    virtual int max_inputs() const;
-    virtual bool is_source() const { return role() == Role::source; }
-    virtual bool is_output_sink() const { return name() == "output"; }
+    virtual bool supports_bypass() const { return true; }
+    virtual bool is_output_sink() const { return false; }
+    bool is_source() const { return role() == Role::source; }
 };
-
-// Runtime instance for the audio thread (may hold delay lines, file handles, …).
-std::unique_ptr<Module> make_runtime_module(const std::string& module_name, float sample_rate);

@@ -200,7 +200,7 @@ void AudioGraph::reset_to_default_chain() {
 
     if (auto* p = find_node(wav)->state().as<node_params::WavPlayer>()) {
         p->loop = true;
-        p->path = kDefaultWavPath;
+        p->set_path(kDefaultWavPath);
     }
     if (auto* p = find_node(pre)->state().as<node_params::Preamp>()) {
         p->gain_db = 0.0f;

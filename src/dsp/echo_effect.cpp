@@ -102,5 +102,11 @@ void EchoEffect::process(ProcessContext& ctx) {
     if (ctx.buffer == nullptr || ctx.num_samples == 0) {
         return;
     }
+    const size_t needed = static_cast<size_t>(std::max(1.0f, ctx.sample_rate)) + 1;
+    if (delay_left_.size() < needed) {
+        delay_left_.assign(needed, 0.0f);
+        delay_right_.assign(needed, 0.0f);
+        write_index_ = 0;
+    }
     process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

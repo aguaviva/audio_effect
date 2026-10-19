@@ -29,11 +29,6 @@ public:
     void process(float* samples, size_t sample_count, float sample_rate);
     void reset();
 
-    void copy_controls_from(const DrivePedal& other) {
-        model = other.model;
-        amount = other.amount;
-        tone = other.tone;
-    }
 
 private:
     static float shape(float input, DriveModel model, float drive, float bias,

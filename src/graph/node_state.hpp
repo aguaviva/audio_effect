@@ -17,8 +17,8 @@
 
 #include <array>
 #include <cstddef>
+#include <memory>
 #include <string>
-#include <variant>
 
 // Graph node modules: each concrete type implements Module
 // (name / save / load / render). Fields live on the class itself.
@@ -55,16 +55,13 @@ using Spectrum = ::Spectrum;
 using PitchDetector = ::PitchDetectorModule;
 using Mixer = ::Mixer; // dsp/mixer.hpp
 
-using Variant = std::variant<None, WavPlayer, AudioInput, AudioOutput, Chord, WhiteNoise, Echo,
-                             Preamp, HighPass, LowPass, Drive, Compressor, NoiseGate, EqThreeBand,
-                             Reverb, DryWet, WavRecorder, VuMeter, Oscilloscope, Spectrum,
-                             PitchDetector, Mixer>;
-
 bool try_resolve_name(const std::string& module_name, NodeType& out);
 std::string name_for_type(NodeType type);
 
 } // namespace node_params
 
+// Per-node state. Copies share the same Module instance: the UI renders it and the
+// audio thread processes it, so settings never need to be copied between them.
 struct NodeState {
     bool bypassed = false;
     std::array<bool, kMaxMixerInputs> input_muted{};
@@ -73,8 +70,6 @@ struct NodeState {
         gains.fill(1.0f);
         return gains;
     }();
-
-    node_params::Variant params{node_params::None{}};
 
     bool is_input_muted(int slot) const {
         return slot >= 0 && slot < kMaxMixerInputs && input_muted[static_cast<size_t>(slot)];
@@ -95,18 +90,19 @@ struct NodeState {
 
     template <typename T>
     T* as() {
-        return std::get_if<T>(&params);
+        return dynamic_cast<T*>(module_.get());
     }
     template <typename T>
     const T* as() const {
-        return std::get_if<T>(&params);
+        return dynamic_cast<const T*>(module_.get());
     }
 
-    // Polymorphic view of the active module (for GraphProcessor / UI).
-    Module& module() {
-        return std::visit([](auto& m) -> Module& { return m; }, params);
-    }
-    const Module& module() const {
-        return std::visit([](const auto& m) -> const Module& { return m; }, params);
-    }
+    Module& module() { return *module_; }
+    const Module& module() const { return *module_; }
+
+    // Mutable access for the audio thread, which only holds const snapshots of NodeState.
+    Module& shared_module() const { return *module_; }
+
+private:
+    std::shared_ptr<Module> module_ = std::make_shared<node_params::None>();
 };

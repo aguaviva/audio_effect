@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
             for (const auto& n : graph.nodes()) {
                 if (n.type() == NodeType::wav_player) {
                     if (const auto* p = n.state().as<node_params::WavPlayer>()) {
-                        if (!p->path.empty()) {
-                            g_pipeline.load_wav(p->path);
+                        if (!p->path().empty()) {
+                            g_pipeline.load_wav(p->path());
                             loaded_any = true;
                         }
                     }

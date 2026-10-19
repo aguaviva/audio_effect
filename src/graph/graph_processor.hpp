@@ -13,6 +13,7 @@
 #include <vector>
 
 // Runs a compiled graph. Knows Module + ProcessContext only — no concrete DSP types.
+// Each node's Module is the same instance the UI edits; this class only owns audio buffers.
 class GraphProcessor : public GraphHost {
 public:
     explicit GraphProcessor(float sample_rate);
@@ -37,13 +38,7 @@ public:
                  size_t num_samples, float display_gain, float vu_decay) override;
 
 private:
-    struct NodeRuntime {
-        std::string module_name;
-        std::unique_ptr<Module> module;
-        std::vector<float> buffer;
-    };
-
-    void ensure_state(const CompiledGraph& graph);
+    void ensure_buffers(const CompiledGraph& graph);
     void gather_inputs(const CompiledGraph::Node& node,
                        const std::unordered_map<int, std::vector<float>*>& buffers,
                        const float** out_inputs, size_t max_inputs, size_t& out_count) const;
@@ -54,5 +49,5 @@ private:
     std::shared_ptr<const WavClip> wav_clip_;
     std::unordered_map<std::string, std::shared_ptr<const WavClip>> wav_cache_;
     std::string record_path_;
-    std::unordered_map<int, std::unique_ptr<NodeRuntime>> states_;
+    std::unordered_map<int, std::vector<float>> buffers_;
 };

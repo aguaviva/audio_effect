@@ -373,7 +373,7 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         for (auto& node : loaded.nodes()) {
             if (node.type() == NodeType::wav_player) {
                 if (auto* p = node.state().as<node_params::WavPlayer>()) {
-                    p->path = loaded.wav_path();
+                    p->set_path(loaded.wav_path());
                 }
             }
         }

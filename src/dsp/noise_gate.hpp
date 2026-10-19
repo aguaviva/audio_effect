@@ -21,11 +21,6 @@ public:
     void process(float* interleaved, size_t sample_count, float sample_rate);
     void reset();
 
-    void copy_controls_from(const NoiseGate& other) {
-        threshold_db = other.threshold_db;
-        attack_ms = other.attack_ms;
-        release_ms = other.release_ms;
-    }
 
 private:
     float envelope_ = 0.0f;

@@ -211,18 +211,18 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
     case NodeType::wav_player:
         if (auto* m = st.as<node_params::WavPlayer>()) {
             // File picker uses shared browser state — keep the "..." button here.
-            const char* slash = std::strrchr(m->path.c_str(), '/');
-            const char* leaf = slash ? slash + 1 : m->path.c_str();
+            const char* slash = std::strrchr(m->path().c_str(), '/');
+            const char* leaf = slash ? slash + 1 : m->path().c_str();
             ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
             ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
             ImGui::PopTextWrapPos();
-            if (ImGui::IsItemHovered() && !m->path.empty()) {
-                ImGui::SetTooltip("%s", m->path.c_str());
+            if (ImGui::IsItemHovered() && !m->path().empty()) {
+                ImGui::SetTooltip("%s", m->path().c_str());
             }
             ImGui::SameLine();
             if (ImGui::SmallButton("...")) {
                 wav_picker_node_id() = node.id();
-                open_browser_near_path(wav_open_browser(), m->path.c_str());
+                open_browser_near_path(wav_open_browser(), m->path().c_str());
             }
             render_module(*m, node.id());
         }
@@ -467,7 +467,7 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
         wav_picker_node_id() = -1;
         if (auto* node = graph.find_node(target)) {
             if (auto* p = node->state().as<node_params::WavPlayer>()) {
-                p->path = selected;
+                p->set_path(selected);
                 graph.set_wav_path(selected);
                 state.status_message = std::string("WAV Player → ") + selected;
                 node_editor_publish(graph);

@@ -13,8 +13,8 @@ public:
     float mix = 0.25f;
     int selected_preset = 0; // 0 = Custom
 
-    // Default size is for NodeState copies; audio runtime passes a real capacity.
-    explicit EchoEffect(size_t max_delay_samples = 48000);
+    // Sized for 1 s at 48 kHz; process() grows it if the stream runs faster.
+    explicit EchoEffect(size_t max_delay_samples = 48001);
 
     std::string name() const override { return "echo"; }
     Role role() const override { return Role::effect; }
@@ -26,12 +26,6 @@ public:
     void process(float* samples, size_t sample_count, float sample_rate);
     void reset();
 
-    void copy_controls_from(const EchoEffect& other) {
-        delay_ms = other.delay_ms;
-        feedback = other.feedback;
-        mix = other.mix;
-        selected_preset = other.selected_preset;
-    }
 
 private:
     std::vector<float> delay_left_;
