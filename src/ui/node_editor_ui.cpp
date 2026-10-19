@@ -337,6 +337,7 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         break;
     case NodeType::mixer:
         if (auto* m = st.as<node_params::Mixer>()) {
+            m->ui_slots = std::max(1, graph.mixer_pin_count(node.id()));
             render_module(*m, node.id());
         }
         break;

@@ -72,6 +72,38 @@ TEST(mixer_dsp_averages_sources) {
     CHECK_NEAR(out[7], 0.4f, 1e-5f);
 }
 
+TEST(mixer_gains_save_load_and_scale) {
+    Mixer mixer;
+    mixer.gain[0] = 0.5f;
+    mixer.gain[1] = 1.5f;
+    std::string fields;
+    bool first = true;
+    mixer.save(fields, first);
+    CHECK(fields.find("\"gain_0\"") != std::string::npos);
+    CHECK(fields.find("\"gain_1\"") != std::string::npos);
+
+    Mixer loaded;
+    CHECK(loaded.load("gain_0", 0.25, false, "", module_json::kKindNumber));
+    CHECK(loaded.load("gain_1", 2.0, false, "", module_json::kKindNumber));
+    CHECK_NEAR(loaded.gain[0], 0.25f, 1e-5f);
+    CHECK_NEAR(loaded.gain[1], 2.0f, 1e-5f);
+
+    std::vector<float> a(4, 1.0f);
+    std::vector<float> b(4, 1.0f);
+    std::vector<float> out(4, 0.0f);
+    const float* sources[] = {a.data(), b.data()};
+    mixer.gain[0] = 1.0f;
+    mixer.gain[1] = 0.0f;
+    ProcessContext ctx;
+    ctx.buffer = out.data();
+    ctx.num_samples = out.size();
+    ctx.inputs = sources;
+    ctx.input_count = 2;
+    mixer.process(ctx);
+    // average of (1*1 + 1*0) / 2 = 0.5
+    CHECK_NEAR(out[0], 0.5f, 1e-5f);
+}
+
 TEST(noise_gate_silences_below_threshold) {
     NoiseGate gate;
     std::vector<float> quiet(64, 0.0001f);
