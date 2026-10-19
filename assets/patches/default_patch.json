@@ -3,7 +3,6 @@
   "wav_path":"assets/audio/danano.wav",
   "record_path":"assets/recordings/capture.wav",
   "next_node_id":12,
-  "next_link_id":12,
   "nodes":[
     {"id":1,"type":"wav_player","x":40,"y":220,"params":{"bypassed":false,"loop":true,"path":"assets/audio/danano.wav"}},
     {"id":2,"type":"preamp","x":280,"y":220,"params":{"bypassed":false,"gain_db":0.000000,"selected_preset":0}},
@@ -17,6 +16,7 @@
     {"id":10,"type":"spectrum","x":1480,"y":480,"params":{"bypassed":false,"display_gain":1.000000}},
     {"id":11,"type":"output","x":1720,"y":220,"params":{"bypassed":false,"device":"default"}}
   ],
+  "next_link_id":12,
   "links":[
     {"id":1,"from":1,"to":2,"to_slot":0},
     {"id":2,"from":2,"to":3,"to_slot":0},

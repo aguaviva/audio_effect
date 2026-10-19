@@ -99,7 +99,6 @@ std::string serialize(const AudioGraph& graph) {
     oss << "  \"wav_path\":\"" << escape_string(graph.wav_path()) << "\",\n";
     oss << "  \"record_path\":\"" << escape_string(graph.record_path()) << "\",\n";
     oss << "  \"next_node_id\":" << graph.next_node_id() << ",\n";
-    oss << "  \"next_link_id\":" << graph.next_link_id() << ",\n";
     oss << "  \"nodes\":[\n";
     const auto& nodes = graph.nodes();
     for (size_t n = 0; n < nodes.size(); ++n) {
@@ -112,7 +111,9 @@ std::string serialize(const AudioGraph& graph) {
         if (n + 1 < nodes.size()) oss << ',';
         oss << '\n';
     }
-    oss << "  ],\n  \"links\":[\n";
+    oss << "  ],\n";
+    oss << "  \"next_link_id\":" << graph.next_link_id() << ",\n";
+    oss << "  \"links\":[\n";
     const auto& links = graph.links();
     for (size_t n = 0; n < links.size(); ++n) {
         const auto& link = links[n];

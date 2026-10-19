@@ -171,3 +171,15 @@ TEST(graph_io_bundled_patches_load) {
         CHECK(!g.nodes().empty());
     }
 }
+
+TEST(graph_io_saves_all_node_data_before_link_data) {
+    AudioGraph g;
+    g.reset_to_default_chain();
+    const std::string text = graph_io::serialize(g);
+    const size_t nodes = text.find("\"nodes\"");
+    const size_t next_link = text.find("\"next_link_id\"");
+    const size_t links = text.find("\"links\"");
+    CHECK(text.find("\"next_node_id\"") < nodes);
+    CHECK(nodes < next_link);
+    CHECK(next_link < links);
+}
