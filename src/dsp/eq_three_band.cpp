@@ -113,3 +113,18 @@ void EqThreeBand::process(float* interleaved, size_t sample_count, float low_gai
         interleaved[i + 1] = r;
     }
 }
+
+void EqThreeBand::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "low_db", low_db);
+    module_json::write_float(out, first, "mid_db", mid_db);
+    module_json::write_float(out, first, "high_db", high_db);
+}
+bool EqThreeBand::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "low_db") { low_db = static_cast<float>(num); return true; }
+    if (key == "mid_db") { mid_db = static_cast<float>(num); return true; }
+    if (key == "high_db") { high_db = static_cast<float>(num); return true; }
+    return false;
+}

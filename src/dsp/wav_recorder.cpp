@@ -124,3 +124,14 @@ std::string WavRecorder::status() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return status_;
 }
+
+void WavRecorder::Params::write(std::string& out, bool& first) const {
+    module_json::write_bool(out, first, "armed", armed);
+}
+bool WavRecorder::Params::read(const std::string& key, double, bool flag, const std::string&, int kind) {
+    if (key == "armed" && kind == module_json::kKindBool) {
+        armed = flag;
+        return true;
+    }
+    return false;
+}

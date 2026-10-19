@@ -1,10 +1,23 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <atomic>
 #include <cstddef>
+#include <string>
 
 class DynamicHighPassFilter {
 public:
+    // Controllable module state: name() + write/read (JSON assembled outside).
+    struct Params {
+        float cutoff_hz = 70.0f;
+
+        static std::string name() { return "high_pass"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     // samples: normalized interleaved stereo values, modified in place.
     // num_samples: number of float values, not stereo frames.
     // cutoff: raise in Hz to remove more bass and rumble.

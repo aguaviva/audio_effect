@@ -88,3 +88,27 @@ void EchoEffect::render(std::atomic<bool>& enabled, std::atomic<float>& delay_ms
     ImGui::Unindent();
     ImGui::Separator();
 }
+
+void EchoEffect::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "delay_ms", delay_ms);
+    module_json::write_float(out, first, "feedback", feedback);
+    module_json::write_float(out, first, "mix", mix);
+}
+bool EchoEffect::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "delay_ms") {
+        delay_ms = static_cast<float>(num);
+        return true;
+    }
+    if (key == "feedback") {
+        feedback = static_cast<float>(num);
+        return true;
+    }
+    if (key == "mix") {
+        mix = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}

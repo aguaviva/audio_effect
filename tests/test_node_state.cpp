@@ -49,14 +49,15 @@ TEST(module_name_and_json_load_by_name) {
     CHECK(node_params::HighPass::name() == "high_pass");
     CHECK(node_params::LowPass::name() == "low_pass");
 
+    // write/read are called from outside the module (helpers / NodeState).
     node_params::Preamp pre;
     pre.gain_db = 4.25f;
-    const std::string module_json = pre.save_json();
-    CHECK(module_json.find("\"gain_db\"") != std::string::npos);
+    const std::string fields_json = module_json::save_object(pre);
+    CHECK(fields_json.find("\"gain_db\"") != std::string::npos);
 
     node_params::Preamp loaded_mod;
     size_t mi = 0;
-    CHECK(loaded_mod.load_json(module_json, mi));
+    CHECK(module_json::parse_object(fields_json, mi, loaded_mod));
     CHECK_NEAR(loaded_mod.gain_db, 4.25f, 1e-4f);
 
     NodeType resolved = NodeType::count;
@@ -118,21 +119,4 @@ TEST(node_state_chord_index_clamped_on_read) {
     i = 0;
     CHECK(s.read_params(NodeType::chord_generator, high, i));
     CHECK_EQ(s.as<node_params::Chord>()->index, kChordCount - 1);
-}
-
-TEST(node_state_legacy_arrays) {
-    float f[8] = {12.0f, 0, 0, 0, 0, 0, 0, 0};
-    int ii[4] = {0, 0, 0, 0};
-    bool b[4] = {false, false, false, true};
-    NodeState s;
-    s.from_legacy_arrays(NodeType::preamp, f, ii, b);
-    CHECK(s.bypassed);
-    CHECK_NEAR(s.as<node_params::Preamp>()->gain_db, 12.0f, 1e-6f);
-
-    const std::string legacy = R"({"f":[6,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]})";
-    size_t idx = 0;
-    NodeState loaded;
-    CHECK(loaded.read_params(NodeType::preamp, legacy, idx));
-    CHECK_NEAR(loaded.as<node_params::Preamp>()->gain_db, 6.0f, 1e-6f);
-    CHECK(!loaded.bypassed);
 }

@@ -112,3 +112,18 @@ void SimpleReverb::process(float* interleaved, size_t sample_count, float room_s
         interleaved[i + 1] = dry_r * (1.0f - mix) + wet_r * mix;
     }
 }
+
+void SimpleReverb::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "room", room);
+    module_json::write_float(out, first, "damping", damping);
+    module_json::write_float(out, first, "mix", mix);
+}
+bool SimpleReverb::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "room") { room = static_cast<float>(num); return true; }
+    if (key == "damping") { damping = static_cast<float>(num); return true; }
+    if (key == "mix") { mix = static_cast<float>(num); return true; }
+    return false;
+}

@@ -1,7 +1,10 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <atomic>
 #include <cstddef>
+#include <string>
 
 namespace guitar_pedals {
 
@@ -15,6 +18,17 @@ enum class DriveModel : int {
 
 class DrivePedal {
 public:
+    struct Params {
+        int model = 0;
+        float amount = 3.0f;
+        float tone = 0.65f;
+
+        static std::string name() { return "drive_pedal"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     // samples: interleaved stereo audio in normalized floats, modified in place.
     // sample_count: number of float values (left and right samples), not frames.
     // model: soft overdrive, hard-clipping distortion, or cascaded fuzz character.

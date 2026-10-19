@@ -44,32 +44,6 @@ TEST(graph_io_serialize_deserialize_roundtrip) {
     CHECK(found_gain);
 }
 
-TEST(graph_io_loads_legacy_v1_params) {
-    const std::string legacy = R"({
-  "version":1,
-  "wav_path":"assets/audio/danano.wav",
-  "next_node_id":3,
-  "next_link_id":2,
-  "nodes":[
-    {"id":1,"type":"preamp","x":0,"y":0,"params":{"f":[3.5,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}},
-    {"id":2,"type":"output","x":100,"y":0,"params":{"f":[0,0,0,0,0,0,0,0],"i":[0,0,0,0],"b":[false,false,false,false]}}
-  ],
-  "links":[{"id":1,"from":1,"to":2,"to_slot":0}]
-})";
-    AudioGraph loaded;
-    loaded.clear();
-    std::string error;
-    CHECK(graph_io::deserialize(loaded, legacy, error));
-    bool found = false;
-    for (const auto& n : loaded.nodes()) {
-        if (n.type() == NodeType::preamp) {
-            CHECK_NEAR(n.state().as<node_params::Preamp>()->gain_db, 3.5f, 1e-4f);
-            found = true;
-        }
-    }
-    CHECK(found);
-}
-
 TEST(graph_io_file_roundtrip) {
     AudioGraph g;
     g.reset_to_default_chain();

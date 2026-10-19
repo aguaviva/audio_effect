@@ -140,3 +140,25 @@ void ValveCompressor::render(std::atomic<bool>& enabled,
     ImGui::Unindent();
     ImGui::Separator();
 }
+
+void ValveCompressor::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "threshold_db", threshold_db);
+    module_json::write_float(out, first, "ratio", ratio);
+    module_json::write_float(out, first, "attack_ms", attack_ms);
+    module_json::write_float(out, first, "release_ms", release_ms);
+    module_json::write_float(out, first, "drive", drive);
+    module_json::write_float(out, first, "makeup_db", makeup_db);
+}
+bool ValveCompressor::Params::read(const std::string& key, double num, bool, const std::string&,
+                                   int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "threshold_db") { threshold_db = static_cast<float>(num); return true; }
+    if (key == "ratio") { ratio = static_cast<float>(num); return true; }
+    if (key == "attack_ms") { attack_ms = static_cast<float>(num); return true; }
+    if (key == "release_ms") { release_ms = static_cast<float>(num); return true; }
+    if (key == "drive") { drive = static_cast<float>(num); return true; }
+    if (key == "makeup_db") { makeup_db = static_cast<float>(num); return true; }
+    return false;
+}

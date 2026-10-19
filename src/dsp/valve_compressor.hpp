@@ -1,10 +1,27 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <atomic>
 #include <cstddef>
+#include <string>
 
 class ValveCompressor {
 public:
+    struct Params {
+        float threshold_db = -18.0f;
+        float ratio = 3.0f;
+        float attack_ms = 15.0f;
+        float release_ms = 100.0f;
+        float drive = 1.25f;
+        float makeup_db = 0.0f;
+
+        static std::string name() { return "compressor"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     // samples: normalized interleaved stereo values, modified in place.
     // num_samples: number of float values, not stereo frames.
     // threshold_db: lower values compress more of the signal.

@@ -1,11 +1,25 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <atomic>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 class EchoEffect {
 public:
+    struct Params {
+        float delay_ms = 320.0f;
+        float feedback = 0.35f;
+        float mix = 0.25f;
+
+        static std::string name() { return "echo"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     // max_delay_samples: delay-line capacity in samples per channel; allocate at least
     // sample_rate * the longest delay time you intend to use.
     explicit EchoEffect(size_t max_delay_samples);

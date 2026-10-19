@@ -1,10 +1,24 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <cstddef>
+#include <string>
 
 // Stereo 3-band EQ: low shelf, mid peak, high shelf (RBJ-style biquads).
 class EqThreeBand {
 public:
+    struct Params {
+        float low_db = 0.0f;
+        float mid_db = 0.0f;
+        float high_db = 0.0f;
+
+        static std::string name() { return "eq_three_band"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     void process(float* interleaved, size_t sample_count, float low_gain_db,
                  float mid_gain_db, float high_gain_db, float sample_rate);
     void reset();

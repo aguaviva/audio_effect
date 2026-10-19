@@ -37,3 +37,18 @@ void NoiseGate::process(float* interleaved, size_t sample_count, float threshold
         interleaved[i + 1] *= gain_;
     }
 }
+
+void NoiseGate::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "threshold_db", threshold_db);
+    module_json::write_float(out, first, "attack_ms", attack_ms);
+    module_json::write_float(out, first, "release_ms", release_ms);
+}
+bool NoiseGate::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "threshold_db") { threshold_db = static_cast<float>(num); return true; }
+    if (key == "attack_ms") { attack_ms = static_cast<float>(num); return true; }
+    if (key == "release_ms") { release_ms = static_cast<float>(num); return true; }
+    return false;
+}

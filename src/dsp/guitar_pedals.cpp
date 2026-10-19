@@ -98,3 +98,28 @@ void DrivePedal::render(std::atomic<bool>& enabled, std::atomic<int>& model,
 }
 
 } // namespace guitar_pedals
+
+void guitar_pedals::DrivePedal::Params::write(std::string& out, bool& first) const {
+    module_json::write_int(out, first, "model", model);
+    module_json::write_float(out, first, "amount", amount);
+    module_json::write_float(out, first, "tone", tone);
+}
+bool guitar_pedals::DrivePedal::Params::read(const std::string& key, double num, bool, const std::string&,
+                                             int kind) {
+    if (kind != module_json::kKindNumber) {
+        return false;
+    }
+    if (key == "model") {
+        model = static_cast<int>(num);
+        return true;
+    }
+    if (key == "amount") {
+        amount = static_cast<float>(num);
+        return true;
+    }
+    if (key == "tone") {
+        tone = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}

@@ -43,3 +43,14 @@ void Preamp::render(std::atomic<bool>& enabled, std::atomic<float>& gain_db,
     ImGui::Unindent();
     ImGui::Separator();
 }
+
+void Preamp::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "gain_db", gain_db);
+}
+bool Preamp::Params::read(const std::string& key, double num, bool, const std::string&, int kind) {
+    if (key == "gain_db" && kind == module_json::kKindNumber) {
+        gain_db = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}

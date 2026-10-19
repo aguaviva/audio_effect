@@ -55,3 +55,15 @@ void DynamicLowPassFilter::render(std::atomic<bool>& enabled,
     ImGui::Unindent();
     ImGui::Separator();
 }
+
+void DynamicLowPassFilter::Params::write(std::string& out, bool& first) const {
+    module_json::write_float(out, first, "cutoff_hz", cutoff_hz);
+}
+bool DynamicLowPassFilter::Params::read(const std::string& key, double num, bool, const std::string&,
+                                        int kind) {
+    if (key == "cutoff_hz" && kind == module_json::kKindNumber) {
+        cutoff_hz = static_cast<float>(num);
+        return true;
+    }
+    return false;
+}

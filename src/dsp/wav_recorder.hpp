@@ -1,5 +1,7 @@
 #pragma once
 
+#include "module_json.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -9,6 +11,15 @@
 // Pass-through WAV writer (16-bit PCM stereo). Call set_path before arming.
 class WavRecorder {
 public:
+    struct Params {
+        bool armed = false;
+
+        static std::string name() { return "wav_recorder"; }
+
+        void write(std::string& out, bool& first) const;
+        bool read(const std::string& key, double num, bool flag, const std::string& str, int kind);
+    };
+
     void set_path(const std::string& path);
     const std::string& path() const { return path_; }
 
