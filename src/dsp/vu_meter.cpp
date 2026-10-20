@@ -1,5 +1,8 @@
 #include "vu_meter.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include "imgui.h"
 
 std::string VuMeter::save() const {
@@ -16,6 +19,10 @@ bool VuMeter::load(const std::string& json) {
     return true;
 }
 
+static float linear_to_db(float linear) {
+    return 20.0f * std::log10(std::max(linear, 1.0e-6f));
+}
+
 bool VuMeter::render() {
     bool changed = false;
     //ImGui::TextUnformatted("Gain");
@@ -24,12 +31,33 @@ bool VuMeter::render() {
     ImGui::TextUnformatted("Decay");
     ImGui::SetNextItemWidth(-1.0f);
     changed |= ImGui::SliderFloat("##vu_decay", &decay, 0.5f, 0.99f, "%.2f");
+
+    const float peak = peak_.load(std::memory_order_relaxed);
+    const float rms = rms_.load(std::memory_order_relaxed);
+    ImGui::Text("Peak %.1f dB", linear_to_db(peak));
+    ImGui::ProgressBar(std::clamp(peak, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
+    ImGui::Text("RMS  %.1f dB", linear_to_db(rms));
+    ImGui::ProgressBar(std::clamp(rms * 1.5f, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
     return changed;
 }
+
 void VuMeter::process(const float* const* inputs, int input_count, float* output,
                       size_t sample_count, float /*sample_rate*/) {
     copy_input(inputs, input_count, 0, output, sample_count);
-    if (host_) {
-        host_->analyze(node_id_, name(), output, sample_count, display_gain, decay);
+
+    const size_t frames = sample_count / 2;
+    float peak = 0.0f;
+    double sum_sq = 0.0;
+    for (size_t i = 0; i < frames; ++i) {
+        const float s = 0.5f * (output[i * 2] + output[i * 2 + 1]);
+        peak = std::max(peak, std::abs(s));
+        sum_sq += static_cast<double>(s) * s;
     }
+    const float rms = frames ? static_cast<float>(std::sqrt(sum_sq / frames)) : 0.0f;
+
+    const float d = std::clamp(decay, 0.5f, 0.99f);
+    peak_hold_ = std::max(peak, peak_hold_ * d);
+    rms_hold_ = std::max(rms, rms_hold_ * d);
+    peak_.store(peak_hold_, std::memory_order_relaxed);
+    rms_.store(rms_hold_, std::memory_order_relaxed);
 }

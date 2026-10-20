@@ -3,7 +3,6 @@
 #include "audio_graph.hpp"
 #include "dsp/module.hpp"
 #include "dsp/wav_generator.hpp"
-#include "visualizer_bus.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -34,8 +33,6 @@ public:
     std::shared_ptr<const WavClip> fallback_wav() const override { return wav_clip_; }
     const std::string& record_path() const override { return record_path_; }
     const int32_t* live_input() const override { return live_pcm_; }
-    void analyze(int node_id, const std::string& module_name, const float* block,
-                 size_t num_samples, float display_gain, float vu_decay) override;
 
 private:
     float* buffer(size_t index) { return buffers_.data() + index * block_size_; }

@@ -30,7 +30,6 @@ set(AUDIO_EFFECT_SOURCES
   src/graph/graph_io.cpp
   src/graph/graph_processor.cpp
   src/graph/node_state.cpp
-  src/graph/visualizer_bus.cpp
   src/ui/node_editor_ui.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
@@ -125,7 +124,6 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/graph/graph_io.cpp
     src/graph/graph_processor.cpp
     src/graph/node_state.cpp
-    src/graph/visualizer_bus.cpp
     src/dsp/preamp.cpp
     src/dsp/dynamic_high_pass_filter.cpp
     src/dsp/dynamic_low_pass_filter.cpp

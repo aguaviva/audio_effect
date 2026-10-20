@@ -26,7 +26,6 @@ SRC_APP  := src/main.cpp \
             src/graph/graph_io.cpp \
             src/graph/graph_processor.cpp \
             src/graph/node_state.cpp \
-            src/graph/visualizer_bus.cpp \
             src/ui/node_editor_ui.cpp
 
 SRC_EFFECTS := src/dsp/preamp.cpp \
@@ -76,7 +75,6 @@ TEST_SUPPORT := src/graph/audio_graph.cpp \
                 src/graph/graph_io.cpp \
                 src/graph/graph_processor.cpp \
                 src/graph/node_state.cpp \
-                src/graph/visualizer_bus.cpp \
                 $(SRC_EFFECTS)
 TEST_IMGUI := third_party/imgui/imgui.cpp \
               third_party/imgui/imgui_draw.cpp \

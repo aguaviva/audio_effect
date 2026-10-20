@@ -31,16 +31,6 @@ std::shared_ptr<const WavClip> GraphProcessor::load_wav(const std::string& path)
     return clip;
 }
 
-void GraphProcessor::analyze(int node_id, const std::string& module_name, const float* block,
-                             size_t num_samples, float display_gain, float vu_decay) {
-    NodeType type = NodeType::count;
-    if (!node_params::try_resolve_name(module_name, type)) {
-        return;
-    }
-    g_visualizer_bus.analyze(node_id, type, block, num_samples, sample_rate_, display_gain,
-                             vu_decay);
-}
-
 bool GraphProcessor::process(const CompiledGraph& graph,
                              const int32_t* live_pcm,
                              float* out_float,
@@ -61,13 +51,6 @@ bool GraphProcessor::process(const CompiledGraph& graph,
     float* scratch = buffer(graph.link_count);
     live_pcm_ = live_pcm;
 
-    std::vector<int> alive_ids;
-    alive_ids.reserve(graph.order.size());
-    for (const auto& node : graph.order) {
-        alive_ids.push_back(node.id());
-    }
-    g_visualizer_bus.retain_only(alive_ids);
-
     bool wrote_output = false;
     for (const auto& node : graph.order) {
         const float* inputs[kMaxMixerInputs] = {};
@@ -84,7 +67,6 @@ bool GraphProcessor::process(const CompiledGraph& graph,
             copy_input(inputs, input_count, 0, out, block_size_);
         } else {
             mod.host_ = this;
-            mod.node_id_ = node.id();
             mod.process(inputs, input_count, out, block_size_, sample_rate_);
         }
         for (size_t k = 1; k < links_out.size(); ++k) {

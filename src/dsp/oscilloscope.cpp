@@ -1,5 +1,7 @@
 #include "oscilloscope.hpp"
 
+#include <algorithm>
+
 #include "imgui.h"
 
 std::string Oscilloscope::save() const {
@@ -18,12 +20,27 @@ bool Oscilloscope::render() {
     //ImGui::TextUnformatted("Gain");
     //ImGui::SetNextItemWidth(-1.0f);
     //return ImGui::SliderFloat("##scope_gain", &display_gain, 0.25f, 4.0f, "%.2f");
-    return true;
+    float points[kPoints];
+    {
+        std::lock_guard<std::mutex> lock(points_mutex_);
+        std::copy(points_, points_ + kPoints, points);
+    }
+    ImGui::PlotLines("##scope", points, kPoints, 0, nullptr, -1.0f, 1.0f, ImVec2(-1.0f, 48.0f));
+    return false;
 }
+
 void Oscilloscope::process(const float* const* inputs, int input_count, float* output,
                            size_t sample_count, float /*sample_rate*/) {
     copy_input(inputs, input_count, 0, output, sample_count);
-    if (host_) {
-        host_->analyze(node_id_, name(), output, sample_count, display_gain, 0.85f);
+
+    const size_t frames = sample_count / 2;
+    std::unique_lock<std::mutex> lock(points_mutex_, std::try_to_lock);
+    if (!lock.owns_lock() || frames == 0) {
+        return;
+    }
+    for (int i = 0; i < kPoints; ++i) {
+        const size_t f = static_cast<size_t>(i) * (frames - 1) / (kPoints - 1);
+        const float mono = 0.5f * (output[f * 2] + output[f * 2 + 1]);
+        points_[i] = std::clamp(mono * display_gain, -1.5f, 1.5f);
     }
 }

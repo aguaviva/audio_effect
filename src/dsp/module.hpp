@@ -19,8 +19,6 @@ public:
     virtual std::shared_ptr<const WavClip> fallback_wav() const = 0;
     virtual const std::string& record_path() const = 0;
     virtual const int32_t* live_input() const = 0;
-    virtual void analyze(int node_id, const std::string& module_name, const float* block,
-                         size_t num_samples, float display_gain, float vu_decay) = 0;
 };
 
 // Copies inputs[slot] into output, or silence when that pin is not connected.
@@ -58,6 +56,5 @@ public:
 
 protected:
     GraphHost* host_ = nullptr;
-    int node_id_ = -1;
     friend class GraphProcessor;
 };

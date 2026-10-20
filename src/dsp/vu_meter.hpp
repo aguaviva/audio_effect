@@ -2,6 +2,7 @@
 
 #include "module.hpp"
 
+#include <atomic>
 #include <string>
 
 class VuMeter : public Module {
@@ -15,4 +16,12 @@ public:
     bool render() override;
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
+
+private:
+    // Audio thread only.
+    float peak_hold_ = 0.0f;
+    float rms_hold_ = 0.0f;
+    // Written by the audio thread, drawn by the UI thread.
+    std::atomic<float> peak_{0.0f};
+    std::atomic<float> rms_{0.0f};
 };

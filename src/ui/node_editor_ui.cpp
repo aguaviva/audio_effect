@@ -5,7 +5,6 @@
 #include "dsp/chord_catalog.hpp"
 #include "dsp/module.hpp"
 #include "graph/graph_io.hpp"
-#include "graph/visualizer_bus.hpp"
 #include "paths.hpp"
 
 #include "imgui.h"
@@ -13,7 +12,6 @@
 #include "imnodes.h"
 
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -106,51 +104,6 @@ void open_browser_near_path(ImGui::FileBrowser& browser, const char* path_hint,
 }
 
 } // namespace
-
-static float linear_to_db(float linear) {
-    const float clamped = std::max(linear, 1.0e-6f);
-    return 20.0f * std::log10(clamped);
-}
-
-static void draw_vu_widget(int node_id) {
-    float peak = 0.0f;
-    float rms = 0.0f;
-    g_visualizer_bus.read_vu(node_id, peak, rms);
-    const float peak_db = linear_to_db(peak);
-    const float rms_db = linear_to_db(rms);
-    ImGui::Text("Peak %.1f dB", peak_db);
-    ImGui::ProgressBar(std::clamp(peak, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
-    ImGui::Text("RMS  %.1f dB", rms_db);
-    ImGui::ProgressBar(std::clamp(rms * 1.5f, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
-}
-
-static void draw_scope_widget(int node_id) {
-    float samples[kVisualizerScopePoints]{};
-    g_visualizer_bus.read_scope(node_id, samples, kVisualizerScopePoints);
-    ImGui::PlotLines("##scope", samples, kVisualizerScopePoints, 0, nullptr, -1.0f, 1.0f,
-                     ImVec2(-1.0f, 48.0f));
-}
-
-static void draw_spectrum_widget(int node_id) {
-    float bins[kVisualizerSpectrumBins]{};
-    g_visualizer_bus.read_spectrum(node_id, bins, kVisualizerSpectrumBins);
-    ImGui::PlotHistogram("##spectrum", bins, kVisualizerSpectrumBins, 0, nullptr, 0.0f, 1.0f,
-                         ImVec2(-1.0f, 48.0f));
-}
-
-static void draw_pitch_widget(int node_id) {
-    float frequency_hz = 0.0f;
-    g_visualizer_bus.read_pitch(node_id, frequency_hz);
-    char note[16];
-    pitch_frequency_to_note(frequency_hz, note, sizeof(note));
-    if (frequency_hz > 0.0f) {
-        ImGui::Text("Freq  %.1f Hz", frequency_hz);
-        ImGui::Text("Note  %s", note);
-    } else {
-        ImGui::TextUnformatted("Freq  --");
-        ImGui::TextUnformatted("Note  --");
-    }
-}
 
 void node_editor_init() {
     ImNodes::CreateContext();
@@ -327,25 +280,21 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         if (auto* m = st.as<node_params::VuMeter>()) {
             render_module(*m, node.id());
         }
-        draw_vu_widget(node.id());
         break;
     case NodeType::oscilloscope:
         if (auto* m = st.as<node_params::Oscilloscope>()) {
             render_module(*m, node.id());
         }
-        draw_scope_widget(node.id());
         break;
     case NodeType::spectrum:
         if (auto* m = st.as<node_params::Spectrum>()) {
             render_module(*m, node.id());
         }
-        draw_spectrum_widget(node.id());
         break;
     case NodeType::pitch_detector:
         if (auto* m = st.as<node_params::PitchDetector>()) {
             render_module(*m, node.id());
         }
-        draw_pitch_widget(node.id());
         break;
     case NodeType::mixer:
         if (auto* m = st.as<node_params::Mixer>()) {
