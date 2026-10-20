@@ -8,7 +8,7 @@
 
 class Mixer : public Module {
 public:
-    static constexpr int kChannels = 8;
+    static constexpr int kChannels = kMaxInputs;
 
     // Per-input linear gain (1 = unity). Serialized as gain_0 .. gain_7.
     std::array<float, kChannels> gain{{1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f}};
@@ -21,7 +21,7 @@ public:
     bool supports_bypass() const override { return false; }
     std::string save() const override;
     bool load(const std::string& json) override;
-    void get_inputs(int *count, const char* const** str);
+    void get_inputs(int *count, const char* const** str) const override;
     bool render() override;
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;

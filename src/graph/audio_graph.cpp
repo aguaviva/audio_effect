@@ -1,44 +1,42 @@
 #include "audio_graph.hpp"
 
+#include "dsp/mixer.hpp"
+#include "node_registry.hpp"
+
 #include <algorithm>
 #include <queue>
+#include <unordered_map>
 #include <unordered_set>
-
-GraphNode::GraphNode(int id, NodeType type, float x, float y)
-    : id_(id), type_(type), x_(x), y_(y), state_(NodeState::make(type)) {}
-
-GraphLink::GraphLink(int id, int from_node, int to_node, int to_slot)
-    : id_(id), from_node_(from_node), to_node_(to_node), to_slot_(to_slot) {}
 
 template <typename T>
 static int next_free_id(const std::vector<T>& items) {
     int max_id = 0;
     for (const auto& item : items) {
-        max_id = std::max(max_id, item.id());
+        max_id = std::max(max_id, item.id);
     }
     return max_id + 1;
 }
 
-AudioGraph::AudioGraph() {
-    reset_to_default_chain();
-}
-
-int AudioGraph::add_node(NodeType type, float x, float y) {
+int AudioGraph::add_node(const std::string& type, float x, float y) {
+    auto module = make_module(type);
+    if (!module) {
+        return -1;
+    }
     const int id = next_free_id(nodes_);
-    nodes_.emplace_back(id, type, x, y);
+    nodes_.push_back({id, x, y, false, std::move(module)});
     return id;
 }
 
 bool AudioGraph::remove_node(int node_id) {
     auto it = std::find_if(nodes_.begin(), nodes_.end(),
-                           [node_id](const GraphNode& n) { return n.id() == node_id; });
+                           [node_id](const GraphNode& n) { return n.id == node_id; });
     if (it == nodes_.end()) {
         return false;
     }
     nodes_.erase(it);
     links_.erase(std::remove_if(links_.begin(), links_.end(),
                                 [node_id](const GraphLink& l) {
-                                    return l.from_node() == node_id || l.to_node() == node_id;
+                                    return l.from_node == node_id || l.to_node == node_id;
                                 }),
                  links_.end());
     return true;
@@ -50,19 +48,10 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
     }
     const GraphNode* from = find_node(from_node);
     const GraphNode* to = find_node(to_node);
-    if (!from || !to) {
+    if (!from || !to || from->module->output_count() == 0) {
         return false;
     }
-    if (!node_has_output_pin(from->type()) || !node_has_input_pin(to->type())) {
-        return false;
-    }
-
-    const int slot_limit = node_input_slot_limit(to->type());
-    if (to_slot < 0 || to_slot >= slot_limit) {
-        return false;
-    }
-    // Mixer: only expose connected pins + one spare; reject wiring past that.
-    if (node_is_mixer(to->type()) && to_slot >= mixer_pin_count(to_node)) {
+    if (to_slot < 0 || to_slot >= input_pin_count(to_node)) {
         return false;
     }
 
@@ -78,45 +67,48 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
             continue;
         }
         for (const auto& link : links_) {
-            if (link.from_node() == current) {
-                stack.push_back(link.to_node());
+            if (link.from_node == current) {
+                stack.push_back(link.to_node);
             }
         }
     }
 
     // One link per input pin; fan-in goes through a Mixer.
     for (const auto& link : links_) {
-        if (link.to_node() == to_node && link.to_slot() == to_slot) {
+        if (link.to_node == to_node && link.to_slot == to_slot) {
             return false;
         }
     }
 
-    links_.emplace_back(next_free_id(links_), from_node, to_node, to_slot);
+    links_.push_back({next_free_id(links_), from_node, to_node, to_slot});
     return true;
 }
 
-int AudioGraph::mixer_pin_count(int node_id) const {
+int AudioGraph::input_pin_count(int node_id) const {
     const GraphNode* node = find_node(node_id);
-    if (!node || !node_is_mixer(node->type())) {
-        return 1;
+    if (!node) {
+        return 0;
+    }
+    if (!node->as<Mixer>()) {
+        return node->module->input_count();
     }
     int max_slot = -1;
     int connected = 0;
     for (const auto& link : links_) {
-        if (link.to_node() != node_id) {
+        if (link.to_node != node_id) {
             continue;
         }
         ++connected;
-        max_slot = std::max(max_slot, link.to_slot());
+        max_slot = std::max(max_slot, link.to_slot);
     }
     // Auto-detect: show every used slot, plus one empty pin for the next wire.
     const int needed = std::max(max_slot + 1, connected) + 1;
-    return std::clamp(needed, 1, kMaxMixerInputs);
+    return std::clamp(needed, 1, node->module->input_count());
 }
 
 bool AudioGraph::remove_link(int link_id) {
     auto it = std::find_if(links_.begin(), links_.end(),
-                           [link_id](const GraphLink& l) { return l.id() == link_id; });
+                           [link_id](const GraphLink& l) { return l.id == link_id; });
     if (it == links_.end()) {
         return false;
     }
@@ -126,7 +118,7 @@ bool AudioGraph::remove_link(int link_id) {
 
 GraphNode* AudioGraph::find_node(int node_id) {
     for (auto& node : nodes_) {
-        if (node.id() == node_id) {
+        if (node.id == node_id) {
             return &node;
         }
     }
@@ -135,7 +127,7 @@ GraphNode* AudioGraph::find_node(int node_id) {
 
 const GraphNode* AudioGraph::find_node(int node_id) const {
     for (const auto& node : nodes_) {
-        if (node.id() == node_id) {
+        if (node.id == node_id) {
             return &node;
         }
     }
@@ -154,59 +146,6 @@ void AudioGraph::copy_structure_from(const AudioGraph& other) {
     record_path_ = other.record_path_;
 }
 
-void AudioGraph::reset_to_default_chain() {
-    clear();
-    set_wav_path(kDefaultWavPath);
-
-    // Default patch: WAV -> preamp -> parallel echo/drive -> mixer -> tone -> meters -> out
-    const int wav = add_node(NodeType::wav_player, 40.0f, 220.0f);
-    const int pre = add_node(NodeType::preamp, 280.0f, 220.0f);
-    const int echo = add_node(NodeType::echo, 520.0f, 80.0f);
-    const int drive = add_node(NodeType::drive_pedal, 520.0f, 360.0f);
-    const int mix = add_node(NodeType::mixer, 760.0f, 220.0f);
-    const int hpf = add_node(NodeType::high_pass, 1000.0f, 220.0f);
-    const int lpf = add_node(NodeType::low_pass, 1240.0f, 220.0f);
-    const int vu = add_node(NodeType::vu_meter, 1480.0f, 80.0f);
-    const int scope = add_node(NodeType::oscilloscope, 1480.0f, 280.0f);
-    const int spec = add_node(NodeType::spectrum, 1480.0f, 480.0f);
-    const int out = add_node(NodeType::output, 1720.0f, 220.0f);
-
-    if (auto* p = find_node(wav)->state().as<node_params::WavPlayer>()) {
-        p->loop = true;
-        p->set_path(kDefaultWavPath);
-    }
-    if (auto* p = find_node(pre)->state().as<node_params::Preamp>()) {
-        p->gain_db = 0.0f;
-    }
-    if (auto* p = find_node(echo)->state().as<node_params::Echo>()) {
-        p->delay_ms = 320.0f;
-        p->feedback = 0.35f;
-        p->mix = 0.25f;
-    }
-    if (auto* p = find_node(drive)->state().as<node_params::Drive>()) {
-        p->amount = 3.0f;
-        p->tone = 0.65f;
-    }
-    if (auto* p = find_node(hpf)->state().as<node_params::HighPass>()) {
-        p->cutoff_hz = 70.0f;
-    }
-    if (auto* p = find_node(lpf)->state().as<node_params::LowPass>()) {
-        p->cutoff_hz = 8000.0f;
-    }
-
-    add_link(wav, pre);
-    add_link(pre, echo);
-    add_link(pre, drive);
-    add_link(echo, mix, 0);
-    add_link(drive, mix, 1);
-    add_link(mix, hpf);
-    add_link(hpf, lpf);
-    add_link(lpf, vu);
-    add_link(vu, scope);
-    add_link(scope, spec);
-    add_link(spec, out);
-}
-
 std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     auto compiled = std::make_shared<CompiledGraph>();
 
@@ -216,22 +155,22 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     std::unordered_map<int, int> indegree;
 
     for (const auto& node : nodes_) {
-        indegree[node.id()] = 0;
-        next_nodes[node.id()] = {};
-        out_links[node.id()] = {};
-        ins[node.id()] = {};
+        indegree[node.id] = 0;
+        next_nodes[node.id] = {};
+        out_links[node.id] = {};
+        ins[node.id] = {};
     }
     for (const auto& link : links_) {
-        const GraphNode* to = find_node(link.to_node());
-        if (!indegree.count(link.from_node()) || !to || link.to_slot() < 0 ||
-            link.to_slot() >= node_input_slot_limit(to->type())) {
+        const GraphNode* to = find_node(link.to_node);
+        if (!indegree.count(link.from_node) || !to || link.to_slot < 0 ||
+            link.to_slot >= to->module->input_count()) {
             continue;
         }
         const int buffer = static_cast<int>(compiled->link_count++);
-        next_nodes[link.from_node()].push_back(link.to_node());
-        out_links[link.from_node()].push_back(buffer);
-        ins[link.to_node()].push_back({buffer, link.to_slot()});
-        indegree[link.to_node()] += 1;
+        next_nodes[link.from_node].push_back(link.to_node);
+        out_links[link.from_node].push_back(buffer);
+        ins[link.to_node].push_back({buffer, link.to_slot});
+        indegree[link.to_node] += 1;
     }
 
     std::queue<int> ready;
@@ -266,13 +205,7 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
         if (!src) {
             continue;
         }
-        CompiledGraph::Node node;
-        node.set_id(src->id());
-        node.set_type(src->type());
-        node.set_state(src->state());
-        node.inputs() = ins[id];
-        node.outputs() = out_links[id];
-        compiled->order.push_back(std::move(node));
+        compiled->order.push_back({src->id, src->module, src->bypassed, ins[id], out_links[id]});
     }
     compiled->valid = true;
     return compiled;

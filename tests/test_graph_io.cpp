@@ -1,8 +1,10 @@
 #include "test_harness.hpp"
 
 #include "graph/audio_graph.hpp"
+#include "dsp/preamp.hpp"
+#include "dsp/wav_player.hpp"
 #include "graph/graph_io.hpp"
-#include "graph/node_state.hpp"
+#include "paths.hpp"
 
 #include <cstdio>
 #include <fstream>
@@ -10,13 +12,14 @@
 
 TEST(graph_io_serialize_deserialize_roundtrip) {
     AudioGraph g;
-    g.reset_to_default_chain();
-    if (auto* wav = g.find_node(g.nodes().front().id())->state().as<node_params::WavPlayer>()) {
+    std::string load_error;
+    CHECK(graph_io::load_from_file(g, kDefaultPatchPath, load_error));
+    if (auto* wav = g.find_node(g.nodes().front().id)->as<WavPlayer>()) {
         wav->loop = false;
     }
     for (auto& n : g.nodes()) {
-        if (n.type() == NodeType::preamp) {
-            if (auto* p = n.state().as<node_params::Preamp>()) {
+        if (n.module->name() == "preamp") {
+            if (auto* p = n.as<Preamp>()) {
                 p->gain_db = 3.5f;
             }
         }
@@ -36,8 +39,8 @@ TEST(graph_io_serialize_deserialize_roundtrip) {
 
     bool found_gain = false;
     for (const auto& n : loaded.nodes()) {
-        if (n.type() == NodeType::preamp) {
-            CHECK_NEAR(n.state().as<node_params::Preamp>()->gain_db, 3.5f, 1e-4f);
+        if (n.module->name() == "preamp") {
+            CHECK_NEAR(n.as<Preamp>()->gain_db, 3.5f, 1e-4f);
             found_gain = true;
         }
     }
@@ -46,9 +49,9 @@ TEST(graph_io_serialize_deserialize_roundtrip) {
 
 TEST(graph_io_file_roundtrip) {
     AudioGraph g;
-    g.reset_to_default_chain();
-    const std::string path = "tests/_tmp_graph.json";
     std::string error;
+    CHECK(graph_io::load_from_file(g, kDefaultPatchPath, error));
+    const std::string path = "tests/_tmp_graph.json";
     CHECK(graph_io::save_to_file(g, path, error));
 
     AudioGraph loaded;
@@ -61,9 +64,9 @@ TEST(graph_io_file_roundtrip) {
 TEST(graph_io_preserves_mixer_to_slot) {
     AudioGraph g;
     g.clear();
-    const int a = g.add_node(NodeType::wav_player, 0, 0);
-    const int b = g.add_node(NodeType::preamp, 0, 0);
-    const int m = g.add_node(NodeType::mixer, 0, 0);
+    const int a = g.add_node("wav_player", 0, 0);
+    const int b = g.add_node("preamp", 0, 0);
+    const int m = g.add_node("mixer", 0, 0);
     CHECK(g.add_link(a, m, 0));
     CHECK(g.add_link(b, m, 1));
 
@@ -72,8 +75,8 @@ TEST(graph_io_preserves_mixer_to_slot) {
     CHECK(graph_io::deserialize(loaded, graph_io::serialize(g), error));
     int slot_sum = 0;
     for (const auto& link : loaded.links()) {
-        if (link.to_node() == m) {
-            slot_sum += link.to_slot();
+        if (link.to_node == m) {
+            slot_sum += link.to_slot;
         }
     }
     CHECK_EQ(slot_sum, 1); // slots 0 and 1
@@ -103,10 +106,10 @@ TEST(graph_io_new_ids_follow_largest_loaded_id) {
     AudioGraph g;
     std::string error;
     CHECK(graph_io::deserialize(g, text, error));
-    const int added = g.add_node(NodeType::preamp, 0, 0);
+    const int added = g.add_node("preamp", 0, 0);
     CHECK_EQ(added, 10);
     CHECK(g.add_link(added, 7));
-    CHECK_EQ(g.links().back().id(), 5);
+    CHECK_EQ(g.links().back().id, 5);
 }
 
 TEST(graph_io_rejects_two_links_into_one_input_pin) {
@@ -127,7 +130,27 @@ TEST(graph_io_params_may_precede_type) {
     AudioGraph g;
     std::string error;
     CHECK(graph_io::deserialize(g, text, error));
-    CHECK_NEAR(g.find_node(1)->state().as<node_params::Preamp>()->gain_db, 4.5f, 1e-5f);
+    CHECK_NEAR(g.find_node(1)->as<Preamp>()->gain_db, 4.5f, 1e-5f);
+}
+
+TEST(graph_io_rejects_unknown_module) {
+    AudioGraph g;
+    std::string error;
+    CHECK(!graph_io::deserialize(
+        g, R"({"version":2,"nodes":[{"id":1,"type":"nope","x":0,"y":0}],"links":[]})", error));
+    CHECK(error.find("Unknown module name") != std::string::npos);
+}
+
+TEST(graph_io_bypass_roundtrip) {
+    AudioGraph g;
+    const int pre = g.add_node("preamp", 0, 0);
+    g.find_node(pre)->bypassed = true;
+    g.find_node(pre)->as<Preamp>()->gain_db = 3.5f;
+    AudioGraph loaded;
+    std::string error;
+    CHECK(graph_io::deserialize(loaded, graph_io::serialize(g), error));
+    CHECK(loaded.find_node(pre)->bypassed);
+    CHECK_NEAR(loaded.find_node(pre)->as<Preamp>()->gain_db, 3.5f, 1e-4f);
 }
 
 TEST(graph_io_rejects_other_versions) {
@@ -151,7 +174,8 @@ TEST(graph_io_bundled_patches_load) {
 
 TEST(graph_io_saves_nodes_before_links) {
     AudioGraph g;
-    g.reset_to_default_chain();
+    std::string load_error;
+    CHECK(graph_io::load_from_file(g, kDefaultPatchPath, load_error));
     const std::string text = graph_io::serialize(g);
     CHECK(text.find("\"nodes\"") < text.find("\"links\""));
     CHECK(text.find("next_node_id") == std::string::npos);

@@ -225,6 +225,49 @@ inline bool for_each_member(const std::string& text, Fn&& fn) {
     }
 }
 
+// Walk elements of the JSON array at text[i]; Fn(element) gets each element's text.
+template <typename Fn>
+inline bool for_each_element(const std::string& text, size_t& i, Fn&& fn) {
+    if (!expect_char(text, i, '[') || !skip_ws(text, i)) {
+        return false;
+    }
+    if (text[i] == ']') {
+        ++i;
+        return true;
+    }
+    while (true) {
+        if (!skip_ws(text, i)) {
+            return false;
+        }
+        const size_t start = i;
+        if (!skip_value(text, i) || !fn(text.substr(start, i - start)) || !skip_ws(text, i)) {
+            return false;
+        }
+        if (text[i] == ',') {
+            ++i;
+            continue;
+        }
+        if (text[i] == ']') {
+            ++i;
+            return true;
+        }
+        return false;
+    }
+}
+
+// Copies the raw text of the value at text[i] into out.
+inline bool take_value(const std::string& text, size_t& i, std::string& out) {
+    if (!skip_ws(text, i)) {
+        return false;
+    }
+    const size_t start = i;
+    if (!skip_value(text, i)) {
+        return false;
+    }
+    out = text.substr(start, i - start);
+    return true;
+}
+
 inline bool parse_value(const std::string& text, size_t& i, float& out) {
     double num = 0.0;
     if (!parse_number_value(text, i, num)) {

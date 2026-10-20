@@ -1,67 +1,33 @@
 #pragma once
 
-#include "node_state.hpp"
-#include "node_types.hpp"
+#include "dsp/module.hpp"
 #include "paths.hpp"
 
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-class GraphNode {
-public:
-    GraphNode() = default;
-    GraphNode(int id, NodeType type, float x, float y);
+struct GraphNode {
+    int id = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    bool bypassed = false;
+    // Copies share this instance: the UI renders it and the audio thread processes it,
+    // so settings never need to be copied between them.
+    std::shared_ptr<Module> module;
 
-    int id() const { return id_; }
-    void set_id(int id) { id_ = id; }
-
-    NodeType type() const { return type_; }
-    void set_type(NodeType type) { type_ = type; }
-
-    float x() const { return x_; }
-    float y() const { return y_; }
-    void set_x(float x) { x_ = x; }
-    void set_y(float y) { y_ = y; }
-    void set_position(float x, float y) {
-        x_ = x;
-        y_ = y;
+    template <typename T>
+    T* as() const {
+        return dynamic_cast<T*>(module.get());
     }
-
-    const NodeState& state() const { return state_; }
-    NodeState& state() { return state_; }
-    void set_state(const NodeState& state) { state_ = state; }
-
-private:
-    int id_ = 0;
-    NodeType type_ = NodeType::preamp;
-    float x_ = 0.0f;
-    float y_ = 0.0f;
-    NodeState state_{};
 };
 
-class GraphLink {
-public:
-    GraphLink() = default;
-    GraphLink(int id, int from_node, int to_node, int to_slot = 0);
-
-    int id() const { return id_; }
-    void set_id(int id) { id_ = id; }
-
-    int from_node() const { return from_node_; }
-    int to_node() const { return to_node_; }
-    int to_slot() const { return to_slot_; }
-    void set_from_node(int id) { from_node_ = id; }
-    void set_to_node(int id) { to_node_ = id; }
-    void set_to_slot(int slot) { to_slot_ = slot; }
-
-private:
-    int id_ = 0;
-    int from_node_ = 0;
-    int to_node_ = 0;
-    int to_slot_ = 0; // destination input slot (mixers have several)
+struct GraphLink {
+    int id = 0;
+    int from_node = 0;
+    int to_node = 0;
+    int to_slot = 0;
 };
 
 // Snapshot consumed by the audio thread. Every link owns one audio buffer, numbered
@@ -72,29 +38,12 @@ struct CompiledGraph {
         int to_slot = 0;
     };
 
-    class Node {
-    public:
-        int id() const { return id_; }
-        void set_id(int id) { id_ = id; }
-
-        NodeType type() const { return type_; }
-        void set_type(NodeType type) { type_ = type; }
-
-        const NodeState& state() const { return state_; }
-        NodeState& state() { return state_; }
-        void set_state(const NodeState& state) { state_ = state; }
-
-        const std::vector<WiredInput>& inputs() const { return inputs_; }
-        const std::vector<int>& outputs() const { return outputs_; }
-        std::vector<WiredInput>& inputs() { return inputs_; }
-        std::vector<int>& outputs() { return outputs_; }
-
-    private:
-        int id_ = 0;
-        NodeType type_ = NodeType::preamp;
-        NodeState state_{};
-        std::vector<WiredInput> inputs_;
-        std::vector<int> outputs_; // links this node writes
+    struct Node {
+        int id = 0;
+        std::shared_ptr<Module> module;
+        bool bypassed = false;
+        std::vector<WiredInput> inputs;
+        std::vector<int> outputs; // links this node writes
     };
 
     std::vector<Node> order; // topological order
@@ -104,14 +53,14 @@ struct CompiledGraph {
 
 class AudioGraph {
 public:
-    AudioGraph();
-
-    int add_node(NodeType type, float x, float y);
+    // Returns the new node id, or -1 when no module has this name.
+    int add_node(const std::string& type, float x, float y);
     bool remove_node(int node_id);
     bool add_link(int from_node, int to_node, int to_slot = 0);
     bool remove_link(int link_id);
-    // Visible mixer input pins: one per connection plus one spare (capped).
-    int mixer_pin_count(int node_id) const;
+    // Input pins to show: the module's count, except a Mixer shows one per connection
+    // plus one spare.
+    int input_pin_count(int node_id) const;
     GraphNode* find_node(int node_id);
     const GraphNode* find_node(int node_id) const;
 
@@ -127,7 +76,6 @@ public:
     void set_record_path(const std::string& path) { record_path_ = path; }
 
     void clear();
-    void reset_to_default_chain();
     void copy_structure_from(const AudioGraph& other);
     std::shared_ptr<const CompiledGraph> compile() const;
 

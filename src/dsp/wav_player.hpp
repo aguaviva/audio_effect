@@ -2,6 +2,7 @@
 
 #include "audio_input_sources.hpp"
 #include "module.hpp"
+#include "paths.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -18,6 +19,7 @@ public:
     void set_path(const std::string& path);
 
     std::string name() const override { return "wav_player"; }
+    void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
@@ -26,7 +28,7 @@ public:
 
 private:
     std::mutex path_mutex_;
-    std::string path_;
+    std::string path_ = kDefaultWavPath;
     WavFileInput wav_;
     std::shared_ptr<const WavClip> clip_;
     std::string loaded_path_;

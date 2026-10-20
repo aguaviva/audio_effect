@@ -47,8 +47,14 @@ public:
     virtual void process(const float* const* inputs, int input_count, float* output,
                          size_t sample_count, float sample_rate) = 0;
 
-    virtual void get_inputs(int *count, const char* const** str) { static const char* input_names[] = {"in"}; *count=1; *str=input_names; }    
-    virtual void get_outputs(int *count, const char* const** str) { static const char* output_names[] = {"out"}; *count=1; *str=output_names; }    
+    static constexpr int kMaxInputs = 8;
+
+    // Pin names. Sources have no inputs, sinks no outputs; at most kMaxInputs inputs.
+    virtual void get_inputs(int *count, const char* const** str) const { static const char* input_names[] = {"in"}; *count=1; *str=input_names; }
+    virtual void get_outputs(int *count, const char* const** str) const { static const char* output_names[] = {"out"}; *count=1; *str=output_names; }
+
+    int input_count() const { int n = 0; const char* const* s = nullptr; get_inputs(&n, &s); return n; }
+    int output_count() const { int n = 0; const char* const* s = nullptr; get_outputs(&n, &s); return n; }
 
     virtual bool supports_bypass() const { return true; }
     virtual bool is_output_sink() const { return false; }

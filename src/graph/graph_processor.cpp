@@ -1,7 +1,5 @@
 #include "graph_processor.hpp"
 
-#include "node_types.hpp"
-
 #include <algorithm>
 
 GraphProcessor::GraphProcessor(float sample_rate)
@@ -53,17 +51,17 @@ bool GraphProcessor::process(const CompiledGraph& graph,
 
     bool wrote_output = false;
     for (const auto& node : graph.order) {
-        const float* inputs[kMaxMixerInputs] = {};
-        for (const auto& in : node.inputs()) {
+        Module& mod = *node.module;
+        const float* inputs[Module::kMaxInputs] = {};
+        for (const auto& in : node.inputs) {
             inputs[in.to_slot] = buffer(static_cast<size_t>(in.link));
         }
-        const int input_count = node_input_slot_limit(node.type());
+        const int input_count = mod.input_count();
 
-        const auto& links_out = node.outputs();
+        const auto& links_out = node.outputs;
         float* out = links_out.empty() ? scratch : buffer(static_cast<size_t>(links_out.front()));
 
-        Module& mod = node.state().shared_module();
-        if (mod.supports_bypass() && node.state().bypassed) {
+        if (mod.supports_bypass() && node.bypassed) {
             copy_input(inputs, input_count, 0, out, block_size_);
         } else {
             mod.host_ = this;

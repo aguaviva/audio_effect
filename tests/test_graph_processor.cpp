@@ -1,8 +1,10 @@
 #include "test_harness.hpp"
 
 #include "graph/audio_graph.hpp"
+#include "dsp/audio_output.hpp"
+#include "dsp/mixer.hpp"
+#include "dsp/preamp.hpp"
 #include "graph/graph_processor.hpp"
-#include "graph/node_state.hpp"
 
 #include <vector>
 
@@ -16,10 +18,10 @@ static std::shared_ptr<const CompiledGraph> compile_chain(AudioGraph& g) {
 TEST(graph_processor_preamp_applies_gain) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre = g.add_node(NodeType::preamp, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
-    g.find_node(pre)->state().as<node_params::Preamp>()->gain_db = 6.0f; // ~2x
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre = g.add_node("preamp", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    g.find_node(pre)->as<Preamp>()->gain_db = 6.0f; // ~2x
     CHECK(g.add_link(in, pre));
     CHECK(g.add_link(pre, out));
 
@@ -39,9 +41,9 @@ TEST(graph_processor_preamp_applies_gain) {
 TEST(graph_processor_sees_ui_edits_without_recompile) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre = g.add_node(NodeType::preamp, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre = g.add_node("preamp", 0, 0);
+    const int out = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, pre));
     CHECK(g.add_link(pre, out));
 
@@ -55,7 +57,7 @@ TEST(graph_processor_sees_ui_edits_without_recompile) {
     CHECK_NEAR(output[0], 0.5f, 0.02f);
 
     // Same snapshot: the processor runs the module the UI edits.
-    g.find_node(pre)->state().as<node_params::Preamp>()->gain_db = 6.0f;
+    g.find_node(pre)->as<Preamp>()->gain_db = 6.0f;
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
     CHECK_NEAR(output[0], 0.998f, 0.05f);
 }
@@ -63,11 +65,11 @@ TEST(graph_processor_sees_ui_edits_without_recompile) {
 TEST(graph_processor_bypass_skips_preamp_gain) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre = g.add_node(NodeType::preamp, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
-    g.find_node(pre)->state().as<node_params::Preamp>()->gain_db = 6.0f;
-    g.find_node(pre)->state().bypassed = true;
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre = g.add_node("preamp", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    g.find_node(pre)->as<Preamp>()->gain_db = 6.0f;
+    g.find_node(pre)->bypassed = true;
     CHECK(g.add_link(in, pre));
     CHECK(g.add_link(pre, out));
 
@@ -91,15 +93,15 @@ TEST(graph_processor_mixer_applies_per_input_gain) {
     // input -> preamp(0dB) via... only one audio_input reads live buffer.
     // Instead: wav-less sources won't work. Use one audio_input split to two
     // preamps with different gains, then mix.
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre_a = g.add_node(NodeType::preamp, 0, 0);
-    const int pre_b = g.add_node(NodeType::preamp, 0, 0);
-    const int mix = g.add_node(NodeType::mixer, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
-    g.find_node(pre_a)->state().as<node_params::Preamp>()->gain_db = 0.0f;  // x1
-    g.find_node(pre_b)->state().as<node_params::Preamp>()->gain_db = 6.0f;  // ~x2
-    g.find_node(mix)->state().as<node_params::Mixer>()->gain[0] = 0.5f;
-    g.find_node(mix)->state().as<node_params::Mixer>()->gain[1] = 1.5f;
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre_a = g.add_node("preamp", 0, 0);
+    const int pre_b = g.add_node("preamp", 0, 0);
+    const int mix = g.add_node("mixer", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    g.find_node(pre_a)->as<Preamp>()->gain_db = 0.0f;  // x1
+    g.find_node(pre_b)->as<Preamp>()->gain_db = 6.0f;  // ~x2
+    g.find_node(mix)->as<Mixer>()->gain[0] = 0.5f;
+    g.find_node(mix)->as<Mixer>()->gain[1] = 1.5f;
     CHECK(g.add_link(in, pre_a));
     CHECK(g.add_link(in, pre_b));
     CHECK(g.add_link(pre_a, mix, 0));
@@ -137,12 +139,8 @@ TEST(graph_processor_rejects_mismatched_empty_graph) {
 
 TEST(graph_processor_block_size_contract) {
     AudioGraph g;
-    g.reset_to_default_chain();
-    // Replace wav with audio input for deterministic PCM
-    // Just process default — may not have audio_input; use custom mini graph.
-    g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int out = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, out));
 
     GraphProcessor proc(48000.0f);
@@ -157,11 +155,11 @@ TEST(graph_processor_block_size_contract) {
 TEST(graph_processor_output_node_ignores_bypass_flag) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int out = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, out));
-    g.find_node(out)->state().bypassed = true;
-    CHECK(!node_supports_bypass(NodeType::output));
+    g.find_node(out)->bypassed = true;
+    CHECK(!g.find_node(out)->module->supports_bypass());
 
     constexpr size_t block = 16;
     std::vector<int32_t> live(block, 1073741824);
@@ -175,8 +173,8 @@ TEST(graph_processor_output_node_ignores_bypass_flag) {
 TEST(graph_processor_reports_no_output_without_output_node) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre = g.add_node(NodeType::preamp, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre = g.add_node("preamp", 0, 0);
     CHECK(g.add_link(in, pre));
 
     constexpr size_t block = 16;
@@ -192,10 +190,10 @@ TEST(graph_processor_reports_no_output_without_output_node) {
 TEST(graph_processor_fan_out_feeds_every_link) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre = g.add_node(NodeType::preamp, 0, 0);
-    const int out_a = g.add_node(NodeType::output, 0, 0);
-    const int out_b = g.add_node(NodeType::output, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre = g.add_node("preamp", 0, 0);
+    const int out_a = g.add_node("output", 0, 0);
+    const int out_b = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, pre));
     CHECK(g.add_link(pre, out_a));
     CHECK(g.add_link(pre, out_b));
@@ -213,10 +211,10 @@ TEST(graph_processor_fan_out_feeds_every_link) {
 TEST(graph_processor_output_volume_and_mute) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
+    const int in = g.add_node("audio_input", 0, 0);
+    const int out = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, out));
-    auto* m = g.find_node(out)->state().as<node_params::AudioOutput>();
+    auto* m = g.find_node(out)->as<AudioOutput>();
     m->volume_db = -6.0206f; // x0.5
 
     constexpr size_t block = 16;

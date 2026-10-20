@@ -2,16 +2,18 @@
 
 #include "dsp/agc.hpp"
 #include "dsp/denormals.hpp"
+#include "dsp/dry_wet_mix.hpp"
 #include "dsp/eq_three_band.hpp"
 #include "dsp/guitar_pedals.hpp"
 #include "dsp/mixer.hpp"
 #include "dsp/noise_gate.hpp"
+#include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
 #include "dsp/wav_recorder.hpp"
+#include "dsp/white_noise.hpp"
 #include "graph/audio_graph.hpp"
 #include "graph/graph_processor.hpp"
-#include "graph/node_state.hpp"
-#include "graph/node_types.hpp"
+#include "graph/node_registry.hpp"
 #include "paths.hpp"
 
 #include <cmath>
@@ -27,28 +29,26 @@ static void run_effect(Module& module, std::vector<float>& block) {
     module.process(inputs, 1, block.data(), block.size(), 48000.0f);
 }
 
-TEST(new_node_types_parse_and_labels) {
-    NodeType t = NodeType::output;
-    CHECK(try_parse_node_type("noise_gate", t));
-    CHECK(t == NodeType::noise_gate);
-    CHECK(try_parse_node_type("eq_three_band", t));
-    CHECK(try_parse_node_type("reverb", t));
-    CHECK(try_parse_node_type("dry_wet_mix", t));
-    CHECK(try_parse_node_type("wav_recorder", t));
-    CHECK(try_parse_node_type("white_noise", t));
-    CHECK(t == NodeType::white_noise);
-    CHECK(node_is_source(NodeType::white_noise));
-    CHECK(!node_has_input_pin(NodeType::white_noise));
-    CHECK(node_is_dry_wet(NodeType::dry_wet_mix));
-    CHECK_EQ(node_input_slot_limit(NodeType::dry_wet_mix), 2);
+TEST(registry_resolves_module_names_and_pins) {
+    for (const char* name : {"noise_gate", "eq_three_band", "reverb", "dry_wet_mix", "wav_recorder",
+                             "white_noise", "agc", "pitch_detector"}) {
+        auto module = make_module(name);
+        CHECK(module != nullptr);
+        CHECK(module->name() == name);
+    }
+    CHECK(make_module("not_a_module") == nullptr);
+    CHECK_EQ(make_module("white_noise")->input_count(), 0);
+    CHECK_EQ(make_module("dry_wet_mix")->input_count(), 2);
+    CHECK_EQ(make_module("output")->output_count(), 0);
+    CHECK_STREQ(node_label(*make_module("pitch_detector")), "Pitch Detector");
 }
 
 TEST(white_noise_source_produces_energy) {
     AudioGraph g;
     g.clear();
-    const int noise = g.add_node(NodeType::white_noise, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
-    g.find_node(noise)->state().as<node_params::WhiteNoise>()->level = 0.5f;
+    const int noise = g.add_node("white_noise", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    g.find_node(noise)->as<WhiteNoise>()->level = 0.5f;
     CHECK(g.add_link(noise, out));
 
     constexpr size_t block = 256;
@@ -173,14 +173,14 @@ TEST(reverb_mix_changes_output) {
 TEST(dry_wet_mix_blends_slots) {
     AudioGraph g;
     g.clear();
-    const int in = g.add_node(NodeType::audio_input, 0, 0);
-    const int pre_a = g.add_node(NodeType::preamp, 0, 0);
-    const int pre_b = g.add_node(NodeType::preamp, 0, 0);
-    const int mix = g.add_node(NodeType::dry_wet_mix, 0, 0);
-    const int out = g.add_node(NodeType::output, 0, 0);
-    g.find_node(pre_a)->state().as<node_params::Preamp>()->gain_db = 0.0f;
-    g.find_node(pre_b)->state().as<node_params::Preamp>()->gain_db = 6.0f;
-    g.find_node(mix)->state().as<node_params::DryWet>()->mix = 0.5f;
+    const int in = g.add_node("audio_input", 0, 0);
+    const int pre_a = g.add_node("preamp", 0, 0);
+    const int pre_b = g.add_node("preamp", 0, 0);
+    const int mix = g.add_node("dry_wet_mix", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    g.find_node(pre_a)->as<Preamp>()->gain_db = 0.0f;
+    g.find_node(pre_b)->as<Preamp>()->gain_db = 6.0f;
+    g.find_node(mix)->as<DryWetMix>()->mix = 0.5f;
     CHECK(g.add_link(in, pre_a));
     CHECK(g.add_link(in, pre_b));
     CHECK(g.add_link(pre_a, mix, 0));
@@ -350,7 +350,4 @@ TEST(agc_save_load_roundtrip) {
     CHECK_NEAR(loaded.target_db, -12.0f, 1e-5f);
     CHECK_NEAR(loaded.max_gain_db, 10.0f, 1e-5f);
     CHECK_NEAR(loaded.release_ms, 900.0f, 1e-5f);
-    NodeType type = NodeType::count;
-    CHECK(node_params::try_resolve_name("agc", type));
-    CHECK(type == NodeType::agc);
 }

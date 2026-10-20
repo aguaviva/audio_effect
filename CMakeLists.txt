@@ -29,7 +29,7 @@ set(AUDIO_EFFECT_SOURCES
   src/graph/audio_graph.cpp
   src/graph/graph_io.cpp
   src/graph/graph_processor.cpp
-  src/graph/node_state.cpp
+  src/graph/node_registry.cpp
   src/ui/node_editor_ui.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
@@ -114,7 +114,7 @@ endif()
 if(AUDIO_EFFECT_BUILD_TESTS)
   set(TEST_SOURCES
     tests/test_main.cpp
-    tests/test_node_state.cpp
+    tests/test_node_registry.cpp
     tests/test_chord_catalog.cpp
     tests/test_audio_graph.cpp
     tests/test_graph_io.cpp
@@ -124,7 +124,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/graph/audio_graph.cpp
     src/graph/graph_io.cpp
     src/graph/graph_processor.cpp
-    src/graph/node_state.cpp
+    src/graph/node_registry.cpp
     src/dsp/preamp.cpp
     src/dsp/dynamic_high_pass_filter.cpp
     src/dsp/dynamic_low_pass_filter.cpp

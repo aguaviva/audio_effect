@@ -10,6 +10,7 @@ public:
     float level = 0.2f;
 
     std::string name() const override { return "white_noise"; }
+    void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;

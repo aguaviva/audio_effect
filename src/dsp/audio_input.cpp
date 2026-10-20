@@ -1,7 +1,5 @@
 #include "audio_input.hpp"
 
-#include "imgui.h"
-
 std::string AudioInput::save() const {
     std::string out = "{";
     module_json::write_string(out, "device", device);
@@ -18,7 +16,6 @@ bool AudioInput::load(const std::string& json) {
 }
 
 bool AudioInput::render() {
-    ImGui::TextUnformatted(device.c_str());
     return false;
 }
 void AudioInput::process(const float* const* /*inputs*/, int /*input_count*/, float* output,

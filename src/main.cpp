@@ -36,73 +36,20 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Load a graph at startup: CLI path wins, otherwise assets/patches/default_patch.json.
-    // AudioGraph already seeded reset_to_default_chain(); file load replaces it.
+    // CLI path wins, otherwise assets/patches/default_patch.json.
     const char* graph_path = (argc > 1) ? argv[1] : kDefaultPatchPath;
-    std::string load_status;
-    {
-        std::string load_error;
-        if (graph_io::load_from_file(graph, graph_path, load_error)) {
-            // Prefer per-node WavPlayer paths; keep graph.wav_path as fallback cache key.
-            bool loaded_any = false;
-            for (const auto& n : graph.nodes()) {
-                if (n.type() == NodeType::wav_player) {
-                    if (const auto* p = n.state().as<node_params::WavPlayer>()) {
-                        if (!p->path().empty()) {
-                            g_pipeline.load_wav(p->path());
-                            loaded_any = true;
-                        }
-                    }
-                }
-                if (n.type() == NodeType::audio_input) {
-                    if (const auto* p = n.state().as<node_params::AudioInput>()) {
-                        std::string err;
-                        g_pipeline.set_capture_device(p->device.c_str(), err);
-                    }
-                }
-                if (n.type() == NodeType::output) {
-                    if (const auto* p = n.state().as<node_params::AudioOutput>()) {
-                        std::string err;
-                        g_pipeline.set_playback_device(p->device.c_str(), err);
-                    }
-                }
-            }
-            if (!loaded_any) {
-                g_pipeline.load_wav(graph.wav_path());
-            }
-            load_status = std::string("Loaded graph ") + graph_path;
-            if (!g_pipeline.last_device_error.empty()) {
-                std::fprintf(stderr, "%s\n", g_pipeline.last_device_error.c_str());
-                load_status += " | " + g_pipeline.last_device_error;
-            }
-        } else if (argc > 1) {
-            load_status = std::string("Failed to load graph: ") + load_error;
-            std::fprintf(stderr, "%s\n", load_status.c_str());
-        } else {
-            // No default file on disk — keep in-code default chain and write it for next run.
-            graph.reset_to_default_chain();
-            std::string save_error;
-            if (graph_io::save_to_file(graph, kDefaultPatchPath, save_error)) {
-                load_status = std::string("Using built-in default graph (wrote ") +
-                              kDefaultPatchPath + ")";
-            } else {
-                load_status = "Using built-in default graph";
-            }
-        }
+    NodeEditorUiState ui_state;
+    if (!node_editor_load(graph, ui_state, graph_path)) {
+        std::fprintf(stderr, "%s\n", ui_state.status_message.c_str());
     }
-
-    node_editor_publish(graph);
+    std::snprintf(ui_state.graph_path, sizeof(ui_state.graph_path), "%s", graph_path);
 
     if (g_pipeline.playback_ready) {
         g_pipeline.start();
     } else {
         // No sound card (CI / VM): still run the graph so WAV + visualizers animate.
         g_pipeline.start_offline();
-        if (load_status.empty()) {
-            load_status = "Offline audio (no device)";
-        } else {
-            load_status += " | Offline audio (no device)";
-        }
+        ui_state.status_message += " | Offline audio (no device)";
     }
 
     if (!glfwInit()) {
@@ -145,14 +92,7 @@ int main(int argc, char** argv) {
     ImGui_ImplOpenGL3_Init("#version 130");
     node_editor_init();
 
-    NodeEditorUiState ui_state;
     std::snprintf(ui_state.wav_path, sizeof(ui_state.wav_path), "%s", graph.wav_path().c_str());
-    std::snprintf(ui_state.graph_path, sizeof(ui_state.graph_path), "%s", graph_path);
-    if (!load_status.empty()) {
-        ui_state.status_message = load_status;
-    } else if (!g_pipeline.playback_ready) {
-        ui_state.status_message = error.empty() ? "Audio device unavailable" : error;
-    }
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

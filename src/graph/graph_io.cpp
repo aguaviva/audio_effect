@@ -1,10 +1,9 @@
 #include "graph_io.hpp"
 
 #include "dsp/module_json.hpp"
-#include "node_state.hpp"
-#include "paths.hpp"
+#include "node_registry.hpp"
+#include "pins.hpp"
 
-#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <unordered_set>
@@ -14,78 +13,81 @@ namespace {
 
 constexpr int kFileVersion = 2;
 
-std::string escape_string(const std::string& value) {
-    std::string out;
-    out.reserve(value.size() + 8);
-    for (char c : value) {
-        if (c == '\\' || c == '"') {
-            out.push_back('\\');
-        }
-        out.push_back(c);
-    }
+std::string node_json(const GraphNode& node) {
+    std::string params = "{";
+    module_json::write_bool(params, "bypassed", node.bypassed);
+    module_json::append_object_members(params, node.module->save());
+    params += '}';
+
+    std::string out = "{";
+    module_json::write_int(out, "id", node.id);
+    module_json::write_string(out, "type", node.module->name());
+    module_json::write_float(out, "x", node.x);
+    module_json::write_float(out, "y", node.y);
+    out += ",\"params\":" + params + '}';
     return out;
 }
 
-bool parse_string(const std::string& text, size_t& i, std::string& out) {
-    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
-        ++i;
-    }
-    if (i >= text.size() || text[i] != '"') {
-        return false;
-    }
-    ++i;
-    out.clear();
-    while (i < text.size()) {
-        char c = text[i++];
-        if (c == '\\' && i < text.size()) {
-            out.push_back(text[i++]);
-            continue;
-        }
-        if (c == '"') {
-            return true;
-        }
-        out.push_back(c);
-    }
-    return false;
+std::string link_json(const GraphLink& link) {
+    std::string out = "{";
+    module_json::write_int(out, "id", link.id);
+    module_json::write_int(out, "from", link.from_node);
+    module_json::write_int(out, "to", link.to_node);
+    module_json::write_int(out, "to_slot", link.to_slot);
+    out += '}';
+    return out;
 }
 
-bool expect(const std::string& text, size_t& i, char ch) {
-    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
-        ++i;
-    }
-    if (i >= text.size() || text[i] != ch) {
+bool parse_node(const std::string& json, GraphNode& node, std::string& error) {
+    std::string type;
+    std::string params = "{}";
+    const bool ok = module_json::for_each_member(
+        json, [&](const std::string& key, const std::string& text, size_t& i) {
+            if (key == "id") return module_json::parse_value(text, i, node.id);
+            if (key == "x") return module_json::parse_value(text, i, node.x);
+            if (key == "y") return module_json::parse_value(text, i, node.y);
+            if (key == "type") return module_json::parse_value(text, i, type);
+            if (key == "params") return module_json::take_value(text, i, params);
+            error = "Unknown node field: " + key;
+            return false;
+        });
+    if (!ok) {
+        if (error.empty()) error = "Invalid node object";
         return false;
     }
-    ++i;
+    if (node.id <= 0) {
+        error = "Node missing id";
+        return false;
+    }
+    node.module = make_module(type);
+    if (!node.module) {
+        error = "Unknown module name '" + type + "' on node " + std::to_string(node.id);
+        return false;
+    }
+    module_json::read(params, "bypassed", node.bypassed);
+    if (!node.module->load(params)) {
+        error = "Invalid params on node " + std::to_string(node.id);
+        return false;
+    }
     return true;
 }
 
-bool parse_number(const std::string& text, size_t& i, double& out) {
-    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) {
-        ++i;
-    }
-    size_t start = i;
-    if (i < text.size() && (text[i] == '-' || text[i] == '+')) {
-        ++i;
-    }
-    while (i < text.size() && (std::isdigit(static_cast<unsigned char>(text[i])) || text[i] == '.' ||
-                               text[i] == 'e' || text[i] == 'E' || text[i] == '+' || text[i] == '-')) {
-        // Stop at structural chars; allow exponent signs after e/E only.
-        if ((text[i] == '+' || text[i] == '-') && i > start &&
-            text[i - 1] != 'e' && text[i - 1] != 'E') {
-            break;
-        }
-        if (text[i] == ',' || text[i] == '}' || text[i] == ']') {
-            break;
-        }
-        ++i;
-    }
-    if (start == i) {
+bool parse_link(const std::string& json, GraphLink& link, std::string& error) {
+    const bool ok = module_json::for_each_member(
+        json, [&](const std::string& key, const std::string& text, size_t& i) {
+            if (key == "id") return module_json::parse_value(text, i, link.id);
+            if (key == "from") return module_json::parse_value(text, i, link.from_node);
+            if (key == "to") return module_json::parse_value(text, i, link.to_node);
+            if (key == "to_slot") return module_json::parse_value(text, i, link.to_slot);
+            error = "Unknown link field: " + key;
+            return false;
+        });
+    if (!ok) {
+        if (error.empty()) error = "Invalid link object";
         return false;
     }
-    try {
-        out = std::stod(text.substr(start, i - start));
-    } catch (...) {
+    if (link.id <= 0) {
+        error = "Link missing id";
         return false;
     }
     return true;
@@ -94,293 +96,102 @@ bool parse_number(const std::string& text, size_t& i, double& out) {
 } // namespace
 
 std::string serialize(const AudioGraph& graph) {
-    std::ostringstream oss;
-    oss << "{\n";
-    oss << "  \"version\":" << kFileVersion << ",\n";
-    oss << "  \"record_path\":\"" << escape_string(graph.record_path()) << "\",\n";
-    oss << "  \"nodes\":[\n";
+    std::string out = "{\n";
+    out += "  \"version\":" + std::to_string(kFileVersion) + ",\n  ";
+    std::string record_path = "{";
+    module_json::write_string(record_path, "record_path", graph.record_path());
+    out += record_path.substr(1) + ",\n";
+    out += "  \"nodes\":[\n";
     const auto& nodes = graph.nodes();
     for (size_t n = 0; n < nodes.size(); ++n) {
-        const auto& node = nodes[n];
-        oss << "    {\"id\":" << node.id()
-            << ",\"type\":\"" << escape_string(node_params::name_for_type(node.type())) << "\""
-            << ",\"x\":" << node.x()
-            << ",\"y\":" << node.y()
-            << ",\"params\":" << node.state().write_params() << "}";
-        if (n + 1 < nodes.size()) oss << ',';
-        oss << '\n';
+        out += "    " + node_json(nodes[n]) + (n + 1 < nodes.size() ? ",\n" : "\n");
     }
-    oss << "  ],\n";
-    oss << "  \"links\":[\n";
+    out += "  ],\n  \"links\":[\n";
     const auto& links = graph.links();
     for (size_t n = 0; n < links.size(); ++n) {
-        const auto& link = links[n];
-        oss << "    {\"id\":" << link.id()
-            << ",\"from\":" << link.from_node()
-            << ",\"to\":" << link.to_node()
-            << ",\"to_slot\":" << link.to_slot() << "}";
-        if (n + 1 < links.size()) oss << ',';
-        oss << '\n';
+        out += "    " + link_json(links[n]) + (n + 1 < links.size() ? ",\n" : "\n");
     }
-    oss << "  ]\n}\n";
-    return oss.str();
+    out += "  ]\n}\n";
+    return out;
 }
 
 bool deserialize(AudioGraph& graph, const std::string& text, std::string& error) {
-    size_t i = 0;
-    if (!expect(text, i, '{')) {
-        error = "Expected object";
+    error.clear();
+    int version = 0;
+    module_json::read(text, "version", version);
+    if (version != kFileVersion) {
+        error = "Unsupported patch version " + std::to_string(version) + " (expected " +
+                std::to_string(kFileVersion) + ")";
         return false;
     }
 
     AudioGraph loaded;
-    loaded.clear();
-    loaded.set_record_path(kDefaultRecordPath);
-    int file_version = 0;
+    std::string record_path = kDefaultRecordPath;
     std::unordered_set<int> node_ids;
     std::unordered_set<int> link_ids;
     bool have_nodes = false;
-    bool have_links = false;
 
-    while (true) {
-        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-        if (i < text.size() && text[i] == '}') {
-            ++i;
-            break;
-        }
-        std::string key;
-        if (!parse_string(text, i, key) || !expect(text, i, ':')) {
-            error = "Invalid key";
-            return false;
-        }
-
-        if (key == "version") {
-            double version = 0;
-            if (!parse_number(text, i, version)) {
-                error = "Invalid version";
-                return false;
-            }
-            file_version = static_cast<int>(version);
-        } else if (key == "record_path") {
-            std::string path;
-            if (!parse_string(text, i, path)) {
-                error = "Invalid record_path";
-                return false;
-            }
-            loaded.set_record_path(path);
-        } else if (key == "nodes") {
-            if (!expect(text, i, '[')) {
-                error = "nodes must be an array";
-                return false;
-            }
-            while (true) {
-                while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                if (i < text.size() && text[i] == ']') {
-                    ++i;
-                    break;
-                }
-                if (!expect(text, i, '{')) {
-                    error = "Invalid node object";
-                    return false;
-                }
-                GraphNode node;
-                std::string params_text;
-                NodeType parsed_type = NodeType::preamp;
-                bool have_type = false;
-                while (true) {
-                    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                    if (i < text.size() && text[i] == '}') {
-                        ++i;
-                        break;
-                    }
-                    std::string nkey;
-                    if (!parse_string(text, i, nkey) || !expect(text, i, ':')) {
-                        error = "Invalid node field";
+    const bool ok = module_json::for_each_member(
+        text, [&](const std::string& key, const std::string& body, size_t& i) {
+            if (key == "version") return module_json::skip_value(body, i);
+            if (key == "record_path") return module_json::parse_value(body, i, record_path);
+            if (key == "nodes") {
+                have_nodes = true;
+                return module_json::for_each_element(body, i, [&](const std::string& json) {
+                    GraphNode node;
+                    if (!parse_node(json, node, error)) return false;
+                    if (!node_ids.insert(node.id).second) {
+                        error = "Duplicate node id " + std::to_string(node.id);
                         return false;
                     }
-                    if (nkey == "id" || nkey == "x" || nkey == "y") {
-                        double value = 0;
-                        if (!parse_number(text, i, value)) {
-                            error = "Invalid numeric node field";
-                            return false;
-                        }
-                        if (nkey == "id") node.set_id(static_cast<int>(value));
-                        if (nkey == "x") node.set_x(static_cast<float>(value));
-                        if (nkey == "y") node.set_y(static_cast<float>(value));
-                    } else if (nkey == "type") {
-                        std::string type_key;
-                        // Match JSON type against each module's name().
-                        if (!parse_string(text, i, type_key) ||
-                            !node_params::try_resolve_name(type_key, parsed_type)) {
-                            error = "Unknown module name";
-                            return false;
-                        }
-                        have_type = true;
-                        node.set_type(parsed_type);
-                    } else if (nkey == "params") {
-                        // Parsed once the node object is closed, so "type" may come later.
-                        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                        const size_t start = i;
-                        if (!module_json::skip_value(text, i)) {
-                            error = "Invalid params";
-                            return false;
-                        }
-                        params_text = text.substr(start, i - start);
-                    } else {
-                        error = "Unknown node field: " + nkey;
-                        return false;
-                    }
-                    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                    if (i < text.size() && text[i] == ',') {
-                        ++i;
-                        continue;
-                    }
-                    if (i < text.size() && text[i] == '}') {
-                        ++i;
-                        break;
-                    }
-                    error = "Malformed node";
-                    return false;
-                }
-                if (node.id() <= 0) {
-                    error = "Node missing id";
-                    return false;
-                }
-                if (!node_ids.insert(node.id()).second) {
-                    error = "Duplicate node id " + std::to_string(node.id());
-                    return false;
-                }
-                if (!have_type) {
-                    error = "Node " + std::to_string(node.id()) + " missing type";
-                    return false;
-                }
-                if (params_text.empty()) {
-                    node.set_state(NodeState::make(parsed_type));
-                } else {
-                    NodeState state;
-                    size_t pi = 0;
-                    if (!state.read_params(parsed_type, params_text, pi)) {
-                        error = "Invalid params on node " + std::to_string(node.id());
-                        return false;
-                    }
-                    node.set_state(state);
-                }
-                loaded.nodes().push_back(node);
-                while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                if (i < text.size() && text[i] == ',') ++i;
+                    loaded.nodes().push_back(std::move(node));
+                    return true;
+                });
             }
-            have_nodes = true;
-        } else if (key == "links") {
-            if (!expect(text, i, '[')) {
-                error = "links must be an array";
-                return false;
+            if (key == "links") {
+                return module_json::for_each_element(body, i, [&](const std::string& json) {
+                    GraphLink link;
+                    if (!parse_link(json, link, error)) return false;
+                    if (!link_ids.insert(link.id).second) {
+                        error = "Duplicate link id " + std::to_string(link.id);
+                        return false;
+                    }
+                    loaded.links().push_back(link);
+                    return true;
+                });
             }
-            while (true) {
-                while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                if (i < text.size() && text[i] == ']') {
-                    ++i;
-                    break;
-                }
-                if (!expect(text, i, '{')) {
-                    error = "Invalid link object";
-                    return false;
-                }
-                GraphLink link;
-                while (true) {
-                    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                    if (i < text.size() && text[i] == '}') {
-                        ++i;
-                        break;
-                    }
-                    std::string lkey;
-                    if (!parse_string(text, i, lkey) || !expect(text, i, ':')) {
-                        error = "Invalid link field";
-                        return false;
-                    }
-                    double value = 0;
-                    if (!parse_number(text, i, value)) {
-                        error = "Invalid link number";
-                        return false;
-                    }
-                    if (lkey == "id") link.set_id(static_cast<int>(value));
-                    else if (lkey == "from") link.set_from_node(static_cast<int>(value));
-                    else if (lkey == "to") link.set_to_node(static_cast<int>(value));
-                    else if (lkey == "to_slot") link.set_to_slot(static_cast<int>(value));
-                    else {
-                        error = "Unknown link field";
-                        return false;
-                    }
-                    while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                    if (i < text.size() && text[i] == ',') {
-                        ++i;
-                        continue;
-                    }
-                    if (i < text.size() && text[i] == '}') {
-                        ++i;
-                        break;
-                    }
-                    error = "Malformed link";
-                    return false;
-                }
-                if (link.id() <= 0) {
-                    error = "Link missing id";
-                    return false;
-                }
-                if (!link_ids.insert(link.id()).second) {
-                    error = "Duplicate link id " + std::to_string(link.id());
-                    return false;
-                }
-                loaded.links().push_back(link);
-                while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-                if (i < text.size() && text[i] == ',') ++i;
-            }
-            have_links = true;
-        } else {
             error = "Unknown top-level key: " + key;
             return false;
-        }
-
-        while (i < text.size() && std::isspace(static_cast<unsigned char>(text[i]))) ++i;
-        if (i < text.size() && text[i] == ',') {
-            ++i;
-            continue;
-        }
-        if (i < text.size() && text[i] == '}') {
-            ++i;
-            break;
-        }
-        if (i >= text.size()) break;
-    }
-
-    if (file_version != kFileVersion) {
-        error = "Unsupported patch version " + std::to_string(file_version) + " (expected " +
-                std::to_string(kFileVersion) + ")";
+        });
+    if (!ok) {
+        if (error.empty()) error = "Malformed graph file";
         return false;
     }
     if (!have_nodes) {
         error = "Graph file missing nodes";
         return false;
     }
-    (void)have_links;
 
     // Drop links to missing nodes or pins; a second link into the same pin is an error
     // because every input pin reads exactly one link buffer.
     std::vector<GraphLink> valid_links;
     std::unordered_set<int> used_pins;
     for (const auto& link : loaded.links()) {
-        const GraphNode* to = loaded.find_node(link.to_node());
-        if (!loaded.find_node(link.from_node()) || !to || link.to_slot() < 0 ||
-            link.to_slot() >= node_input_slot_limit(to->type())) {
+        const GraphNode* from = loaded.find_node(link.from_node);
+        const GraphNode* to = loaded.find_node(link.to_node);
+        if (!from || from->module->output_count() == 0 || !to || link.to_slot < 0 ||
+            link.to_slot >= to->module->input_count()) {
             continue;
         }
-        if (!used_pins.insert(input_pin_id(link.to_node(), link.to_slot())).second) {
-            error = "Link " + std::to_string(link.id()) + " connects to an input pin that is "
+        if (!used_pins.insert(input_pin_id(link.to_node, link.to_slot)).second) {
+            error = "Link " + std::to_string(link.id) + " connects to an input pin that is "
                     "already connected";
             return false;
         }
         valid_links.push_back(link);
     }
     loaded.links() = std::move(valid_links);
+    loaded.set_record_path(record_path);
 
     graph.copy_structure_from(loaded);
     return true;

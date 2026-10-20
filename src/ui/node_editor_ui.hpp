@@ -23,3 +23,5 @@ void node_editor_init();
 void node_editor_shutdown();
 void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state);
 void node_editor_publish(AudioGraph& graph);
+// Loads a patch, applies its device choices, and reports the result in state.status_message.
+bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::string& path);

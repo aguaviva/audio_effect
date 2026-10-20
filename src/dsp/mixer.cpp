@@ -31,10 +31,10 @@ bool Mixer::load(const std::string& json) {
     return true;
 }
 
-void Mixer::get_inputs(int *count, const char* const** str) 
+void Mixer::get_inputs(int *count, const char* const** str) const
 {   
     static const char* input_names[] = {"in 1", "in 2", "in 3", "in 4", "in 5", "in 6", "in 7", "in 8"};    
-    *count=ui_slots; 
+    *count=kChannels; 
     *str=input_names;
 } 
 

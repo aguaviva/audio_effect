@@ -2,9 +2,14 @@
 
 #include "audio/audio_devices.hpp"
 #include "audio/pipeline.hpp"
-#include "dsp/chord_catalog.hpp"
-#include "dsp/module.hpp"
+#include "dsp/audio_input.hpp"
+#include "dsp/audio_output.hpp"
+#include "dsp/mixer.hpp"
+#include "dsp/wav_player.hpp"
+#include "dsp/wav_recorder.hpp"
 #include "graph/graph_io.hpp"
+#include "graph/node_registry.hpp"
+#include "graph/pins.hpp"
 #include "paths.hpp"
 
 #include "imgui.h"
@@ -114,6 +119,31 @@ void node_editor_publish(AudioGraph& graph) {
     graph.publish(graph.compile());
 }
 
+bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::string& path) {
+    std::string error;
+    if (!graph_io::load_from_file(graph, path, error)) {
+        state.status_message = error;
+        return false;
+    }
+    std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", path.c_str());
+    for (const auto& node : graph.nodes()) {
+        std::string err;
+        if (const auto* p = node.as<AudioInput>()) {
+            g_pipeline.set_capture_device(p->device.c_str(), err);
+        }
+        if (const auto* p = node.as<AudioOutput>()) {
+            g_pipeline.set_playback_device(p->device.c_str(), err);
+        }
+    }
+    state.positions_need_apply = true;
+    node_editor_publish(graph);
+    state.status_message = "Loaded " + path;
+    if (!g_pipeline.last_device_error.empty()) {
+        state.status_message += " | " + g_pipeline.last_device_error;
+    }
+    return true;
+}
+
 static bool draw_device_combo(const char* label, std::string& device,
                               const std::vector<AudioDevice>& devices,
                               std::vector<const char*>& labels) {
@@ -151,187 +181,74 @@ static void draw_device_error(const char* stream_prefix) {
     ImGui::PopTextWrapPos();
 }
 
-static void render_module(Module& module, int node_id) {
-    ImGui::PushID(node_id);
-    //ImGui::PushItemdth(kNodeWidth);
-    module.render();
-    //ImGui::PopItemWidth();
-    ImGui::PopID();
-}
-
 static void draw_node_params(GraphNode& node, AudioGraph& graph) {
-    NodeState& st = node.state();
-    switch (node.type()) {
-    case NodeType::wav_player:
-        if (auto* m = st.as<node_params::WavPlayer>()) {
-            // File picker uses shared browser state — keep the "..." button here.
-            const char* slash = std::strrchr(m->path().c_str(), '/');
-            const char* leaf = slash ? slash + 1 : m->path().c_str();
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
-            ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
-            ImGui::PopTextWrapPos();
-            if (ImGui::IsItemHovered() && !m->path().empty()) {
-                ImGui::SetTooltip("%s", m->path().c_str());
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("...")) {
-                wav_picker_node_id() = node.id();
-                open_browser_near_path(wav_open_browser(), m->path().c_str());
-            }
-            render_module(*m, node.id());
+    if (auto* m = node.as<WavPlayer>()) {
+        // File picker uses shared browser state — keep the "..." button here.
+        const char* slash = std::strrchr(m->path().c_str(), '/');
+        const char* leaf = slash ? slash + 1 : m->path().c_str();
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
+        ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
+        ImGui::PopTextWrapPos();
+        if (ImGui::IsItemHovered() && !m->path().empty()) {
+            ImGui::SetTooltip("%s", m->path().c_str());
         }
-        break;
-    case NodeType::audio_input:
-        if (auto* m = st.as<node_params::AudioInput>()) {
-            static std::vector<AudioDevice> devices = list_capture_devices();
-            static std::vector<const char*> labels;
-            ImGui::TextUnformatted("Device");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##cap_dev", m->device, devices, labels)) {
-                std::string err;
-                if (!g_pipeline.set_capture_device(m->device.c_str(), err)) {
-                    m->device = g_pipeline.capture_device();
-                }
-            }
-            draw_device_error("Capture");
-            if (g_pipeline.offline_mode) {
-                ImGui::TextDisabled("offline");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("...")) {
+            wav_picker_node_id() = node.id;
+            open_browser_near_path(wav_open_browser(), m->path().c_str());
+        }
+    } else if (auto* m = node.as<AudioInput>()) {
+        static std::vector<AudioDevice> devices = list_capture_devices();
+        static std::vector<const char*> labels;
+        ImGui::TextUnformatted("Device");
+        ImGui::SetNextItemWidth(kNodeWidth);
+        if (draw_device_combo("##cap_dev", m->device, devices, labels)) {
+            std::string err;
+            if (!g_pipeline.set_capture_device(m->device.c_str(), err)) {
+                m->device = g_pipeline.capture_device();
             }
         }
-        break;
-    case NodeType::chord_generator:
-        if (auto* m = st.as<node_params::Chord>()) {
-            render_module(*m, node.id());
+        draw_device_error("Capture");
+        if (g_pipeline.offline_mode) {
+            ImGui::TextDisabled("offline");
         }
-        break;
-    case NodeType::white_noise:
-        if (auto* m = st.as<node_params::WhiteNoise>()) {
-            render_module(*m, node.id());
+    } else if (auto* m = node.as<AudioOutput>()) {
+        static std::vector<AudioDevice> devices = list_playback_devices();
+        static std::vector<const char*> labels;
+        ImGui::TextUnformatted("Device");
+        ImGui::SetNextItemWidth(kNodeWidth);
+        if (draw_device_combo("##play_dev", m->device, devices, labels)) {
+            std::string err;
+            if (!g_pipeline.set_playback_device(m->device.c_str(), err)) {
+                m->device = g_pipeline.playback_device();
+            }
         }
-        break;
-    case NodeType::echo:
-        if (auto* m = st.as<node_params::Echo>()) {
-            render_module(*m, node.id());
+        draw_device_error("Playback");
+        if (g_pipeline.offline_mode) {
+            ImGui::TextDisabled("offline");
         }
-        break;
-    case NodeType::preamp:
-        if (auto* m = st.as<node_params::Preamp>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::high_pass:
-        if (auto* m = st.as<node_params::HighPass>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::drive_pedal:
-        if (auto* m = st.as<node_params::Drive>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::low_pass:
-        if (auto* m = st.as<node_params::LowPass>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::compressor:
-        if (auto* m = st.as<node_params::Compressor>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::noise_gate:
-        if (auto* m = st.as<node_params::NoiseGate>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::eq_three_band:
-        if (auto* m = st.as<node_params::EqThreeBand>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::reverb:
-        if (auto* m = st.as<node_params::Reverb>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::agc:
-        if (auto* m = st.as<node_params::Agc>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::dry_wet_mix:
-        if (auto* m = st.as<node_params::DryWet>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::wav_recorder:
-        if (auto* m = st.as<node_params::WavRecorder>()) {
-            render_module(*m, node.id());
-        }
+    } else if (auto* m = node.as<Mixer>()) {
+        m->ui_slots = graph.input_pin_count(node.id);
+    }
+    node.module->render();
+    if (node.as<WavRecorder>()) {
         ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
         ImGui::TextUnformatted(graph.record_path().c_str());
         ImGui::PopTextWrapPos();
-        break;
-    case NodeType::vu_meter:
-        if (auto* m = st.as<node_params::VuMeter>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::oscilloscope:
-        if (auto* m = st.as<node_params::Oscilloscope>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::spectrum:
-        if (auto* m = st.as<node_params::Spectrum>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::pitch_detector:
-        if (auto* m = st.as<node_params::PitchDetector>()) {
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::mixer:
-        if (auto* m = st.as<node_params::Mixer>()) {
-            m->ui_slots = std::max(1, graph.mixer_pin_count(node.id()));
-            render_module(*m, node.id());
-        }
-        break;
-    case NodeType::output:
-        if (auto* m = st.as<node_params::AudioOutput>()) {
-            static std::vector<AudioDevice> devices = list_playback_devices();
-            static std::vector<const char*> labels;
-            ImGui::TextUnformatted("Device");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##play_dev", m->device, devices, labels)) {
-                std::string err;
-                if (!g_pipeline.set_playback_device(m->device.c_str(), err)) {
-                    m->device = g_pipeline.playback_device();
-                }
-            }
-            draw_device_error("Playback");
-            if (g_pipeline.offline_mode) {
-                ImGui::TextDisabled("offline");
-            }
-            render_module(*m, node.id());
-        }
-        break;
-    default:
-        break;
     }
 }
 
 static void apply_node_positions(AudioGraph& graph) {
     for (const auto& node : graph.nodes()) {
-        ImNodes::SetNodeGridSpacePos(node.id(), ImVec2(node.x(), node.y()));
+        ImNodes::SetNodeGridSpacePos(node.id, ImVec2(node.x, node.y));
     }
 }
 
 static void sync_node_positions(AudioGraph& graph) {
     for (auto& node : graph.nodes()) {
-        ImVec2 pos = ImNodes::GetNodeGridSpacePos(node.id());
-        node.set_position(pos.x, pos.y);
+        ImVec2 pos = ImNodes::GetNodeGridSpacePos(node.id);
+        node.x = pos.x;
+        node.y = pos.y;
     }
 }
 
@@ -350,17 +267,7 @@ static void draw_toolbar(AudioGraph& graph, NodeEditorUiState& state) {
     }
     ImGui::SameLine();
     if (ImGui::Button("Reset Default")) {
-        graph.reset_to_default_chain();
-        std::string save_error;
-        if (graph_io::save_to_file(graph, kDefaultPatchPath, save_error)) {
-            std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", kDefaultPatchPath);
-            state.status_message =
-                std::string("Reset to default graph (saved ") + kDefaultPatchPath + ")";
-        } else {
-            state.status_message = "Reset to default graph";
-        }
-        state.positions_need_apply = true;
-        node_editor_publish(graph);
+        node_editor_load(graph, state, kDefaultPatchPath);
     }
 
     ImGui::Checkbox("Diagnostics", &state.show_diagnostics);
@@ -378,34 +285,9 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
     auto& open_graph = graph_open_browser();
     open_graph.Display();
     if (open_graph.HasSelected()) {
-        copy_path_to_buf(state.graph_path, sizeof(state.graph_path), open_graph.GetSelected());
+        const std::string selected = open_graph.GetSelected().string();
         open_graph.ClearSelected();
-        std::string error;
-        if (graph_io::load_from_file(graph, state.graph_path, error)) {
-            state.positions_need_apply = true;
-            // Apply first Audio Input device if present; WAV paths live on WavPlayer nodes.
-            for (const auto& n : graph.nodes()) {
-                if (n.type() == NodeType::audio_input) {
-                    if (const auto* p = n.state().as<node_params::AudioInput>()) {
-                        std::string err;
-                        g_pipeline.set_capture_device(p->device.c_str(), err);
-                    }
-                }
-                if (n.type() == NodeType::output) {
-                    if (const auto* p = n.state().as<node_params::AudioOutput>()) {
-                        std::string err;
-                        g_pipeline.set_playback_device(p->device.c_str(), err);
-                    }
-                }
-            }
-            node_editor_publish(graph);
-            state.status_message = std::string("Loaded ") + state.graph_path;
-            if (!g_pipeline.last_device_error.empty()) {
-                state.status_message += " | " + g_pipeline.last_device_error;
-            }
-        } else {
-            state.status_message = error;
-        }
+        node_editor_load(graph, state, selected);
     }
 
     auto& save_graph = graph_save_browser();
@@ -430,7 +312,7 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
         const int target = wav_picker_node_id();
         wav_picker_node_id() = -1;
         if (auto* node = graph.find_node(target)) {
-            if (auto* p = node->state().as<node_params::WavPlayer>()) {
+            if (auto* p = node->as<WavPlayer>()) {
                 p->set_path(selected);
                 graph.set_wav_path(selected);
                 state.status_message = std::string("WAV Player → ") + selected;
@@ -467,62 +349,27 @@ static void context_menu_add_nodes(AudioGraph& graph, NodeEditorUiState& state,
 
     if (ImGui::BeginPopup("node_add_menu")) {
         ImVec2 screen = ImGui::GetMousePosOnOpeningCurrentPopup();
-        // Approximate editor-space spawn near cursor; imnodes will place via SetNodeScreenSpacePos.
-        const struct Entry {
-            const char* label;
-            NodeType type;
-        } sources[] = {
-            {"Audio Input (Live)", NodeType::audio_input},
-            {"WAV Player", NodeType::wav_player},
-            {"Chord Generator", NodeType::chord_generator},
-            {"White Noise", NodeType::white_noise},
-        };
-        const Entry effects[] = {
-            {"Echo", NodeType::echo},
-            {"Preamp", NodeType::preamp},
-            {"High-Pass Filter", NodeType::high_pass},
-            {"Drive Pedal", NodeType::drive_pedal},
-            {"Low-Pass Filter", NodeType::low_pass},
-            {"Valve Compressor", NodeType::compressor},
-            {"Noise Gate", NodeType::noise_gate},
-            {"3-Band EQ", NodeType::eq_three_band},
-            {"Reverb", NodeType::reverb},
-            {"AGC", NodeType::agc},
-            {"Mixer", NodeType::mixer},
-            {"Dry/Wet Mix", NodeType::dry_wet_mix},
-        };
-        const Entry visualizers[] = {
-            {"VU Meter", NodeType::vu_meter},
-            {"Oscilloscope", NodeType::oscilloscope},
-            {"Spectrum", NodeType::spectrum},
-            {"Pitch Detector", NodeType::pitch_detector},
-        };
-        const Entry sinks[] = {
-            {"WAV Recorder", NodeType::wav_recorder},
-            {"Output", NodeType::output},
-        };
-
-        auto add_entries = [&](const char* group, const Entry* entries, int count) {
-            ImGui::TextDisabled("%s", group);
-            for (int i = 0; i < count; ++i) {
-                if (ImGui::MenuItem(entries[i].label)) {
-                    int id = graph.add_node(entries[i].type, 0.0f, 0.0f);
-                    ImNodes::SetNodeScreenSpacePos(id, screen);
-                    ImVec2 grid = ImNodes::GetNodeGridSpacePos(id);
-                    if (auto* node = graph.find_node(id)) {
-                        node->set_position(grid.x, grid.y);
-                    }
-                    node_editor_publish(graph);
-                    state.status_message = std::string("Added ") + entries[i].label;
+        const char* category = nullptr;
+        for (const auto& kind : node_kinds()) {
+            if (!category || std::strcmp(category, kind.category) != 0) {
+                if (category) {
+                    ImGui::Separator();
                 }
+                category = kind.category;
+                ImGui::TextDisabled("%s", category);
             }
-            ImGui::Separator();
-        };
-
-        add_entries("Sources", sources, IM_ARRAYSIZE(sources));
-        add_entries("Effects", effects, IM_ARRAYSIZE(effects));
-        add_entries("Visualizers", visualizers, IM_ARRAYSIZE(visualizers));
-        add_entries("Sinks", sinks, IM_ARRAYSIZE(sinks));
+            if (ImGui::MenuItem(kind.label)) {
+                const int id = graph.add_node(kind.make()->name(), 0.0f, 0.0f);
+                ImNodes::SetNodeScreenSpacePos(id, screen);
+                const ImVec2 grid = ImNodes::GetNodeGridSpacePos(id);
+                if (auto* node = graph.find_node(id)) {
+                    node->x = grid.x;
+                    node->y = grid.y;
+                }
+                node_editor_publish(graph);
+                state.status_message = std::string("Added ") + kind.label;
+            }
+        }
         ImGui::EndPopup();
     }
 }
@@ -548,17 +395,17 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     }
 
     for (auto& node : graph.nodes()) {
-        ImNodes::BeginNode(node.id());
+        ImNodes::BeginNode(node.id);
 
-        const char* title = node_type_label(node.type());
+        const char* title = node_label(*node.module);
 
         ImNodes::BeginNodeTitleBar();
         // Measure the real title-row width (Text + optional Byp) instead of estimating.
         ImGui::BeginGroup();
         ImGui::TextUnformatted(title);
-        if (node_supports_bypass(node.type())) {
-            ImGui::PushID(node.id());
-            bool& bypassed = node.state().bypassed;
+        if (node.module->supports_bypass()) {
+            ImGui::PushID(node.id);
+            bool& bypassed = node.bypassed;
             ImGui::SameLine();
             const bool bypass_style_pushed = bypassed;
             if (bypass_style_pushed) {
@@ -578,12 +425,12 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             }
             ImGui::PopID();
         } else {
-            node.state().bypassed = false;
+            node.bypassed = false;
         }
         ImGui::EndGroup();
         ImNodes::EndNodeTitleBar();
 
-        ImGui::PushID(node.id());
+        ImGui::PushID(node.id);
         ImGui::BeginChild("child", ImVec2(200.0f, 0.0f), ImGuiChildFlags_AutoResizeY);
 
         if (ImGui::BeginTable("node_layout", 3, ImGuiTableFlags_SizingFixedFit))
@@ -600,11 +447,12 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             {
                 int inputs=0;
                 const char* const* name;
-                node.state().module().get_inputs(&inputs, &name);
+                node.module->get_inputs(&inputs, &name);
+                inputs = std::min(inputs, graph.input_pin_count(node.id));
 
                 for (int slot = 0; slot < inputs; ++slot) {
-                    ImNodes::BeginInputAttribute(input_pin_id(node.id(), slot));
-                    ImGui::PushID(node.id() * 32 + slot);
+                    ImNodes::BeginInputAttribute(input_pin_id(node.id, slot));
+                    ImGui::PushID(node.id * 32 + slot);
                     ImGui::AlignTextToFramePadding();
                     ImGui::TextUnformatted(name[slot]);
                     ImGui::PopID();
@@ -614,7 +462,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
             // --- Column 1: Slider (with your -1.0f width requirement) ---
             ImGui::TableSetColumnIndex(1);        
-            ImGui::PushID(node.id());
+            ImGui::PushID(node.id);
             draw_node_params(node, graph);
             ImGui::PopID();
 
@@ -623,9 +471,9 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             {       
                 int outputs;
                 const char* const* name;
-                node.state().module().get_outputs(&outputs, &name);
+                node.module->get_outputs(&outputs, &name);
                 if (outputs>0) {
-                    ImNodes::BeginOutputAttribute(output_pin_id(node.id()));
+                    ImNodes::BeginOutputAttribute(output_pin_id(node.id));
                     ImGui::TextUnformatted(name[0]);
                     ImNodes::EndOutputAttribute();
                 }
@@ -641,8 +489,8 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     }
 
     for (const auto& link : graph.links()) {
-        ImNodes::Link(link.id(), output_pin_id(link.from_node()),
-                      input_pin_id(link.to_node(), link.to_slot()));
+        ImNodes::Link(link.id, output_pin_id(link.from_node),
+                      input_pin_id(link.to_node, link.to_slot));
     }
 
     ImNodes::MiniMap(0.15f, ImNodesMiniMapLocation_BottomRight);

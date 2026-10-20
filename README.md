@@ -1,6 +1,6 @@
 # Guitar Pedal Audio Processor
 
-A cross-platform desktop audio processor for electric guitar built with [miniaudio](https://miniaud.io), C++17, Dear ImGui, [imnodes](https://github.com/Nelarius/imnodes), GLFW, and OpenGL (Linux and Windows). Patch sources, effects, and sinks freely in a fullscreen node editor. Live audio follows the compiled graph (DAG): fan-out duplicates, fan-in mixes (sums), cycles are rejected.
+A cross-platform desktop audio processor for electric guitar built with [miniaudio](https://miniaud.io), C++17, Dear ImGui, [imnodes](https://github.com/Nelarius/imnodes), GLFW, and OpenGL (Linux and Windows). Patch sources, effects, and sinks freely in a fullscreen node editor. Live audio follows the compiled graph (DAG): outputs fan out, each input takes one link (combine signals with a Mixer), cycles are rejected.
 
 This project models a small set of pedal-style effects; it is not an amplifier or speaker-cabinet simulator, and its simplified models are not exact circuit emulations.
 
@@ -8,7 +8,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 - Fullscreen ImGui **node editor** (imnodes) for free wiring of audio nodes.
 - **Right-click** the canvas to add nodes from the inventory below.
-- Each node has a title-bar **Byp** toggle (dry pass-through / mute sources & outputs). Delete selected nodes/links with Delete.
+- Effects, visualizers, and sources have a title-bar **Byp** toggle (dry pass-through; a bypassed source is silent). Delete selected nodes/links with Delete.
 - **Load / save** the graph (node positions, types, parameters, and connections) as JSON via an ImGui file browser ([AirGuanZ/imgui-filebrowser](https://github.com/AirGuanZ/imgui-filebrowser)); WAV load uses the same picker.
 - Live capture and playback via miniaudio (interleaved stereo 32-bit PCM at 48 kHz).
 - WAV loading supports uncompressed PCM, mono or stereo, 16-, 24-, and 32-bit samples (converted/resampled to stereo 48 kHz).
@@ -21,6 +21,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 - **Audio Input** — live capture
 - **WAV Player** — loaded WAV clip (loop optional)
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
+- **White Noise**
 
 ### Effects
 
@@ -33,6 +34,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 - **Noise Gate**
 - **3-Band EQ** (low shelf / mid peak / high shelf)
 - **Reverb** (lightweight Schroeder-style)
+- **AGC** — automatic gain control toward a target level
 
 ### Utility
 
@@ -58,18 +60,12 @@ Visualizer nodes sit on the graph like effects (in + out) but only analyze the b
 Connections are **not** limited to a fixed linear chain. Any acyclic wiring is allowed:
 
 - One source can feed many effects (**fan-out**).
-- Several nodes can feed one input (**fan-in**, summed on normal nodes; **averaged** on Mixer).
+- Each input pin takes exactly one link; use a **Mixer** to combine several signals.
 - Multiple sources and multiple outputs may exist; all `Output` sinks are summed to the device.
 
 ### Buffer contract
 
-The graph uses **one global block size** (audio period × channels). Every edge carries a buffer of that size: sources write it, effects read/write the same size in place, sinks consume it. There is no per-edge size negotiation.
-
-A default seed graph is created on launch for convenience:
-
-```text
-WAV Player -> Preamp -> High-pass -> Low-pass -> Output
-```
+The graph uses **one global block size** (audio period × channels). Every link owns a buffer of that size: its source node writes it and its destination node reads it. A node with several outgoing links writes the first and the block is copied to the others.
 
 You can delete links/nodes, add stages from the context menu, and rewire arbitrarily. The audio thread loads a compiled snapshot of the graph each period so parameter and topology edits apply live.
 
@@ -131,4 +127,4 @@ cmake --build build
 ./build/graph_tests               # unit tests
 ```
 
-On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** restores the built-in default and rewrites `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
+On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** reloads `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.

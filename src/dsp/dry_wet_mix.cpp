@@ -16,7 +16,7 @@ bool DryWetMix::load(const std::string& json) {
     return true;
 }
 
-void DryWetMix::get_inputs(int *count, const char* const** str) 
+void DryWetMix::get_inputs(int *count, const char* const** str) const
 {   
     static const char* input_names[] = {"dry", "wet"};    
     *count=2; 
