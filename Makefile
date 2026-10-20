@@ -39,7 +39,16 @@ SRC_EFFECTS := src/dsp/preamp.cpp \
                src/dsp/eq_three_band.cpp \
                src/dsp/simple_reverb.cpp \
                src/dsp/wav_recorder.cpp \
-               src/dsp/graph_modules.cpp \
+               src/dsp/wav_player.cpp \
+               src/dsp/audio_input.cpp \
+               src/dsp/audio_output.cpp \
+               src/dsp/chord_generator.cpp \
+               src/dsp/white_noise.cpp \
+               src/dsp/dry_wet_mix.cpp \
+               src/dsp/vu_meter.cpp \
+               src/dsp/oscilloscope.cpp \
+               src/dsp/spectrum.cpp \
+               src/dsp/pitch_detector_module.cpp \
                src/dsp/mixer.cpp
 
 SRC_IMGUI := third_party/imgui/imgui.cpp \

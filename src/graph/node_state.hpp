@@ -1,18 +1,28 @@
 #pragma once
 
+#include "dsp/audio_input.hpp"
+#include "dsp/audio_output.hpp"
+#include "dsp/chord_generator.hpp"
+#include "dsp/dry_wet_mix.hpp"
 #include "dsp/dynamic_high_pass_filter.hpp"
 #include "dsp/dynamic_low_pass_filter.hpp"
 #include "dsp/echo_effect.hpp"
 #include "dsp/eq_three_band.hpp"
-#include "dsp/graph_modules.hpp"
 #include "dsp/guitar_pedals.hpp"
 #include "dsp/mixer.hpp"
 #include "dsp/module.hpp"
 #include "dsp/noise_gate.hpp"
+#include "dsp/none_module.hpp"
+#include "dsp/oscilloscope.hpp"
+#include "dsp/pitch_detector_module.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
+#include "dsp/spectrum.hpp"
 #include "dsp/valve_compressor.hpp"
+#include "dsp/vu_meter.hpp"
+#include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
+#include "dsp/white_noise.hpp"
 #include "node_types.hpp"
 
 #include <array>
@@ -24,15 +34,7 @@
 // (name / save / load / render). Fields live on the class itself.
 namespace node_params {
 
-struct None : Module {
-    std::string name() const override { return "none"; }
-    Role role() const override { return Role::effect; }
-    std::string save() const override { return "{}"; }
-    bool load(const std::string& /*json*/) override { return true; }
-    bool render() override { return false; }
-    void process(ProcessContext& /*ctx*/) override {}
-};
-
+using None = ::NoneModule;
 using WavPlayer = ::WavPlayer;
 using AudioInput = ::AudioInput;
 using AudioOutput = ::AudioOutput;
