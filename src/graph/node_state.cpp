@@ -76,6 +76,7 @@ NodeState NodeState::make(NodeType type) {
     case NodeType::noise_gate: s.module_ = make_module<node_params::NoiseGate>(); break;
     case NodeType::eq_three_band: s.module_ = make_module<node_params::EqThreeBand>(); break;
     case NodeType::reverb: s.module_ = make_module<node_params::Reverb>(); break;
+    case NodeType::agc: s.module_ = make_module<node_params::Agc>(); break;
     case NodeType::dry_wet_mix: s.module_ = make_module<node_params::DryWet>(); break;
     case NodeType::wav_recorder: s.module_ = make_module<node_params::WavRecorder>(); break;
     case NodeType::vu_meter: s.module_ = make_module<node_params::VuMeter>(); break;

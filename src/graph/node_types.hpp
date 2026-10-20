@@ -24,6 +24,7 @@ enum class NodeType : int {
     noise_gate,        // effect
     eq_three_band,     // effect
     reverb,            // effect
+    agc,               // effect: automatic gain control
     vu_meter,          // visualizer (pass-through)
     oscilloscope,      // visualizer (pass-through)
     spectrum,          // visualizer (pass-through)
@@ -50,6 +51,7 @@ inline const char* node_type_label(NodeType type) {
     case NodeType::noise_gate: return "Noise Gate";
     case NodeType::eq_three_band: return "3-Band EQ";
     case NodeType::reverb: return "Reverb";
+    case NodeType::agc: return "AGC";
     case NodeType::vu_meter: return "VU Meter";
     case NodeType::oscilloscope: return "Oscilloscope";
     case NodeType::spectrum: return "Spectrum";
@@ -78,6 +80,7 @@ inline const char* node_type_key(NodeType type) {
     case NodeType::noise_gate: return "noise_gate";
     case NodeType::eq_three_band: return "eq_three_band";
     case NodeType::reverb: return "reverb";
+    case NodeType::agc: return "agc";
     case NodeType::vu_meter: return "vu_meter";
     case NodeType::oscilloscope: return "oscilloscope";
     case NodeType::spectrum: return "spectrum";

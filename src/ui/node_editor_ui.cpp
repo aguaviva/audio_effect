@@ -263,6 +263,11 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
             render_module(*m, node.id());
         }
         break;
+    case NodeType::agc:
+        if (auto* m = st.as<node_params::Agc>()) {
+            render_module(*m, node.id());
+        }
+        break;
     case NodeType::dry_wet_mix:
         if (auto* m = st.as<node_params::DryWet>()) {
             render_module(*m, node.id());
@@ -372,7 +377,7 @@ static void draw_toolbar(AudioGraph& graph, NodeEditorUiState& state) {
         ImGui::TextWrapped("%s", state.status_message.c_str());
     }
     ImGui::TextDisabled(
-        "Right-click canvas to add nodes. Wire freely (fan-in sums, fan-out duplicates). "
+        "Right-click canvas to add nodes. One link per input (combine with a Mixer); outputs can fan out. "
         "Ctrl+drag pin to detach. Title-bar Byp toggles bypass. "
         "Mixer mute checkbox silences a slot. Delete removes selection.");
 }
@@ -490,6 +495,7 @@ static void context_menu_add_nodes(AudioGraph& graph, NodeEditorUiState& state,
             {"Noise Gate", NodeType::noise_gate},
             {"3-Band EQ", NodeType::eq_three_band},
             {"Reverb", NodeType::reverb},
+            {"AGC", NodeType::agc},
             {"Mixer", NodeType::mixer},
             {"Dry/Wet Mix", NodeType::dry_wet_mix},
         };

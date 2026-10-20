@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dsp/agc.hpp"
 #include "dsp/audio_input.hpp"
 #include "dsp/audio_output.hpp"
 #include "dsp/chord_generator.hpp"
@@ -48,6 +49,7 @@ using Compressor = ValveCompressor;
 using NoiseGate = ::NoiseGate;
 using EqThreeBand = ::EqThreeBand;
 using Reverb = SimpleReverb;
+using Agc = ::Agc;
 using DryWet = ::DryWetMix;
 using WavRecorder = ::WavRecorder;
 using VuMeter = ::VuMeter;

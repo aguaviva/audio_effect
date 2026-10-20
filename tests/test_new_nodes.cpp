@@ -1,5 +1,6 @@
 #include "test_harness.hpp"
 
+#include "dsp/agc.hpp"
 #include "dsp/denormals.hpp"
 #include "dsp/eq_three_band.hpp"
 #include "dsp/guitar_pedals.hpp"
@@ -289,4 +290,69 @@ TEST(flush_denormals_to_zero_applies_to_calling_thread) {
 #else
     (void)flushed;
 #endif
+}
+
+// Feeds `seconds` of a stereo 440 Hz sine with the given RMS through the AGC in
+// 512-sample blocks and returns the RMS (dB) of the last block.
+static float agc_settled_rms_db(Agc& agc, float input_rms_db, float seconds) {
+    const float amp = std::pow(10.0f, input_rms_db / 20.0f) * std::sqrt(2.0f);
+    std::vector<float> block(512);
+    size_t frame = 0;
+    const size_t blocks = static_cast<size_t>(seconds * 48000.0f / 256.0f);
+    double sum_sq = 0.0;
+    for (size_t b = 0; b < blocks; ++b) {
+        for (size_t i = 0; i < block.size(); i += 2, ++frame) {
+            const float s = amp * std::sin(2.0f * 3.14159265f * 440.0f * frame / 48000.0f);
+            block[i] = s;
+            block[i + 1] = s;
+        }
+        run_effect(agc, block);
+        sum_sq = 0.0;
+        for (float s : block) {
+            sum_sq += static_cast<double>(s) * s;
+        }
+    }
+    return 10.0f * std::log10(static_cast<float>(sum_sq / block.size()));
+}
+
+TEST(agc_raises_quiet_input_to_target) {
+    Agc agc;
+    agc.target_db = -18.0f;
+    CHECK_NEAR(agc_settled_rms_db(agc, -36.0f, 4.0f), -18.0f, 1.5f);
+    CHECK(agc.gain_db() > 15.0f);
+}
+
+TEST(agc_lowers_loud_input_to_target) {
+    Agc agc;
+    agc.target_db = -18.0f;
+    CHECK_NEAR(agc_settled_rms_db(agc, -6.0f, 1.0f), -18.0f, 1.5f);
+}
+
+TEST(agc_boost_is_capped_by_max_gain) {
+    Agc agc;
+    agc.target_db = -18.0f;
+    agc.max_gain_db = 6.0f;
+    CHECK_NEAR(agc_settled_rms_db(agc, -40.0f, 4.0f), -34.0f, 1.0f);
+}
+
+TEST(agc_holds_gain_below_gate) {
+    Agc agc;
+    agc.gate_db = -60.0f;
+    agc_settled_rms_db(agc, -80.0f, 2.0f);
+    CHECK_NEAR(agc.gain_db(), 0.0f, 1e-3f);
+}
+
+TEST(agc_save_load_roundtrip) {
+    Agc agc;
+    agc.target_db = -12.0f;
+    agc.max_gain_db = 10.0f;
+    agc.release_ms = 900.0f;
+    Agc loaded;
+    CHECK(loaded.load(agc.save()));
+    CHECK_NEAR(loaded.target_db, -12.0f, 1e-5f);
+    CHECK_NEAR(loaded.max_gain_db, 10.0f, 1e-5f);
+    CHECK_NEAR(loaded.release_ms, 900.0f, 1e-5f);
+    NodeType type = NodeType::count;
+    CHECK(node_params::try_resolve_name("agc", type));
+    CHECK(type == NodeType::agc);
 }
