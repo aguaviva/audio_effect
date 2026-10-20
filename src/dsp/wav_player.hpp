@@ -1,14 +1,12 @@
 #pragma once
 
-#include "audio_input_sources.hpp"
 #include "module.hpp"
 #include "paths.hpp"
+#include "wav_generator.hpp"
 
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <vector>
 
 class WavPlayer : public Module {
 public:
@@ -29,8 +27,7 @@ public:
 private:
     std::mutex path_mutex_;
     std::string path_ = kDefaultWavPath;
-    WavFileInput wav_;
     std::shared_ptr<const WavClip> clip_;
     std::string loaded_path_;
-    std::vector<int32_t> scratch_;
+    size_t cursor_ = 0; // next sample in clip_
 };

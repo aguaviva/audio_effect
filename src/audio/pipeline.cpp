@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -48,7 +47,7 @@ void capture_data_callback(ma_device* device, void* /*output*/, const void* inpu
         return;
     }
 
-    const auto* in = static_cast<const int32_t*>(input);
+    const auto* in = static_cast<const float*>(input);
     const size_t samples = static_cast<size_t>(frame_count) * CHANNELS;
     pipe->capture_staging.insert(pipe->capture_staging.end(), in, in + samples);
 
@@ -62,7 +61,7 @@ void capture_data_callback(ma_device* device, void* /*output*/, const void* inpu
             continue;
         }
         std::memcpy(chunk->samples.data(), pipe->capture_staging.data(),
-                    pipe->samples_per_period * sizeof(int32_t));
+                    pipe->samples_per_period * sizeof(float));
         pipe->capture_staging.erase(pipe->capture_staging.begin(),
                                     pipe->capture_staging.begin() +
                                         static_cast<std::ptrdiff_t>(pipe->samples_per_period));
@@ -75,7 +74,7 @@ void capture_data_callback(ma_device* device, void* /*output*/, const void* inpu
 void playback_data_callback(ma_device* device, void* output, const void* /*input*/,
                             ma_uint32 frame_count) {
     auto* pipe = static_cast<AudioPipeline*>(device->pUserData);
-    auto* out = static_cast<int32_t*>(output);
+    auto* out = static_cast<float*>(output);
     const size_t needed = static_cast<size_t>(frame_count) * CHANNELS;
     if (!pipe || !out || needed == 0) {
         return;
@@ -95,17 +94,17 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
     }
 
     if (pipe->playback_staging.size() >= needed) {
-        std::memcpy(out, pipe->playback_staging.data(), needed * sizeof(int32_t));
+        std::memcpy(out, pipe->playback_staging.data(), needed * sizeof(float));
         pipe->playback_staging.erase(pipe->playback_staging.begin(),
                                      pipe->playback_staging.begin() +
                                          static_cast<std::ptrdiff_t>(needed));
     } else {
         const size_t have = pipe->playback_staging.size();
         if (have > 0) {
-            std::memcpy(out, pipe->playback_staging.data(), have * sizeof(int32_t));
+            std::memcpy(out, pipe->playback_staging.data(), have * sizeof(float));
             pipe->playback_staging.clear();
         }
-        std::memset(out + have, 0, (needed - have) * sizeof(int32_t));
+        std::fill(out + have, out + needed, 0.0f);
         pipe->xrun_count.fetch_add(1, std::memory_order_relaxed);
     }
 }
@@ -113,9 +112,9 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
 bool init_device(AudioPipeline& pipe, ma_device_type type, const std::string& name,
                  ma_device* device, std::string& error) {
     ma_device_config config = ma_device_config_init(type);
-    config.capture.format = ma_format_s32;
+    config.capture.format = ma_format_f32;
     config.capture.channels = CHANNELS;
-    config.playback.format = ma_format_s32;
+    config.playback.format = ma_format_f32;
     config.playback.channels = CHANNELS;
     config.sampleRate = SAMPLE_RATE;
     config.periodSizeInFrames = AUDIO_PERIOD_FRAMES;
@@ -187,6 +186,7 @@ void filter_processor() {
     enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
+    std::vector<float> out(block_size, 0.0f);
 
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
         auto chunk = g_pipeline.cap_to_filter.pop();
@@ -195,7 +195,7 @@ void filter_processor() {
             continue;
         }
 
-        if (chunk->samples.size() != block_size || chunk->work_samples.size() != block_size) {
+        if (chunk->samples.size() != block_size) {
             fprintf(stderr, "Audio chunk size mismatch with graph block size (%zu vs %zu)\n",
                     chunk->samples.size(), block_size);
             g_pipeline.running.store(false, std::memory_order_relaxed);
@@ -204,20 +204,11 @@ void filter_processor() {
 
         auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
 
-        float* out = chunk->work_samples.data();
-        bool produced = false;
-        if (compiled) {
-            produced = processor.process(*compiled, chunk->samples.data(), out, block_size);
+        if (!compiled || !processor.process(*compiled, chunk->samples.data(), out.data(), block_size)) {
+            std::fill(out.begin(), out.end(), 0.0f);
         }
-        if (!produced) {
-            std::fill(out, out + block_size, 0.0f);
-        }
-
-        constexpr double pcm_scale = 2147483648.0;
         for (size_t i = 0; i < block_size; ++i) {
-            double sample = std::clamp(static_cast<double>(out[i]), -1.0, 1.0);
-            double pcm = std::clamp(sample * pcm_scale, -2147483648.0, 2147483647.0);
-            chunk->samples[i] = static_cast<int32_t>(std::llround(pcm));
+            chunk->samples[i] = std::clamp(out[i], -1.0f, 1.0f);
         }
 
         while (g_pipeline.running.load(std::memory_order_relaxed) &&
@@ -231,7 +222,7 @@ void offline_processor() {
     enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
-    std::vector<int32_t> live(block_size, 0);
+    std::vector<float> live(block_size, 0.0f);
     std::vector<float> out(block_size, 0.0f);
 
     PeriodClock clock(g_pipeline.period_size);
@@ -250,7 +241,7 @@ void silent_capture_producer() {
            g_pipeline.silent_running.load(std::memory_order_relaxed)) {
         auto chunk = g_pipeline.free_pool.pop();
         if (chunk) {
-            std::fill(chunk->samples.begin(), chunk->samples.end(), 0);
+            std::fill(chunk->samples.begin(), chunk->samples.end(), 0.0f);
             if (!g_pipeline.cap_to_filter.push(std::move(chunk))) {
                 g_pipeline.dropped_capture_reads.fetch_add(1, std::memory_order_relaxed);
             }
@@ -261,7 +252,7 @@ void silent_capture_producer() {
 
 } // namespace
 
-AudioChunk::AudioChunk(size_t sample_count) : samples(sample_count), work_samples(sample_count) {
+AudioChunk::AudioChunk(size_t sample_count) : samples(sample_count) {
     g_pipeline.live_chunks.fetch_add(1, std::memory_order_relaxed);
 }
 

@@ -11,11 +11,7 @@
 #include <vector>
 
 struct WavClip {
-    std::vector<int32_t> interleaved_stereo;
-
-    size_t frame_count() const {
-        return interleaved_stereo.size() / 2;
-    }
+    std::vector<float> interleaved_stereo;
 };
 
 class WavGenerator {
@@ -103,7 +99,7 @@ public:
         size_t source_frames = data_size / block_align;
         size_t target_frames = static_cast<size_t>(std::llround(
             static_cast<double>(source_frames) * target_sample_rate / source_sample_rate));
-        if (target_frames == 0 || target_frames > (static_cast<size_t>(-1) / (2 * sizeof(int32_t)))) {
+        if (target_frames == 0 || target_frames > (static_cast<size_t>(-1) / (2 * sizeof(float)))) {
             error = "WAV duration is invalid or too large";
             return nullptr;
         }
@@ -120,7 +116,6 @@ public:
 
         auto clip = std::make_shared<WavClip>();
         clip->interleaved_stereo.resize(target_frames * 2);
-        constexpr double scale = 2147483648.0;
         for (size_t frame = 0; frame < target_frames; ++frame) {
             double source_position = static_cast<double>(frame) * source_sample_rate / target_sample_rate;
             size_t first = std::min(static_cast<size_t>(source_position), source_frames - 1);
@@ -129,9 +124,8 @@ public:
             for (size_t channel = 0; channel < 2; ++channel) {
                 float a = source[first * 2 + channel];
                 float b = source[second * 2 + channel];
-                double normalized = std::clamp(a + (b - a) * fraction, -1.0f, 1.0f);
-                double pcm = std::clamp(normalized * scale, -2147483648.0, 2147483647.0);
-                clip->interleaved_stereo[frame * 2 + channel] = static_cast<int32_t>(std::llround(pcm));
+                clip->interleaved_stereo[frame * 2 + channel] =
+                    std::clamp(a + (b - a) * fraction, -1.0f, 1.0f);
             }
         }
         error.clear();

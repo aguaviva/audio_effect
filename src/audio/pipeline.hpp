@@ -23,8 +23,7 @@ struct AudioChunk {
     explicit AudioChunk(size_t sample_count);
     ~AudioChunk();
 
-    std::vector<int32_t> samples;
-    std::vector<float> work_samples;
+    std::vector<float> samples; // interleaved stereo
 };
 
 class AudioBufferQueue {
@@ -92,8 +91,8 @@ struct AudioPipeline {
     std::string playback_device_{"default"};
 
     // Audio-thread staging (only touched from the matching device callback).
-    std::vector<int32_t> capture_staging;
-    std::vector<int32_t> playback_staging;
+    std::vector<float> capture_staging;
+    std::vector<float> playback_staging;
     std::mutex device_mutex;
 
 private:

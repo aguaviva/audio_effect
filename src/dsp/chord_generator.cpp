@@ -3,6 +3,7 @@
 #include "chord_catalog.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include "imgui.h"
 
@@ -31,12 +32,23 @@ bool ChordGenerator::render() {
 }
 void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                              size_t sample_count, float sample_rate) {
-    if (scratch_.size() != sample_count) {
-        scratch_.assign(sample_count, 0);
+    const int chord = std::clamp(index, 0, kChordCount - 1);
+    if (chord != active_chord_) {
+        phases_.fill(0.0);
+        active_chord_ = chord;
+        frequencies_ = chord_note_frequencies(chord);
     }
-    chord_.render(index, scratch_.data(), sample_count / 2, 2,
-                  static_cast<uint32_t>(sample_rate));
-    for (size_t i = 0; i < sample_count; ++i) {
-        output[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
+    constexpr double two_pi = 6.28318530717958647692;
+    constexpr double gain = 0.90 / kChordVoices;
+    for (size_t i = 0; i + 1 < sample_count; i += 2) {
+        double mixed = 0.0;
+        for (size_t note = 0; note < phases_.size(); ++note) {
+            mixed += std::sin(phases_[note]);
+            phases_[note] += two_pi * frequencies_[note] / sample_rate;
+            if (phases_[note] >= two_pi) {
+                phases_[note] -= two_pi;
+            }
+        }
+        output[i] = output[i + 1] = static_cast<float>(mixed * gain);
     }
 }

@@ -20,12 +20,10 @@ bool AudioInput::render() {
 }
 void AudioInput::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                          size_t sample_count, float /*sample_rate*/) {
-    const int32_t* pcm = host_ ? host_->live_input() : nullptr;
-    if (pcm == nullptr) {
+    const float* live = host_ ? host_->live_input() : nullptr;
+    if (live) {
+        std::copy(live, live + sample_count, output);
+    } else {
         std::fill(output, output + sample_count, 0.0f);
-        return;
-    }
-    for (size_t i = 0; i < sample_count; ++i) {
-        output[i] = static_cast<float>(pcm[i]) / 2147483648.0f;
     }
 }

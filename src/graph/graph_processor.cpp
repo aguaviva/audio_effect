@@ -22,7 +22,7 @@ std::shared_ptr<const WavClip> GraphProcessor::load_wav(const std::string& path)
 }
 
 bool GraphProcessor::process(const CompiledGraph& graph,
-                             const int32_t* live_pcm,
+                             const float* live_input,
                              float* out_float,
                              size_t block_size) {
     if (block_size == 0) {
@@ -39,7 +39,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
         buffers_.resize(needed);
     }
     float* scratch = buffer(graph.link_count);
-    live_pcm_ = live_pcm;
+    live_input_ = live_input;
 
     bool wrote_output = false;
     for (const auto& node : graph.order) {

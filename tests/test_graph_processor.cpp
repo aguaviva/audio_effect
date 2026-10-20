@@ -26,8 +26,7 @@ TEST(graph_processor_preamp_applies_gain) {
     CHECK(g.add_link(pre, out));
 
     constexpr size_t block = 64; // 32 stereo frames
-    std::vector<int32_t> live(block, 1073741824); // 0.5 in S32 scale-ish (/2^31)
-    // 1073741824 / 2147483648 = 0.5
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
@@ -48,7 +47,7 @@ TEST(graph_processor_sees_ui_edits_without_recompile) {
     CHECK(g.add_link(pre, out));
 
     constexpr size_t block = 64;
-    std::vector<int32_t> live(block, 1073741824); // 0.5 float
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
@@ -74,7 +73,7 @@ TEST(graph_processor_bypass_skips_preamp_gain) {
     CHECK(g.add_link(pre, out));
 
     constexpr size_t block = 64;
-    std::vector<int32_t> live(block, 1073741824); // 0.5 float
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
@@ -109,9 +108,7 @@ TEST(graph_processor_mixer_applies_per_input_gain) {
     CHECK(g.add_link(mix, out));
 
     constexpr size_t block = 32;
-    // live sample corresponding to 0.25 float
-    const int32_t pcm = static_cast<int32_t>(0.25 * 2147483648.0);
-    std::vector<int32_t> live(block, pcm);
+    std::vector<float> live(block, 0.25f);
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
@@ -128,7 +125,7 @@ TEST(graph_processor_rejects_mismatched_empty_graph) {
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();
     // empty graph compiles valid with 0 nodes? clear then compile - order empty
-    std::vector<int32_t> live(16, 0);
+    std::vector<float> live(16, 0.0f);
     std::vector<float> out(16, 1.0f);
     CHECK(compiled);
     // no nodes -> process returns false and zeros output
@@ -146,7 +143,7 @@ TEST(graph_processor_block_size_contract) {
     GraphProcessor proc(48000.0f);
     constexpr size_t block = 48;
 
-    std::vector<int32_t> live(block, 0);
+    std::vector<float> live(block, 0.0f);
     std::vector<float> output(block, 0.0f);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
@@ -162,7 +159,7 @@ TEST(graph_processor_output_node_ignores_bypass_flag) {
     CHECK(!g.find_node(out)->module->supports_bypass());
 
     constexpr size_t block = 16;
-    std::vector<int32_t> live(block, 1073741824);
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = compile_chain(g);
@@ -178,7 +175,7 @@ TEST(graph_processor_reports_no_output_without_output_node) {
     CHECK(g.add_link(in, pre));
 
     constexpr size_t block = 16;
-    std::vector<int32_t> live(block, 1073741824);
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();
@@ -199,7 +196,7 @@ TEST(graph_processor_fan_out_feeds_every_link) {
     CHECK(g.add_link(pre, out_b));
 
     constexpr size_t block = 16;
-    std::vector<int32_t> live(block, static_cast<int32_t>(0.25 * 2147483648.0));
+    std::vector<float> live(block, 0.25f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = compile_chain(g);
@@ -218,7 +215,7 @@ TEST(graph_processor_output_volume_and_mute) {
     m->volume_db = -6.0206f; // x0.5
 
     constexpr size_t block = 16;
-    std::vector<int32_t> live(block, 1073741824); // 0.5
+    std::vector<float> live(block, 0.5f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = compile_chain(g);

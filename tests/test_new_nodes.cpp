@@ -9,6 +9,7 @@
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
+#include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
 #include "graph/audio_graph.hpp"
@@ -52,7 +53,7 @@ TEST(white_noise_source_produces_energy) {
     CHECK(g.add_link(noise, out));
 
     constexpr size_t block = 256;
-    std::vector<int32_t> live(block, 0);
+    std::vector<float> live(block, 0.0f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();
@@ -64,6 +65,33 @@ TEST(white_noise_source_produces_energy) {
         energy += s * s;
     }
     CHECK(energy > 1.0e-3f);
+}
+
+TEST(wav_player_plays_its_file_and_silence_when_missing) {
+    AudioGraph g;
+    const int wav = g.add_node("wav_player", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    CHECK(g.add_link(wav, out));
+    auto* player = g.find_node(wav)->as<WavPlayer>();
+    auto compiled = g.compile();
+    GraphProcessor proc(48000.0f);
+
+    auto energy_of_one_second = [&] {
+        constexpr size_t block = 4800;
+        std::vector<float> output(block, 0.0f);
+        float energy = 0.0f;
+        for (int n = 0; n < 20; ++n) {
+            proc.process(*compiled, nullptr, output.data(), block);
+            for (float s : output) {
+                energy += s * s;
+            }
+        }
+        return energy;
+    };
+    CHECK(energy_of_one_second() > 1.0e-3f);
+
+    player->set_path("assets/audio/does_not_exist.wav");
+    CHECK_NEAR(energy_of_one_second(), 0.0f, 1e-9f);
 }
 
 TEST(mixer_dsp_averages_sources) {
@@ -188,8 +216,7 @@ TEST(dry_wet_mix_blends_slots) {
     CHECK(g.add_link(mix, out));
 
     constexpr size_t block = 32;
-    const int32_t pcm = static_cast<int32_t>(0.25 * 2147483648.0);
-    std::vector<int32_t> live(block, pcm);
+    std::vector<float> live(block, 0.25f);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();

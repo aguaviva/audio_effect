@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -16,7 +15,8 @@ public:
     virtual ~GraphHost() = default;
     // nullptr when the file cannot be loaded.
     virtual std::shared_ptr<const WavClip> load_wav(const std::string& path) = 0;
-    virtual const int32_t* live_input() const = 0;
+    // Captured device block (interleaved float), or nullptr.
+    virtual const float* live_input() const = 0;
 };
 
 // Copies inputs[slot] into output, or silence when that pin is not connected.

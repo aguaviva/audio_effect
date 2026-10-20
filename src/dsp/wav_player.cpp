@@ -30,22 +30,26 @@ bool WavPlayer::render() {
 }
 void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                         size_t sample_count, float /*sample_rate*/) {
-    if (scratch_.size() != sample_count) {
-        scratch_.assign(sample_count, 0);
-    }
     std::unique_lock<std::mutex> lock(path_mutex_, std::try_to_lock);
     if (lock.owns_lock() && path_ != loaded_path_) {
         loaded_path_ = path_;
         lock.unlock();
         clip_ = host_ ? host_->load_wav(loaded_path_) : nullptr;
-        wav_.reset();
+        cursor_ = 0;
     }
-    if (clip_ && clip_->frame_count() > 0) {
-        wav_.render(clip_, loop, scratch_.data(), sample_count / 2);
-    } else {
-        std::fill(scratch_.begin(), scratch_.end(), 0);
+    const size_t clip_samples = clip_ ? clip_->interleaved_stereo.size() : 0;
+    size_t written = 0;
+    while (written < sample_count && clip_samples > 0) {
+        if (cursor_ >= clip_samples) {
+            if (!loop) {
+                break;
+            }
+            cursor_ = 0;
+        }
+        const size_t n = std::min(sample_count - written, clip_samples - cursor_);
+        std::copy_n(clip_->interleaved_stereo.data() + cursor_, n, output + written);
+        written += n;
+        cursor_ += n;
     }
-    for (size_t i = 0; i < sample_count; ++i) {
-        output[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
-    }
+    std::fill(output + written, output + sample_count, 0.0f);
 }

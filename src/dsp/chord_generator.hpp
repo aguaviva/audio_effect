@@ -1,11 +1,10 @@
 #pragma once
 
-#include "audio_input_sources.hpp"
+#include "chord_catalog.hpp"
 #include "module.hpp"
 
-#include <cstdint>
+#include <array>
 #include <string>
-#include <vector>
 
 class ChordGenerator : public Module {
 public:
@@ -20,6 +19,7 @@ public:
                  float sample_rate) override;
 
 private:
-    ChordGeneratorInput chord_;
-    std::vector<int32_t> scratch_;
+    int active_chord_ = -1;
+    std::array<double, kChordVoices> phases_{};
+    std::array<double, kChordVoices> frequencies_{};
 };
