@@ -59,6 +59,9 @@ public:
     virtual Role role() const = 0;
     virtual void process(ProcessContext& ctx) = 0;
 
+    virtual void get_inputs(int *count, const char* const** str) { static const char* input_names[] = {"in"}; *count=1; *str=input_names; }    
+    virtual void get_outputs(int *count, const char* const** str) { static const char* output_names[] = {"out"}; *count=1; *str=output_names; }    
+
     virtual bool supports_bypass() const { return true; }
     virtual bool is_output_sink() const { return false; }
     bool is_source() const { return role() == Role::source; }

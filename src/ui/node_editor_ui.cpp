@@ -119,23 +119,23 @@ static void draw_vu_widget(int node_id) {
     const float peak_db = linear_to_db(peak);
     const float rms_db = linear_to_db(rms);
     ImGui::Text("Peak %.1f dB", peak_db);
-    ImGui::ProgressBar(std::clamp(peak, 0.0f, 1.0f), ImVec2(kNodeWidth, 0.0f), "");
+    ImGui::ProgressBar(std::clamp(peak, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
     ImGui::Text("RMS  %.1f dB", rms_db);
-    ImGui::ProgressBar(std::clamp(rms * 1.5f, 0.0f, 1.0f), ImVec2(kNodeWidth, 0.0f), "");
+    ImGui::ProgressBar(std::clamp(rms * 1.5f, 0.0f, 1.0f), ImVec2(-1.0f, 0.0f), "");
 }
 
 static void draw_scope_widget(int node_id) {
     float samples[kVisualizerScopePoints]{};
     g_visualizer_bus.read_scope(node_id, samples, kVisualizerScopePoints);
     ImGui::PlotLines("##scope", samples, kVisualizerScopePoints, 0, nullptr, -1.0f, 1.0f,
-                     ImVec2(kNodeWidth, 48.0f));
+                     ImVec2(-1.0f, 48.0f));
 }
 
 static void draw_spectrum_widget(int node_id) {
     float bins[kVisualizerSpectrumBins]{};
     g_visualizer_bus.read_spectrum(node_id, bins, kVisualizerSpectrumBins);
     ImGui::PlotHistogram("##spectrum", bins, kVisualizerSpectrumBins, 0, nullptr, 0.0f, 1.0f,
-                         ImVec2(kNodeWidth, 48.0f));
+                         ImVec2(-1.0f, 48.0f));
 }
 
 static void draw_pitch_widget(int node_id) {
@@ -209,9 +209,9 @@ static void draw_device_error(const char* stream_prefix) {
 
 static void render_module(Module& module, int node_id) {
     ImGui::PushID(node_id);
-    ImGui::PushItemWidth(kNodeWidth);
+    //ImGui::PushItemdth(kNodeWidth);
     module.render();
-    ImGui::PopItemWidth();
+    //ImGui::PopItemWidth();
     ImGui::PopID();
 }
 
@@ -314,7 +314,6 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         if (auto* m = st.as<node_params::DryWet>()) {
             render_module(*m, node.id());
         }
-        ImGui::TextDisabled("dry / wet");
         break;
     case NodeType::wav_recorder:
         if (auto* m = st.as<node_params::WavRecorder>()) {
@@ -638,65 +637,59 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         const float title_row_w = ImGui::GetItemRectSize().x;
         ImNodes::EndNodeTitleBar();
 
-        // Pin tracks the widest row; Dummy + params + out share this width.
-        float node_width = std::max(kNodeWidth, title_row_w);
-        {
-            const ImVec2 dims = ImNodes::GetNodeDimensions(node.id());
-            if (dims.x > 1.0f) {
-                node_width =
-                    std::max(node_width, dims.x - 2.0f * ImNodes::GetStyle().NodePadding.x);
-            }
-        }
-        ImGui::Dummy(ImVec2(node_width, 0.0f));
+        ImGui::PushID(node.id());
+        ImGui::BeginChild("child", ImVec2(200.0f, 0.0f), ImGuiChildFlags_AutoResizeY);
 
-        if (node_has_input_pin(node.type())) {
-            int slot_count = 1;
-            if (node_is_mixer(node.type())) {
-                slot_count = graph.mixer_pin_count(node.id());
-            } else if (node_is_dry_wet(node.type())) {
-                slot_count = 2;
-            }
-            for (int slot = 0; slot < slot_count; ++slot) {
-                ImNodes::BeginInputAttribute(input_pin_id(node.id(), slot));
-                if (node_is_mixer(node.type())) {
+        if (ImGui::BeginTable("node_layout", 3, ImGuiTableFlags_SizingFixedFit))
+        {
+            // Setup column widths: column 0 and 2 wrap the pins, column 1 takes the rest (-1.0f)
+            ImGui::TableSetupColumn("In", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Center", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Out", ImGuiTableColumnFlags_WidthFixed);
+
+            ImGui::TableNextRow();
+
+            // --- Column 0: Input Pin ---
+            ImGui::TableSetColumnIndex(0);
+            {
+                int inputs=0;
+                const char* const* name;
+                node.state().module().get_inputs(&inputs, &name);
+
+                for (int slot = 0; slot < inputs; ++slot) {
+                    ImNodes::BeginInputAttribute(input_pin_id(node.id(), slot));
                     ImGui::PushID(node.id() * 32 + slot);
                     ImGui::AlignTextToFramePadding();
-                    ImGui::Text("in %d", slot + 1);
-                    ImGui::SameLine(0.0f, 6.0f);
-                    bool& muted = node.state().input_muted[static_cast<size_t>(slot)];
-                    ImGui::Checkbox("##mute", &muted);
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip(muted ? "Muted (click to unmute)" : "Mute this input");
-                    }
+                    ImGui::Text(name[slot]);
                     ImGui::PopID();
-                } else if (node_is_dry_wet(node.type())) {
-                    ImGui::TextUnformatted(slot == 0 ? "dry" : "wet");
-                } else {
-                    ImGui::TextUnformatted("in");
+                    ImNodes::EndInputAttribute();
                 }
-                ImNodes::EndInputAttribute();
             }
+
+            // --- Column 1: Slider (with your -1.0f width requirement) ---
+            ImGui::TableSetColumnIndex(1);        
+            ImGui::PushID(node.id());
+            draw_node_params(node, graph);
+            ImGui::PopID();
+
+            // --- Column 2: Output Pin ---
+            ImGui::TableSetColumnIndex(2); 
+            {       
+                int outputs;
+                const char* const* name;
+                node.state().module().get_outputs(&outputs, &name);
+                if (outputs>0) {
+                    ImNodes::BeginOutputAttribute(output_pin_id(node.id()));
+                    ImGui::TextUnformatted(name[0]);
+                    ImNodes::EndOutputAttribute();
+                }
+            }
+
+            ImGui::EndTable();        
         }
 
-        ImGui::PushID(node.id());
-        draw_node_params(node, graph);
-        if (node_is_mixer(node.type())) {
-            ImGui::TextDisabled("%d in", graph.mixer_connected_count(node.id()));
-        }
+        ImGui::EndChild();
         ImGui::PopID();
-
-        if (node_has_output_pin(node.type())) {
-            ImNodes::BeginOutputAttribute(output_pin_id(node.id()));
-            // Prefer last frame's true content width so "out" tracks the pin if
-            // anything still stretched the node (title bar, plots, etc.).
-            float out_w = node_width;
-            const ImVec2 dims = ImNodes::GetNodeDimensions(node.id());
-            if (dims.x > 1.0f) {
-                out_w = std::max(out_w, dims.x - 2.0f * ImNodes::GetStyle().NodePadding.x);
-            }
-            draw_output_label(out_w);
-            ImNodes::EndOutputAttribute();
-        }
 
         ImNodes::EndNode();
     }

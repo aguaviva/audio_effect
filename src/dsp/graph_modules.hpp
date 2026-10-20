@@ -100,6 +100,7 @@ public:
     Role role() const override { return Role::multi_in; }
     std::string save() const override;
     bool load(const std::string& json) override;
+    void get_inputs(int *count, const char* const** str);
     bool render() override;
     void process(ProcessContext& ctx) override;
 };

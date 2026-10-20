@@ -188,8 +188,14 @@ bool DryWetMix::load(const std::string& json) {
     return true;
 }
 
+void DryWetMix::get_inputs(int *count, const char* const** str) 
+{   
+    static const char* input_names[] = {"dry", "wet"};    
+    *count=2; 
+    *str=input_names;
+} 
+
 bool DryWetMix::render() {
-    ImGui::TextUnformatted("Wet");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##dw_mix", &mix, 0.0f, 1.0f, "%.2f");
 }
@@ -223,9 +229,9 @@ bool VuMeter::load(const std::string& json) {
 
 bool VuMeter::render() {
     bool changed = false;
-    ImGui::TextUnformatted("Gain");
-    ImGui::SetNextItemWidth(-1.0f);
-    changed |= ImGui::SliderFloat("##vu_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+    //ImGui::TextUnformatted("Gain");
+    //ImGui::SetNextItemWidth(-1.0f);
+    //changed |= ImGui::SliderFloat("##vu_gain", &display_gain, 0.25f, 4.0f, "%.2f");
     ImGui::TextUnformatted("Decay");
     ImGui::SetNextItemWidth(-1.0f);
     changed |= ImGui::SliderFloat("##vu_decay", &decay, 0.5f, 0.99f, "%.2f");
@@ -250,9 +256,10 @@ bool Oscilloscope::load(const std::string& json) {
 }
 
 bool Oscilloscope::render() {
-    ImGui::TextUnformatted("Gain");
-    ImGui::SetNextItemWidth(-1.0f);
-    return ImGui::SliderFloat("##scope_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+    //ImGui::TextUnformatted("Gain");
+    //ImGui::SetNextItemWidth(-1.0f);
+    //return ImGui::SliderFloat("##scope_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+    return true;
 }
 void Oscilloscope::process(ProcessContext& ctx) {
     if (ctx.host) {
@@ -273,9 +280,11 @@ bool Spectrum::load(const std::string& json) {
 }
 
 bool Spectrum::render() {
-    ImGui::TextUnformatted("Gain");
-    ImGui::SetNextItemWidth(-1.0f);
-    return ImGui::SliderFloat("##spec_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+    //ImGui::TextUnformatted("Gain");
+    //ImGui::SetNextItemWidth(-1.0f);
+    //return ImGui::SliderFloat("##spec_gain", &display_gain, 0.25f, 4.0f, "%.2f");
+    
+    return true;
 }
 void Spectrum::process(ProcessContext& ctx) {
     if (ctx.host) {
