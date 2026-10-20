@@ -4,6 +4,7 @@ patch_graph.json
 imgui.ini
 assets/recordings/
 build/
+build-web/
 
 build/
 media/

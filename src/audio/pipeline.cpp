@@ -71,6 +71,41 @@ void capture_data_callback(ma_device* device, void* /*output*/, const void* inpu
     }
 }
 
+// Runs the published graph with chunk as the live input, then replaces it with the clamped output.
+void render_chunk(GraphProcessor& processor, AudioChunk& chunk, std::vector<float>& out) {
+    const size_t block_size = chunk.samples.size();
+    out.resize(block_size);
+    auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
+    if (!compiled || !processor.process(*compiled, chunk.samples.data(), out.data(), block_size)) {
+        std::fill(out.begin(), out.end(), 0.0f);
+    }
+    for (size_t i = 0; i < block_size; ++i) {
+        chunk.samples[i] = std::clamp(out[i], -1.0f, 1.0f);
+    }
+}
+
+#ifdef __EMSCRIPTEN__
+// No threads on the web: the playback callback renders each block itself.
+std::unique_ptr<AudioChunk> next_played_chunk(AudioPipeline& pipe) {
+    static GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
+    static std::vector<float> out;
+    auto chunk = pipe.cap_to_filter.pop();
+    if (!chunk) {
+        chunk = pipe.free_pool.pop();
+        if (!chunk) {
+            return nullptr;
+        }
+        std::fill(chunk->samples.begin(), chunk->samples.end(), 0.0f);
+    }
+    render_chunk(processor, *chunk, out);
+    return chunk;
+}
+#else
+std::unique_ptr<AudioChunk> next_played_chunk(AudioPipeline& pipe) {
+    return pipe.filter_to_play.pop();
+}
+#endif
+
 void playback_data_callback(ma_device* device, void* output, const void* /*input*/,
                             ma_uint32 frame_count) {
     auto* pipe = static_cast<AudioPipeline*>(device->pUserData);
@@ -81,7 +116,7 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
     }
 
     while (pipe->playback_staging.size() < needed) {
-        auto chunk = pipe->filter_to_play.pop();
+        auto chunk = next_played_chunk(*pipe);
         if (!chunk) {
             break;
         }
@@ -147,6 +182,7 @@ bool init_device(AudioPipeline& pipe, ma_device_type type, const std::string& na
     return true;
 }
 
+#ifndef __EMSCRIPTEN__
 // Sleeps until start + n * period, so per-wakeup lateness does not accumulate.
 class PeriodClock {
 public:
@@ -202,14 +238,7 @@ void filter_processor() {
             return;
         }
 
-        auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
-
-        if (!compiled || !processor.process(*compiled, chunk->samples.data(), out.data(), block_size)) {
-            std::fill(out.begin(), out.end(), 0.0f);
-        }
-        for (size_t i = 0; i < block_size; ++i) {
-            chunk->samples[i] = std::clamp(out[i], -1.0f, 1.0f);
-        }
+        render_chunk(processor, *chunk, out);
 
         while (g_pipeline.running.load(std::memory_order_relaxed) &&
                !g_pipeline.filter_to_play.push(std::move(chunk))) {
@@ -249,6 +278,7 @@ void silent_capture_producer() {
         clock.wait_next();
     }
 }
+#endif
 
 } // namespace
 
@@ -312,8 +342,13 @@ bool AudioPipeline::open_audio(const char* capture_device, const char* playback_
     }
 
     std::string capture_error;
+#ifdef __EMSCRIPTEN__
+    // Opening capture asks for the microphone; wait until a patch has an Audio Input.
+    capture_error = "No capture until a patch uses Audio Input";
+#else
     capture_ready = init_device(*this, ma_device_type_capture, capture_device_, &capture,
                                capture_error);
+#endif
 
     std::string playback_error;
     playback_ready = init_device(*this, ma_device_type_playback, playback_device_, &playback,
@@ -339,11 +374,13 @@ bool AudioPipeline::open_audio(const char* capture_device, const char* playback_
 }
 
 void AudioPipeline::start_silent_capture() {
+#ifndef __EMSCRIPTEN__
     if (silent_capture.joinable()) {
         return;
     }
     silent_running.store(true, std::memory_order_relaxed);
     silent_capture = std::thread(silent_capture_producer);
+#endif
 }
 
 void AudioPipeline::stop_silent_capture() {
@@ -442,7 +479,9 @@ bool AudioPipeline::set_playback_device(const char* device, std::string& error) 
 void AudioPipeline::start() {
     offline_mode = false;
     running.store(true, std::memory_order_relaxed);
+#ifndef __EMSCRIPTEN__
     filter = std::thread(filter_processor);
+#endif
 
     std::lock_guard<std::mutex> lock(device_mutex);
     if (capture_ready) {
@@ -469,7 +508,9 @@ void AudioPipeline::start_offline() {
     running.store(true, std::memory_order_relaxed);
     period_size = AUDIO_PERIOD_FRAMES;
     samples_per_period = period_size * CHANNELS;
+#ifndef __EMSCRIPTEN__
     filter = std::thread(offline_processor);
+#endif
 }
 
 void AudioPipeline::stop() {

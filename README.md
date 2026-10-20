@@ -127,3 +127,14 @@ cmake --build build
 ```
 
 On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** reloads `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
+
+### Web build (Emscripten)
+
+```bash
+source <emsdk>/emsdk_env.sh
+emcmake cmake -S . -B build-web
+cmake --build build-web
+python3 -m http.server -d build-web 8080   # open http://localhost:8080/audio_effect_gui.html
+```
+
+`assets/` is preloaded into the page, so the bundled patches and WAVs load as on desktop. There are no threads on the web: the playback callback renders each block itself. The browser starts audio on the first click. The microphone is only opened when a patch uses Audio Input. Load/Save Graph, the WAV picker and WAV Recorder still use the in-page file system, so they can't reach your own files yet.

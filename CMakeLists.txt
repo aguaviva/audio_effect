@@ -5,11 +5,14 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
 
-option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" ON)
-
-find_package(OpenGL REQUIRED)
-find_package(glfw3 CONFIG QUIET)
-if(NOT glfw3_FOUND)
+if(EMSCRIPTEN)
+  option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" OFF)
+else()
+  option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" ON)
+  find_package(OpenGL REQUIRED)
+  find_package(glfw3 CONFIG QUIET)
+endif()
+if(NOT EMSCRIPTEN AND NOT glfw3_FOUND)
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
     pkg_check_modules(GLFW3 REQUIRED glfw3)
@@ -84,18 +87,27 @@ else()
   target_compile_options(audio_effect_gui PRIVATE -Wall -Wextra)
 endif()
 
-target_link_libraries(audio_effect_gui PRIVATE OpenGL::GL)
-
-if(TARGET glfw)
-  target_link_libraries(audio_effect_gui PRIVATE glfw)
+if(EMSCRIPTEN)
+  # Assets are preloaded at /assets and the working directory is /, so relative paths resolve.
+  set(EMSCRIPTEN_FLAGS --use-port=contrib.glfw3)
+  target_compile_options(audio_effect_gui PRIVATE ${EMSCRIPTEN_FLAGS})
+  target_link_options(audio_effect_gui PRIVATE ${EMSCRIPTEN_FLAGS}
+    -sUSE_WEBGL2=1 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1
+    --preload-file ${CMAKE_SOURCE_DIR}/assets@/assets
+    --shell-file ${CMAKE_SOURCE_DIR}/third_party/imgui/examples/libs/emscripten/shell_minimal.html)
+  set_target_properties(audio_effect_gui PROPERTIES SUFFIX ".html")
+  set_source_files_properties(third_party/miniaudio/miniaudio.c PROPERTIES
+    COMPILE_OPTIONS -Wno-unused-parameter) # miniaudio's Web Audio backend
+elseif(TARGET glfw)
+  target_link_libraries(audio_effect_gui PRIVATE OpenGL::GL glfw)
 elseif(TARGET glfw3)
-  target_link_libraries(audio_effect_gui PRIVATE glfw3)
+  target_link_libraries(audio_effect_gui PRIVATE OpenGL::GL glfw3)
 elseif(GLFW3_FOUND)
   target_include_directories(audio_effect_gui PRIVATE ${GLFW3_INCLUDE_DIRS})
-  target_link_libraries(audio_effect_gui PRIVATE ${GLFW3_LIBRARIES})
+  target_link_libraries(audio_effect_gui PRIVATE OpenGL::GL ${GLFW3_LIBRARIES})
 else()
   target_include_directories(audio_effect_gui PRIVATE ${GLFW_INCLUDE_DIR})
-  target_link_libraries(audio_effect_gui PRIVATE ${GLFW_LIBRARY})
+  target_link_libraries(audio_effect_gui PRIVATE OpenGL::GL ${GLFW_LIBRARY})
 endif()
 
 if(WIN32)
@@ -105,7 +117,7 @@ elseif(APPLE)
   find_library(IOKIT_LIBRARY IOKit REQUIRED)
   find_library(COREVIDEO_LIBRARY CoreVideo REQUIRED)
   target_link_libraries(audio_effect_gui PRIVATE ${COCOA_LIBRARY} ${IOKIT_LIBRARY} ${COREVIDEO_LIBRARY})
-else()
+elseif(NOT EMSCRIPTEN)
   # miniaudio loads ALSA/Pulse/JACK via dlopen; only pthread/m/dl are required.
   find_package(Threads REQUIRED)
   target_link_libraries(audio_effect_gui PRIVATE Threads::Threads dl m)
