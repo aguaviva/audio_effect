@@ -100,7 +100,7 @@ src/
   graph/                   # graph model, compile, I/O, DSP execution
   ui/node_editor_ui.*      # imnodes editor
   dsp/                     # effect / source implementations
-tests/                     # headless unit tests (make test)
+tests/                     # headless unit tests (./build/graph_tests)
 third_party/
   imgui/                   # submodule (ocornut/imgui)
   imnodes/                 # submodule (Nelarius/imnodes)
@@ -128,18 +128,7 @@ cmake -S . -B build
 cmake --build build
 ./build/audio_effect_gui          # Linux
 # build\Debug\audio_effect_gui.exe  # Windows (MSVC)
+./build/graph_tests               # unit tests
 ```
 
-### Commands (Makefile — Linux convenience)
-
-```bash
-make
-./audio_effect_gui
-make test
-```
-
-On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** restores the built-in default and rewrites `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
-
-```bash
-make clean
-```
+On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** restores the built-in default and rewrites `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
