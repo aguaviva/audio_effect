@@ -137,4 +137,4 @@ cmake --build build-web
 python3 -m http.server -d build-web 8080   # open http://localhost:8080/audio_effect_gui.html
 ```
 
-`assets/` is preloaded into the page, so the bundled patches and WAVs load as on desktop. There are no threads on the web: the playback callback renders each block itself. The browser starts audio on the first click. The microphone is only opened when a patch uses Audio Input. Load/Save Graph, the WAV picker and WAV Recorder still use the in-page file system, so they can't reach your own files yet.
+Only `assets/patches/` is preloaded into the page; WAVs are not bundled. A patch's WAV Player stays silent until you press its **...** button and upload a WAV from your machine. The file is copied into the page's in-memory file system under `/uploads/`. There are no threads on the web: the playback callback renders each block itself. The browser starts audio on the first click. The microphone is only opened when a patch uses Audio Input. Load/Save Graph and WAV Recorder still use the in-page file system, so they can't reach your own files yet.

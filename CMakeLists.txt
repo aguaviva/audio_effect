@@ -88,12 +88,13 @@ else()
 endif()
 
 if(EMSCRIPTEN)
-  # Assets are preloaded at /assets and the working directory is /, so relative paths resolve.
+  # Patches are preloaded under /assets and the working directory is /, so relative paths
+  # resolve. WAVs are not bundled: the WAV Player uploads them from the user's machine.
   set(EMSCRIPTEN_FLAGS --use-port=contrib.glfw3)
   target_compile_options(audio_effect_gui PRIVATE ${EMSCRIPTEN_FLAGS})
   target_link_options(audio_effect_gui PRIVATE ${EMSCRIPTEN_FLAGS}
     -sUSE_WEBGL2=1 -sMAX_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1
-    --preload-file ${CMAKE_SOURCE_DIR}/assets@/assets
+    --preload-file ${CMAKE_SOURCE_DIR}/assets/patches@/assets/patches
     --shell-file ${CMAKE_SOURCE_DIR}/third_party/imgui/examples/libs/emscripten/shell_minimal.html)
   set_target_properties(audio_effect_gui PROPERTIES SUFFIX ".html")
   set_source_files_properties(third_party/miniaudio/miniaudio.c PROPERTIES
