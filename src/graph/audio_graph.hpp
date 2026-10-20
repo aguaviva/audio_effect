@@ -71,7 +71,10 @@ public:
     void clear();
     std::shared_ptr<const CompiledGraph> compile() const;
 
+    // UI thread. Replaced snapshots are freed here, never on the audio thread, once the
+    // audio thread has let go of them.
     void publish(std::shared_ptr<const CompiledGraph> compiled);
+    // Audio thread.
     std::shared_ptr<const CompiledGraph> latest() const;
 
 private:
@@ -80,4 +83,5 @@ private:
 
     mutable std::mutex publish_mutex_;
     std::shared_ptr<const CompiledGraph> published_;
+    std::vector<std::shared_ptr<const CompiledGraph>> retired_; // UI thread only
 };

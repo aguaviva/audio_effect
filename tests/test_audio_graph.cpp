@@ -125,3 +125,21 @@ TEST(audio_graph_default_patch_has_mixer_and_output) {
     CHECK(compiled);
     CHECK(compiled->valid);
 }
+
+TEST(audio_graph_frees_deleted_modules_on_publishing_thread) {
+    AudioGraph g;
+    const int pre = g.add_node("preamp", 0, 0);
+    std::weak_ptr<Module> module = g.find_node(pre)->module;
+    g.publish(g.compile());
+    auto audio_snapshot = g.latest(); // the audio thread is mid-block on this snapshot
+
+    g.remove_node(pre);
+    g.publish(g.compile());
+    CHECK(!module.expired());
+
+    audio_snapshot.reset(); // the audio thread moves on; it must not run the destructor
+    CHECK(!module.expired());
+
+    g.publish(g.compile()); // the next UI-thread publish frees it
+    CHECK(module.expired());
+}

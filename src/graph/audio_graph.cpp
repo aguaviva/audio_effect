@@ -7,6 +7,7 @@
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 template <typename T>
 static int next_free_id(const std::vector<T>& items) {
@@ -205,8 +206,19 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
 }
 
 void AudioGraph::publish(std::shared_ptr<const CompiledGraph> compiled) {
-    std::lock_guard<std::mutex> lock(publish_mutex_);
-    published_ = std::move(compiled);
+    std::shared_ptr<const CompiledGraph> old;
+    {
+        std::lock_guard<std::mutex> lock(publish_mutex_);
+        old = std::exchange(published_, std::move(compiled));
+    }
+    if (old) {
+        retired_.push_back(std::move(old));
+    }
+    // latest() only hands out published_, so a retired snapshot held only here can never
+    // be picked up again and its modules are destroyed on this thread.
+    retired_.erase(std::remove_if(retired_.begin(), retired_.end(),
+                                  [](const auto& g) { return g.use_count() == 1; }),
+                   retired_.end());
 }
 
 std::shared_ptr<const CompiledGraph> AudioGraph::latest() const {
