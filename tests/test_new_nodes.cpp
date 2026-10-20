@@ -19,6 +19,13 @@
 #include <thread>
 #include <vector>
 
+// Runs a single-input module on block, feeding it a copy of block as its input link.
+static void run_effect(Module& module, std::vector<float>& block) {
+    const std::vector<float> in = block;
+    const float* inputs[] = {in.data()};
+    module.process(inputs, 1, block.data(), block.size(), 48000.0f);
+}
+
 TEST(new_node_types_parse_and_labels) {
     NodeType t = NodeType::output;
     CHECK(try_parse_node_type("noise_gate", t));
@@ -66,12 +73,7 @@ TEST(mixer_dsp_averages_sources) {
     std::vector<float> b(8, 0.6f);
     std::vector<float> out(8, -1.0f);
     const float* sources[] = {a.data(), b.data()};
-    ProcessContext ctx;
-    ctx.buffer = out.data();
-    ctx.num_samples = out.size();
-    ctx.inputs = sources;
-    ctx.input_count = 2;
-    mixer.process(ctx);
+    mixer.process(sources, 2, out.data(), out.size(), 48000.0f);
     CHECK_NEAR(out[0], 0.4f, 1e-5f);
     CHECK_NEAR(out[7], 0.4f, 1e-5f);
 }
@@ -95,14 +97,35 @@ TEST(mixer_gains_save_load_and_scale) {
     const float* sources[] = {a.data(), b.data()};
     mixer.gain[0] = 1.0f;
     mixer.gain[1] = 0.0f;
-    ProcessContext ctx;
-    ctx.buffer = out.data();
-    ctx.num_samples = out.size();
-    ctx.inputs = sources;
-    ctx.input_count = 2;
-    mixer.process(ctx);
+    mixer.process(sources, 2, out.data(), out.size(), 48000.0f);
     // average of (1*1 + 1*0) / 2 = 0.5
     CHECK_NEAR(out[0], 0.5f, 1e-5f);
+}
+
+TEST(mixer_mute_skips_input_and_persists) {
+    Mixer mixer;
+    mixer.input_muted[1] = true;
+    Mixer loaded;
+    CHECK(loaded.load(mixer.save()));
+    CHECK(!loaded.input_muted[0]);
+    CHECK(loaded.input_muted[1]);
+
+    std::vector<float> a(4, 0.2f);
+    std::vector<float> b(4, 0.6f);
+    std::vector<float> out(4, 0.0f);
+    const float* sources[] = {a.data(), b.data()};
+    loaded.process(sources, 2, out.data(), out.size(), 48000.0f);
+    CHECK_NEAR(out[0], 0.2f, 1e-5f);
+}
+
+TEST(effect_with_unconnected_input_outputs_silence) {
+    EqThreeBand eq;
+    std::vector<float> out(16, 1.0f);
+    const float* inputs[] = {nullptr};
+    eq.process(inputs, 1, out.data(), out.size(), 48000.0f);
+    for (float s : out) {
+        CHECK_NEAR(s, 0.0f, 1e-6f);
+    }
 }
 
 TEST(noise_gate_silences_below_threshold) {
@@ -111,7 +134,7 @@ TEST(noise_gate_silences_below_threshold) {
     gate.threshold_db = -20.0f;
     gate.attack_ms = 1.0f;
     gate.release_ms = 1.0f;
-    gate.process(quiet.data(), quiet.size(), 48000.0f);
+    run_effect(gate, quiet);
     float max_abs = 0.0f;
     for (float s : quiet) {
         max_abs = std::max(max_abs, std::fabs(s));
@@ -119,13 +142,13 @@ TEST(noise_gate_silences_below_threshold) {
     CHECK(max_abs < 0.0002f);
 }
 
-TEST(eq_three_band_runs_in_place) {
+TEST(eq_three_band_runs) {
     EqThreeBand eq;
     std::vector<float> block(128, 0.25f);
     eq.low_db = 3.0f;
     eq.mid_db = -3.0f;
     eq.high_db = 2.0f;
-    eq.process(block.data(), block.size(), 48000.0f);
+    run_effect(eq, block);
     CHECK(std::isfinite(block[0]));
 }
 
@@ -139,7 +162,7 @@ TEST(reverb_mix_changes_output) {
     rev.room = 0.9f;
     rev.damping = 0.2f;
     rev.mix = 1.0f;
-    rev.process(block.data(), block.size(), 48000.0f);
+    run_effect(rev, block);
     float energy = 0.0f;
     for (size_t i = 512; i < block.size(); ++i) {
         energy += block[i] * block[i];
@@ -237,7 +260,7 @@ TEST(drive_pedal_amount_zero_is_clean_for_every_model) {
         pedal.amount = 0.0f;
         pedal.tone = 1.0f;
         std::vector<float> block(4096, 0.01f);
-        pedal.process(block.data(), block.size(), 48000.0f);
+        run_effect(pedal, block);
         float peak = 0.0f;
         bool finite = true;
         for (float s : block) {

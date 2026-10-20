@@ -11,6 +11,8 @@ std::string Mixer::save() const {
     for (int i = 0; i < kChannels; ++i) {
         std::snprintf(key, sizeof(key), "gain_%d", i);
         module_json::write_float(out, key, gain[static_cast<size_t>(i)]);
+        std::snprintf(key, sizeof(key), "muted_%d", i);
+        module_json::write_bool(out, key, input_muted[i]);
     }
     out += '}';
     return out;
@@ -23,6 +25,8 @@ bool Mixer::load(const std::string& json) {
         float& g = gain[static_cast<size_t>(i)];
         module_json::read(json, key, g);
         g = std::clamp(g, 0.0f, 2.0f);
+        std::snprintf(key, sizeof(key), "muted_%d", i);
+        module_json::read(json, key, input_muted[i]);
     }
     return true;
 }
@@ -56,35 +60,27 @@ bool Mixer::render() {
     return changed;
 }
 
-void Mixer::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    std::fill(ctx.buffer, ctx.buffer + ctx.num_samples, 0.0f);
-    if (ctx.inputs == nullptr || ctx.input_count == 0) {
-        return;
-    }
+void Mixer::process(const float* const* inputs, int input_count, float* output,
+                    size_t sample_count, float /*sample_rate*/) {
+    std::fill(output, output + sample_count, 0.0f);
 
     size_t connected = 0;
-    for (size_t s = 0; s < ctx.input_count && s < static_cast<size_t>(kChannels); ++s) {
-        if (ctx.input_muted && input_muted[s]) {
+    for (int s = 0; s < input_count && s < kChannels; ++s) {
+        const float* src = inputs[s];
+        if (src == nullptr || input_muted[s]) {
             continue;
         }
-        const float* src = ctx.inputs[s];
-        if (src == nullptr) {
-            continue;
-        }
-        const float g = gain[s];
-        for (size_t i = 0; i < ctx.num_samples; ++i) {
-            ctx.buffer[i] += src[i] * g;
+        const float g = gain[static_cast<size_t>(s)];
+        for (size_t i = 0; i < sample_count; ++i) {
+            output[i] += src[i] * g;
         }
         ++connected;
     }
 
     if (connected > 0) {
         const float scale = 1.0f / static_cast<float>(connected);
-        for (size_t i = 0; i < ctx.num_samples; ++i) {
-            ctx.buffer[i] *= scale;
+        for (size_t i = 0; i < sample_count; ++i) {
+            output[i] *= scale;
         }
     }
 }

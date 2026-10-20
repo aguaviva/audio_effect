@@ -81,7 +81,9 @@ void SimpleReverb::ensure_buffers(float sample_rate) {
     }
 }
 
-void SimpleReverb::process(float* interleaved, size_t sample_count, float sample_rate) {
+void SimpleReverb::process(const float* const* inputs, int input_count, float* interleaved,
+                           size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
@@ -142,11 +144,4 @@ bool SimpleReverb::load(const std::string& json) {
     module_json::read(json, "damping", damping);
     module_json::read(json, "mix", mix);
     return true;
-}
-
-void SimpleReverb::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

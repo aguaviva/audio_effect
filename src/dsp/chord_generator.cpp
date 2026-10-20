@@ -29,16 +29,14 @@ bool ChordGenerator::render() {
     index = std::clamp(index, 0, kChordCount - 1);
     return false;
 }
-void ChordGenerator::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
+void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+                             size_t sample_count, float sample_rate) {
+    if (scratch_.size() != sample_count) {
+        scratch_.assign(sample_count, 0);
     }
-    if (scratch_.size() != ctx.num_samples) {
-        scratch_.assign(ctx.num_samples, 0);
-    }
-    chord_.render(index, scratch_.data(), ctx.num_samples / 2, 2,
-                  static_cast<uint32_t>(ctx.sample_rate));
-    for (size_t i = 0; i < ctx.num_samples; ++i) {
-        ctx.buffer[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
+    chord_.render(index, scratch_.data(), sample_count / 2, 2,
+                  static_cast<uint32_t>(sample_rate));
+    for (size_t i = 0; i < sample_count; ++i) {
+        output[i] = static_cast<float>(scratch_[i]) / 2147483648.0f;
     }
 }

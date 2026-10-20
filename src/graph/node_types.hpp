@@ -5,9 +5,9 @@
 // Patchable node kinds. Sources, effects, sinks, and visualizers may be wired
 // in any legal topology (fan-in / fan-out); nothing here implies a fixed chain.
 //
-// Buffer contract: every graph edge carries one audio block of a single global
-// size. Sources write that size; effects/visualizers read/write that size in
-// place (visualizers are pass-through); sinks consume that size.
+// Buffer contract: every link owns one audio block of a single global size. A node
+// reads one link per input pin (fan-in goes through a Mixer) and writes one output
+// block, which is copied into each of its outgoing links.
 //
 // State: each node type owns a param struct in NodeState (named JSON serialize).
 enum class NodeType : int {
@@ -140,10 +140,6 @@ inline bool node_supports_bypass(NodeType type) {
 
 inline bool node_is_dry_wet(NodeType type) {
     return type == NodeType::dry_wet_mix;
-}
-
-inline bool node_uses_exclusive_input_slots(NodeType type) {
-    return node_is_mixer(type) || node_is_dry_wet(type);
 }
 
 // Pin IDs: node_id * 100 + code. code 0 = output; code 1+N = input slot N.

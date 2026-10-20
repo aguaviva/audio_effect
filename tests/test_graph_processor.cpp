@@ -197,3 +197,24 @@ TEST(graph_processor_reports_no_output_without_output_node) {
     // The pipeline turns this into silence rather than passing the raw input through.
     CHECK(!compiled->valid || !proc.process(*compiled, live.data(), output.data(), block));
 }
+
+TEST(graph_processor_fan_out_feeds_every_link) {
+    AudioGraph g;
+    g.clear();
+    const int in = g.add_node(NodeType::audio_input, 0, 0);
+    const int pre = g.add_node(NodeType::preamp, 0, 0);
+    const int out_a = g.add_node(NodeType::output, 0, 0);
+    const int out_b = g.add_node(NodeType::output, 0, 0);
+    CHECK(g.add_link(in, pre));
+    CHECK(g.add_link(pre, out_a));
+    CHECK(g.add_link(pre, out_b));
+
+    constexpr size_t block = 16;
+    std::vector<int32_t> live(block, static_cast<int32_t>(0.25 * 2147483648.0));
+    std::vector<float> output(block, 0.0f);
+    GraphProcessor proc(48000.0f);
+    auto compiled = compile_chain(g);
+    CHECK(proc.process(*compiled, live.data(), output.data(), block));
+    // Both Output nodes receive the preamp's block and are summed into the device.
+    CHECK_NEAR(output[0], 0.5f, 1e-5f);
+}

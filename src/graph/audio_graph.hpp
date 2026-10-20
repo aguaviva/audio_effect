@@ -64,10 +64,11 @@ private:
     int to_slot_ = 0; // destination input slot (mixers have several)
 };
 
-// Snapshot consumed by the audio thread.
+// Snapshot consumed by the audio thread. Every link owns one audio buffer, numbered
+// 0..link_count-1: its source node writes it and its destination node reads it.
 struct CompiledGraph {
     struct WiredInput {
-        int from_node = -1;
+        int link = -1;
         int to_slot = 0;
     };
 
@@ -93,12 +94,11 @@ struct CompiledGraph {
         NodeType type_ = NodeType::preamp;
         NodeState state_{};
         std::vector<WiredInput> inputs_;
-        std::vector<int> outputs_;
+        std::vector<int> outputs_; // links this node writes
     };
 
     std::vector<Node> order; // topological order
-    std::unordered_map<int, size_t> index_by_id;
-    int output_node_id = -1;
+    size_t link_count = 0;
     bool valid = false;
 };
 

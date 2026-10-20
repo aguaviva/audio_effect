@@ -25,7 +25,6 @@
 #include "dsp/white_noise.hpp"
 #include "node_types.hpp"
 
-#include <array>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -66,11 +65,6 @@ std::string name_for_type(NodeType type);
 // audio thread processes it, so settings never need to be copied between them.
 struct NodeState {
     bool bypassed = false;
-    std::array<bool, kMaxMixerInputs> input_muted{};
-
-    bool is_input_muted(int slot) const {
-        return slot >= 0 && slot < kMaxMixerInputs && input_muted[static_cast<size_t>(slot)];
-    }
 
     static NodeState make(NodeType type);
 

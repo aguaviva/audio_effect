@@ -7,7 +7,9 @@
 
 namespace guitar_pedals {
 
-void DrivePedal::process(float* samples, size_t sample_count, float sample_rate) {
+void DrivePedal::process(const float* const* inputs, int input_count, float* samples,
+                         size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, samples, sample_count);
     const DriveModel mdl = static_cast<DriveModel>(std::clamp(model, 0, 2));
     // Pre-gain is 1 + amount so amount 0 is a clean-ish unity stage. A raw gain of 0
     // made the tube-screamer normalization divide 0 by 0 and silenced RAT / Big Muff.
@@ -93,10 +95,3 @@ bool DrivePedal::load(const std::string& json) {
 }
 
 } // namespace guitar_pedals
-
-void guitar_pedals::DrivePedal::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
-}

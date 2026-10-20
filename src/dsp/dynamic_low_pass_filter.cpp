@@ -4,7 +4,9 @@
 
 #include "imgui.h"
 
-void DynamicLowPassFilter::process(float* samples, size_t num_samples, float sample_rate) {
+void DynamicLowPassFilter::process(const float* const* inputs, int input_count, float* samples,
+                                   size_t num_samples, float sample_rate) {
+    copy_input(inputs, input_count, 0, samples, num_samples);
     float dt = 1.0f / sample_rate;
     float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff_hz);
     float alpha = dt / (rc + dt);
@@ -64,11 +66,4 @@ bool DynamicLowPassFilter::load(const std::string& json) {
     module_json::read(json, "cutoff_hz", cutoff_hz);
     module_json::read(json, "selected_preset", selected_preset);
     return true;
-}
-
-void DynamicLowPassFilter::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

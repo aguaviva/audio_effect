@@ -27,16 +27,14 @@ bool DryWetMix::render() {
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##dw_mix", &mix, 0.0f, 1.0f, "%.2f");
 }
-void DryWetMix::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr) {
-        return;
-    }
-    const float* dry = (ctx.input_count > 0 && ctx.inputs) ? ctx.inputs[0] : nullptr;
-    const float* wet = (ctx.input_count > 1 && ctx.inputs) ? ctx.inputs[1] : nullptr;
+void DryWetMix::process(const float* const* inputs, int input_count, float* output,
+                        size_t sample_count, float /*sample_rate*/) {
+    const float* dry = input_count > 0 ? inputs[0] : nullptr;
+    const float* wet = input_count > 1 ? inputs[1] : nullptr;
     const float wet_amt = std::clamp(mix, 0.0f, 1.0f);
-    for (size_t i = 0; i < ctx.num_samples; ++i) {
+    for (size_t i = 0; i < sample_count; ++i) {
         const float d = dry ? dry[i] : 0.0f;
         const float w = wet ? wet[i] : 0.0f;
-        ctx.buffer[i] = d * (1.0f - wet_amt) + w * wet_amt;
+        output[i] = d * (1.0f - wet_amt) + w * wet_amt;
     }
 }

@@ -721,7 +721,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             node_editor_publish(graph);
             state.status_message = "Linked nodes";
         } else {
-            state.status_message = "Link rejected (cycle, bad pins, or duplicate)";
+            state.status_message = "Link rejected (cycle, bad pins, or input already connected)";
         }
     }
 

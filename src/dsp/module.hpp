@@ -2,6 +2,7 @@
 
 #include "module_json.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -17,37 +18,25 @@ public:
     virtual std::shared_ptr<const WavClip> load_wav(const std::string& path) = 0;
     virtual std::shared_ptr<const WavClip> fallback_wav() const = 0;
     virtual const std::string& record_path() const = 0;
+    virtual const int32_t* live_input() const = 0;
     virtual void analyze(int node_id, const std::string& module_name, const float* block,
                          size_t num_samples, float display_gain, float vu_decay) = 0;
 };
 
-// Per-block audio context passed to Module::process.
-struct ProcessContext {
-    float* buffer = nullptr; // node block (filled by sources / in-place for effects)
-    size_t num_samples = 0;
-    float sample_rate = 0.0f;
-
-    // Wired inputs in slot order (nullptr = disconnected). Mixer / dry-wet read these.
-    const float* const* inputs = nullptr;
-    size_t input_count = 0;
-    const bool* input_muted = nullptr; // size >= input slots used; may be null
-
-    const int32_t* live_pcm = nullptr; // capture source
-    int node_id = -1;
-    GraphHost* host = nullptr;
-};
+// Copies inputs[slot] into output, or silence when that pin is not connected.
+inline void copy_input(const float* const* inputs, int input_count, int slot, float* output,
+                       size_t sample_count) {
+    const float* in = slot < input_count ? inputs[slot] : nullptr;
+    if (in) {
+        std::copy(in, in + sample_count, output);
+    } else {
+        std::fill(output, output + sample_count, 0.0f);
+    }
+}
 
 // Common graph-module interface. Controllable fields live on the concrete class.
 class Module {
 public:
-    enum class Role {
-        source,   // fills buffer; ignores inputs
-        effect,   // in-place on buffer (graph pre-sums a single input)
-        multi_in, // reads ctx.inputs (mixer / dry-wet); writes buffer
-        sink,     // consumes buffer (output / recorder); pass-through OK
-        visualizer // pass-through analyze; buffer unchanged
-    };
-
     virtual ~Module() = default;
 
     virtual std::string name() const = 0;
@@ -56,13 +45,19 @@ public:
     virtual bool load(const std::string& json) = 0;
     virtual bool render() = 0;
 
-    virtual Role role() const = 0;
-    virtual void process(ProcessContext& ctx) = 0;
+    // inputs[pin] is the buffer of the link wired into that pin, or nullptr when the pin is
+    // unconnected. output is never null and must be fully written.
+    virtual void process(const float* const* inputs, int input_count, float* output,
+                         size_t sample_count, float sample_rate) = 0;
 
     virtual void get_inputs(int *count, const char* const** str) { static const char* input_names[] = {"in"}; *count=1; *str=input_names; }    
     virtual void get_outputs(int *count, const char* const** str) { static const char* output_names[] = {"out"}; *count=1; *str=output_names; }    
 
     virtual bool supports_bypass() const { return true; }
     virtual bool is_output_sink() const { return false; }
-    bool is_source() const { return role() == Role::source; }
+
+protected:
+    GraphHost* host_ = nullptr;
+    int node_id_ = -1;
+    friend class GraphProcessor;
 };

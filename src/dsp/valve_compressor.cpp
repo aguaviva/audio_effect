@@ -5,7 +5,9 @@
 
 #include "imgui.h"
 
-void ValveCompressor::process(float* samples, size_t num_samples, float sample_rate) {
+void ValveCompressor::process(const float* const* inputs, int input_count, float* samples,
+                              size_t num_samples, float sample_rate) {
+    copy_input(inputs, input_count, 0, samples, num_samples);
     float threshold = std::pow(10.0f, threshold_db / 20.0f);
     float attack_coefficient = std::exp(-1.0f / (sample_rate * attack_ms * 0.001f));
     float release_coefficient = std::exp(-1.0f / (sample_rate * release_ms * 0.001f));
@@ -148,11 +150,4 @@ bool ValveCompressor::load(const std::string& json) {
     module_json::read(json, "makeup_db", makeup_db);
     module_json::read(json, "selected_preset", selected_preset);
     return true;
-}
-
-void ValveCompressor::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

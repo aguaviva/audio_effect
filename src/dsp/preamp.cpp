@@ -4,7 +4,9 @@
 
 #include "imgui.h"
 
-void Preamp::process(float* samples, size_t num_samples) {
+void Preamp::process(const float* const* inputs, int input_count, float* samples,
+                     size_t num_samples, float /*sample_rate*/) {
+    copy_input(inputs, input_count, 0, samples, num_samples);
     float gain = std::pow(10.0f, gain_db / 20.0f);
     for (size_t i = 0; i < num_samples; ++i) {
         samples[i] *= gain;
@@ -50,11 +52,4 @@ bool Preamp::load(const std::string& json) {
     module_json::read(json, "gain_db", gain_db);
     module_json::read(json, "selected_preset", selected_preset);
     return true;
-}
-
-void Preamp::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples);
 }

@@ -363,12 +363,22 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     }
     (void)have_links;
 
-    // Validate link endpoints exist; drop broken ones rather than failing hard.
+    // Drop links to missing nodes or pins; a second link into the same pin is an error
+    // because every input pin reads exactly one link buffer.
     std::vector<GraphLink> valid_links;
+    std::unordered_set<int> used_pins;
     for (const auto& link : loaded.links()) {
-        if (loaded.find_node(link.from_node()) && loaded.find_node(link.to_node())) {
-            valid_links.push_back(link);
+        const GraphNode* to = loaded.find_node(link.to_node());
+        if (!loaded.find_node(link.from_node()) || !to || link.to_slot() < 0 ||
+            link.to_slot() >= node_input_slot_limit(to->type())) {
+            continue;
         }
+        if (!used_pins.insert(input_pin_id(link.to_node(), link.to_slot())).second) {
+            error = "Link " + std::to_string(link.id()) + " connects to an input pin that is "
+                    "already connected";
+            return false;
+        }
+        valid_links.push_back(link);
     }
     loaded.links() = std::move(valid_links);
 

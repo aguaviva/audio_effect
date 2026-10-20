@@ -10,7 +10,9 @@ void NoiseGate::reset() {
     gain_ = 0.0f;
 }
 
-void NoiseGate::process(float* interleaved, size_t sample_count, float sample_rate) {
+void NoiseGate::process(const float* const* inputs, int input_count, float* interleaved,
+                        size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
@@ -67,11 +69,4 @@ bool NoiseGate::load(const std::string& json) {
     module_json::read(json, "attack_ms", attack_ms);
     module_json::read(json, "release_ms", release_ms);
     return true;
-}
-
-void NoiseGate::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

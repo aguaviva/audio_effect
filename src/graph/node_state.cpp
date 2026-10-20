@@ -104,63 +104,10 @@ bool NodeState::load_by_module_name(const std::string& module_name, const std::s
 std::string NodeState::write_params() const {
     std::string out = "{";
     module_json::write_bool(out, "bypassed", bypassed);
-    bool any_muted = false;
-    for (bool m : input_muted) {
-        if (m) {
-            any_muted = true;
-            break;
-        }
-    }
-    if (any_muted) {
-        module_json::append_comma(out);
-        out += "\"muted\":[";
-        for (size_t i = 0; i < input_muted.size(); ++i) {
-            if (i > 0) {
-                out.push_back(',');
-            }
-            out += input_muted[i] ? "true" : "false";
-        }
-        out += ']';
-    }
     module_json::append_object_members(out, module_->save());
     out += '}';
     return out;
 }
-
-namespace {
-
-// Parses a JSON array of numbers / booleans, calling fn(index, value) per element.
-template <typename Fn>
-bool parse_scalar_array(const std::string& body, size_t& j, Fn&& fn) {
-    if (!module_json::expect_char(body, j, '[')) {
-        return false;
-    }
-    for (int idx = 0;; ++idx) {
-        if (!module_json::skip_ws(body, j)) {
-            return false;
-        }
-        if (body[j] == ']') {
-            ++j;
-            return true;
-        }
-        bool flag = false;
-        double num = 0.0;
-        if (module_json::parse_bool_value(body, j, flag)) {
-            num = flag ? 1.0 : 0.0;
-        } else if (!module_json::parse_number_value(body, j, num)) {
-            return false;
-        }
-        fn(idx, num);
-        if (!module_json::skip_ws(body, j)) {
-            return false;
-        }
-        if (body[j] == ',') {
-            ++j;
-        }
-    }
-}
-
-} // namespace
 
 bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
     *this = make(type);
@@ -187,13 +134,6 @@ bool NodeState::read_params(NodeType type, const std::string& text, size_t& i) {
                 }
                 bypassed = num != 0.0;
                 return true;
-            }
-            if (key == "muted") {
-                return parse_scalar_array(body, j, [&](int idx, double v) {
-                    if (idx < kMaxMixerInputs) {
-                        input_muted[static_cast<size_t>(idx)] = v != 0.0;
-                    }
-                });
             }
             return module_json::skip_value(body, j);
         });

@@ -8,7 +8,15 @@
 EchoEffect::EchoEffect(size_t max_delay_samples)
     : delay_left_(max_delay_samples, 0.0f), delay_right_(max_delay_samples, 0.0f) {}
 
-void EchoEffect::process(float* samples, size_t sample_count, float sample_rate) {
+void EchoEffect::process(const float* const* inputs, int input_count, float* samples,
+                         size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, samples, sample_count);
+    const size_t needed = static_cast<size_t>(std::max(1.0f, sample_rate)) + 1;
+    if (delay_left_.size() < needed) {
+        delay_left_.assign(needed, 0.0f);
+        delay_right_.assign(needed, 0.0f);
+        write_index_ = 0;
+    }
     size_t delay_samples = static_cast<size_t>(delay_ms * 0.001f * sample_rate);
     delay_samples = std::clamp<size_t>(delay_samples, 1, delay_left_.size() - 1);
     float fb = std::clamp(feedback, 0.0f, 0.9f);
@@ -96,17 +104,4 @@ bool EchoEffect::load(const std::string& json) {
     module_json::read(json, "mix", mix);
     module_json::read(json, "selected_preset", selected_preset);
     return true;
-}
-
-void EchoEffect::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    const size_t needed = static_cast<size_t>(std::max(1.0f, ctx.sample_rate)) + 1;
-    if (delay_left_.size() < needed) {
-        delay_left_.assign(needed, 0.0f);
-        delay_right_.assign(needed, 0.0f);
-        write_index_ = 0;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

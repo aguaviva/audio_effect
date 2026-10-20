@@ -20,8 +20,10 @@ bool Oscilloscope::render() {
     //return ImGui::SliderFloat("##scope_gain", &display_gain, 0.25f, 4.0f, "%.2f");
     return true;
 }
-void Oscilloscope::process(ProcessContext& ctx) {
-    if (ctx.host) {
-        ctx.host->analyze(ctx.node_id, name(), ctx.buffer, ctx.num_samples, display_gain, 0.85f);
+void Oscilloscope::process(const float* const* inputs, int input_count, float* output,
+                           size_t sample_count, float /*sample_rate*/) {
+    copy_input(inputs, input_count, 0, output, sample_count);
+    if (host_) {
+        host_->analyze(node_id_, name(), output, sample_count, display_gain, 0.85f);
     }
 }

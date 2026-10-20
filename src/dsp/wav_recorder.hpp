@@ -48,11 +48,11 @@ public:
     bool armed = false;
 
     std::string name() const override { return "wav_recorder"; }
-    Role role() const override { return Role::sink; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
-    void process(ProcessContext& ctx) override;
+    void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
+                 float sample_rate) override;
 
 private:
     std::shared_ptr<WavRecorderEngine> engine_;

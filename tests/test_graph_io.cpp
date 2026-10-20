@@ -105,8 +105,20 @@ TEST(graph_io_new_ids_follow_largest_loaded_id) {
     CHECK(graph_io::deserialize(g, text, error));
     const int added = g.add_node(NodeType::preamp, 0, 0);
     CHECK_EQ(added, 10);
-    CHECK(g.add_link(added, 9));
+    CHECK(g.add_link(added, 7));
     CHECK_EQ(g.links().back().id(), 5);
+}
+
+TEST(graph_io_rejects_two_links_into_one_input_pin) {
+    const char* text = R"({"version":2,"nodes":[
+        {"id":1,"type":"preamp","x":0,"y":0},
+        {"id":2,"type":"preamp","x":0,"y":0},
+        {"id":3,"type":"output","x":0,"y":0}],
+        "links":[{"id":1,"from":1,"to":3,"to_slot":0},{"id":2,"from":2,"to":3,"to_slot":0}]})";
+    AudioGraph g;
+    std::string error;
+    CHECK(!graph_io::deserialize(g, text, error));
+    CHECK(error.find("already connected") != std::string::npos);
 }
 
 TEST(graph_io_params_may_precede_type) {

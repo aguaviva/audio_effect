@@ -84,14 +84,9 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
         }
     }
 
+    // One link per input pin; fan-in goes through a Mixer.
     for (const auto& link : links_) {
-        if (link.from_node() == from_node && link.to_node() == to_node &&
-            link.to_slot() == to_slot) {
-            return false; // duplicate edge into the same slot
-        }
-        // Exclusive slots (mixer / dry-wet): one wire per input.
-        if (node_uses_exclusive_input_slots(to->type()) && link.to_node() == to_node &&
-            link.to_slot() == to_slot) {
+        if (link.to_node() == to_node && link.to_slot() == to_slot) {
             return false;
         }
     }
@@ -242,21 +237,27 @@ void AudioGraph::reset_to_default_chain() {
 std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     auto compiled = std::make_shared<CompiledGraph>();
 
-    std::unordered_map<int, std::vector<int>> outs;
+    std::unordered_map<int, std::vector<int>> next_nodes;
+    std::unordered_map<int, std::vector<int>> out_links;
     std::unordered_map<int, std::vector<CompiledGraph::WiredInput>> ins;
     std::unordered_map<int, int> indegree;
 
     for (const auto& node : nodes_) {
         indegree[node.id()] = 0;
-        outs[node.id()] = {};
+        next_nodes[node.id()] = {};
+        out_links[node.id()] = {};
         ins[node.id()] = {};
     }
     for (const auto& link : links_) {
-        if (!indegree.count(link.from_node()) || !indegree.count(link.to_node())) {
+        const GraphNode* to = find_node(link.to_node());
+        if (!indegree.count(link.from_node()) || !to || link.to_slot() < 0 ||
+            link.to_slot() >= node_input_slot_limit(to->type())) {
             continue;
         }
-        outs[link.from_node()].push_back(link.to_node());
-        ins[link.to_node()].push_back({link.from_node(), link.to_slot()});
+        const int buffer = static_cast<int>(compiled->link_count++);
+        next_nodes[link.from_node()].push_back(link.to_node());
+        out_links[link.from_node()].push_back(buffer);
+        ins[link.to_node()].push_back({buffer, link.to_slot()});
         indegree[link.to_node()] += 1;
     }
 
@@ -274,7 +275,7 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
         int id = ready.front();
         ready.pop();
         order_ids.push_back(id);
-        for (int next : outs[id]) {
+        for (int next : next_nodes[id]) {
             if (--deg[next] == 0) {
                 ready.push(next);
             }
@@ -297,12 +298,8 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
         node.set_type(src->type());
         node.set_state(src->state());
         node.inputs() = ins[id];
-        node.outputs() = outs[id];
-        compiled->index_by_id[id] = compiled->order.size();
+        node.outputs() = out_links[id];
         compiled->order.push_back(std::move(node));
-        if (src->type() == NodeType::output) {
-            compiled->output_node_id = id;
-        }
     }
     compiled->valid = true;
     return compiled;

@@ -90,7 +90,9 @@ void EqThreeBand::design(float sample_rate, float low_gain_db, float mid_gain_db
     high_r_.a1 = high_l_.a1; high_r_.a2 = high_l_.a2;
 }
 
-void EqThreeBand::process(float* interleaved, size_t sample_count, float sample_rate) {
+void EqThreeBand::process(const float* const* inputs, int input_count, float* interleaved,
+                          size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
@@ -143,11 +145,4 @@ bool EqThreeBand::load(const std::string& json) {
     module_json::read(json, "mid_db", mid_db);
     module_json::read(json, "high_db", high_db);
     return true;
-}
-
-void EqThreeBand::process(ProcessContext& ctx) {
-    if (ctx.buffer == nullptr || ctx.num_samples == 0) {
-        return;
-    }
-    process(ctx.buffer, ctx.num_samples, ctx.sample_rate);
 }

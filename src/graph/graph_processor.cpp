@@ -3,21 +3,9 @@
 #include "node_types.hpp"
 
 #include <algorithm>
-#include <cstring>
 
 GraphProcessor::GraphProcessor(float sample_rate)
     : sample_rate_(sample_rate) {}
-
-void GraphProcessor::set_block_size(size_t block_size) {
-    if (block_size_ == block_size) {
-        return;
-    }
-    block_size_ = block_size;
-    for (auto& [id, buffer] : buffers_) {
-        (void)id;
-        buffer.assign(block_size_, 0.0f);
-    }
-}
 
 void GraphProcessor::set_loaded_wav(std::shared_ptr<const WavClip> clip) {
     wav_clip_ = std::move(clip);
@@ -53,78 +41,6 @@ void GraphProcessor::analyze(int node_id, const std::string& module_name, const 
                              vu_decay);
 }
 
-void GraphProcessor::ensure_buffers(const CompiledGraph& graph) {
-    assert(block_size_ > 0 && "graph block size must be set before process");
-
-    for (const auto& node : graph.order) {
-        auto& buffer = buffers_[node.id()];
-        if (buffer.size() != block_size_) {
-            buffer.assign(block_size_, 0.0f);
-        }
-    }
-    if (buffers_.size() == graph.order.size()) {
-        return;
-    }
-    for (auto it = buffers_.begin(); it != buffers_.end();) {
-        if (!graph.index_by_id.count(it->first)) {
-            it = buffers_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
-void GraphProcessor::gather_inputs(const CompiledGraph::Node& node,
-                                   const std::unordered_map<int, std::vector<float>*>& buffers,
-                                   const float** out_inputs, size_t max_inputs,
-                                   size_t& out_count) const {
-    out_count = 0;
-    // Slot-indexed for mixer / dry-wet; append order for simple effects.
-    const bool slotted = node.state().module().role() == Module::Role::multi_in;
-    if (slotted) {
-        for (size_t i = 0; i < max_inputs; ++i) {
-            out_inputs[i] = nullptr;
-        }
-        out_count = max_inputs;
-        for (const auto& in : node.inputs()) {
-            if (in.to_slot < 0 || static_cast<size_t>(in.to_slot) >= max_inputs) {
-                continue;
-            }
-            auto it = buffers.find(in.from_node);
-            if (it == buffers.end() || !it->second || it->second->size() != block_size_) {
-                continue;
-            }
-            out_inputs[static_cast<size_t>(in.to_slot)] = it->second->data();
-        }
-        return;
-    }
-
-    for (const auto& in : node.inputs()) {
-        if (out_count >= max_inputs) {
-            break;
-        }
-        auto it = buffers.find(in.from_node);
-        if (it == buffers.end() || !it->second || it->second->size() != block_size_) {
-            continue;
-        }
-        out_inputs[out_count++] = it->second->data();
-    }
-}
-
-void GraphProcessor::sum_inputs(const float* const* inputs, size_t input_count,
-                                float* destination) const {
-    std::fill(destination, destination + block_size_, 0.0f);
-    for (size_t s = 0; s < input_count; ++s) {
-        const float* src = inputs[s];
-        if (!src) {
-            continue;
-        }
-        for (size_t i = 0; i < block_size_; ++i) {
-            destination[i] += src[i];
-        }
-    }
-}
-
 bool GraphProcessor::process(const CompiledGraph& graph,
                              const int32_t* live_pcm,
                              float* out_float,
@@ -132,67 +48,52 @@ bool GraphProcessor::process(const CompiledGraph& graph,
     if (block_size == 0) {
         return false;
     }
-    if (block_size_ != block_size) {
-        set_block_size(block_size);
-    }
-
+    block_size_ = block_size;
+    std::fill(out_float, out_float + block_size_, 0.0f);
     if (!graph.valid || graph.order.empty()) {
-        std::fill(out_float, out_float + block_size_, 0.0f);
         return false;
     }
 
-    ensure_buffers(graph);
+    const size_t needed = (graph.link_count + 1) * block_size_;
+    if (buffers_.size() < needed) {
+        buffers_.resize(needed);
+    }
+    float* scratch = buffer(graph.link_count);
+    live_pcm_ = live_pcm;
 
     std::vector<int> alive_ids;
     alive_ids.reserve(graph.order.size());
-    std::unordered_map<int, std::vector<float>*> buffers;
-    buffers.reserve(graph.order.size());
     for (const auto& node : graph.order) {
-        buffers[node.id()] = &buffers_[node.id()];
         alive_ids.push_back(node.id());
     }
     g_visualizer_bus.retain_only(alive_ids);
 
     bool wrote_output = false;
-    std::fill(out_float, out_float + block_size_, 0.0f);
-
-    const float* input_ptrs[kMaxMixerInputs]{};
     for (const auto& node : graph.order) {
+        const float* inputs[kMaxMixerInputs] = {};
+        for (const auto& in : node.inputs()) {
+            inputs[in.to_slot] = buffer(static_cast<size_t>(in.link));
+        }
+        const int input_count = node_input_slot_limit(node.type());
+
+        const auto& links_out = node.outputs();
+        float* out = links_out.empty() ? scratch : buffer(static_cast<size_t>(links_out.front()));
+
         Module& mod = node.state().shared_module();
-        float* block = buffers_[node.id()].data();
-        const bool bypassed = mod.supports_bypass() && node.state().bypassed;
-
-        size_t input_count = 0;
-        gather_inputs(node, buffers, input_ptrs, static_cast<size_t>(kMaxMixerInputs),
-                      input_count);
-
-        if (mod.role() == Module::Role::multi_in) {
-            std::fill(block, block + block_size_, 0.0f);
-        } else if (!mod.is_source()) {
-            sum_inputs(input_ptrs, input_count, block);
+        if (mod.supports_bypass() && node.state().bypassed) {
+            copy_input(inputs, input_count, 0, out, block_size_);
+        } else {
+            mod.host_ = this;
+            mod.node_id_ = node.id();
+            mod.process(inputs, input_count, out, block_size_, sample_rate_);
+        }
+        for (size_t k = 1; k < links_out.size(); ++k) {
+            std::copy(out, out + block_size_, buffer(static_cast<size_t>(links_out[k])));
         }
 
-        // multi_in modules always run (legacy: blending lived in mix_inputs).
-        const bool run = !bypassed || mod.role() == Module::Role::multi_in;
-        if (run) {
-            ProcessContext ctx;
-            ctx.buffer = block;
-            ctx.num_samples = block_size_;
-            ctx.sample_rate = sample_rate_;
-            ctx.inputs = input_ptrs;
-            ctx.input_count = input_count;
-            ctx.input_muted = node.state().input_muted.data();
-            ctx.live_pcm = live_pcm;
-            ctx.node_id = node.id();
-            ctx.host = this;
-            mod.process(ctx);
-        } else if (mod.is_source()) {
-            std::fill(block, block + block_size_, 0.0f);
-        }
-
-        if (mod.is_output_sink() && !bypassed) {
+        if (mod.is_output_sink()) {
             for (size_t i = 0; i < block_size_; ++i) {
-                out_float[i] += block[i];
+                out_float[i] += out[i];
             }
             wrote_output = true;
         }

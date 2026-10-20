@@ -10,9 +10,9 @@ public:
     float decay = 0.85f;
 
     std::string name() const override { return "vu_meter"; }
-    Role role() const override { return Role::visualizer; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
-    void process(ProcessContext& ctx) override;
+    void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
+                 float sample_rate) override;
 };

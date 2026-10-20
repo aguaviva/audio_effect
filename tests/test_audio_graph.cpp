@@ -28,6 +28,36 @@ TEST(audio_graph_rejects_cycles_and_duplicates) {
     CHECK(!g.add_link(a, a));      // self
 }
 
+TEST(audio_graph_one_link_per_input_pin) {
+    AudioGraph g;
+    g.clear();
+    const int a = g.add_node(NodeType::white_noise, 0, 0);
+    const int b = g.add_node(NodeType::chord_generator, 0, 0);
+    const int fx = g.add_node(NodeType::preamp, 0, 0);
+    const int out = g.add_node(NodeType::output, 0, 0);
+    CHECK(g.add_link(a, fx));
+    CHECK(!g.add_link(b, fx)); // fan-in needs a mixer
+    CHECK(g.add_link(fx, out));
+    CHECK(!g.add_link(a, out)); // output pin already taken
+}
+
+TEST(audio_graph_compile_gives_every_link_a_buffer) {
+    AudioGraph g;
+    g.clear();
+    const int src = g.add_node(NodeType::white_noise, 0, 0);
+    const int fx_a = g.add_node(NodeType::preamp, 0, 0);
+    const int fx_b = g.add_node(NodeType::low_pass, 0, 0);
+    CHECK(g.add_link(src, fx_a));
+    CHECK(g.add_link(src, fx_b));
+    auto compiled = g.compile();
+    CHECK(compiled->valid);
+    CHECK_EQ(static_cast<int>(compiled->link_count), 2);
+    const auto& first = compiled->order.front();
+    CHECK_EQ(first.id(), src);
+    CHECK_EQ(static_cast<int>(first.outputs().size()), 2);
+    CHECK(first.outputs()[0] != first.outputs()[1]);
+}
+
 TEST(audio_graph_mixer_auto_pins) {
     AudioGraph g;
     g.clear();

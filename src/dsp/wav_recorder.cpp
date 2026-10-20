@@ -27,15 +27,17 @@ bool WavRecorder::render() {
     return ImGui::Checkbox("Arm Record", &armed);
 }
 
-void WavRecorder::process(ProcessContext& ctx) {
+void WavRecorder::process(const float* const* inputs, int input_count, float* output,
+                          size_t sample_count, float sample_rate) {
+    copy_input(inputs, input_count, 0, output, sample_count);
     if (!engine_) {
         engine_ = std::make_shared<WavRecorderEngine>();
     }
-    if (ctx.host) {
-        engine_->set_path(ctx.host->record_path());
+    if (host_) {
+        engine_->set_path(host_->record_path());
     }
-    engine_->set_armed(armed, ctx.sample_rate);
-    engine_->write_samples(ctx.buffer, ctx.num_samples);
+    engine_->set_armed(armed, sample_rate);
+    engine_->write_samples(output, sample_count);
 }
 
 WavRecorderEngine::~WavRecorderEngine() {
