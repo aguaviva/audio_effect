@@ -17,7 +17,6 @@
 #define SAMPLE_RATE 48000
 #define CHANNELS 2
 #define QUEUE_CAPACITY 16
-#define WAVEFORM_POINTS 1024
 #define AUDIO_PERIOD_FRAMES 256
 
 struct AudioChunk {
@@ -40,24 +39,6 @@ private:
     alignas(64) std::atomic<size_t> tail_{0};
 };
 
-struct DoubleBufferedWaveform {
-    float input_buffer[2][WAVEFORM_POINTS]{};
-    float output_buffer[2][WAVEFORM_POINTS]{};
-    size_t active_write_index = 0;
-    size_t sample_counter = 0;
-    std::atomic<size_t> ready_read_index{0};
-    float previous_sample = 0.0f;
-    bool has_previous_sample = false;
-    bool capturing_frame = false;
-    size_t capture_span_samples = WAVEFORM_POINTS;
-    size_t raw_samples_in_frame = 0;
-    size_t next_display_point = 1;
-
-    void push_sample(float input_sample, float output_sample, float trigger_level,
-                     size_t requested_span_samples = WAVEFORM_POINTS);
-    void get_latest_frame(float* input_destination, float* output_destination);
-};
-
 struct AudioPipeline {
     size_t period_size = AUDIO_PERIOD_FRAMES; // frames
     size_t samples_per_period = AUDIO_PERIOD_FRAMES * CHANNELS;
@@ -66,16 +47,11 @@ struct AudioPipeline {
     AudioBufferQueue cap_to_filter;
     AudioBufferQueue filter_to_play;
 
-    DoubleBufferedWaveform waveform;
-    float ui_input_waveform[WAVEFORM_POINTS]{};
-    float ui_output_waveform[WAVEFORM_POINTS]{};
-
     std::atomic<bool> running{false};
     std::atomic<bool> silent_running{false};
     std::atomic<size_t> live_chunks{0};
     std::atomic<uint64_t> xrun_count{0};
     std::atomic<uint64_t> dropped_capture_reads{0};
-    std::atomic<float> scope_trigger_level{0.0f};
 
     AudioGraph* graph = nullptr;
     std::shared_ptr<const WavClip> loaded_wav;

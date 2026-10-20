@@ -29,7 +29,6 @@ TEST(graph_processor_preamp_applies_gain) {
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
 
@@ -51,7 +50,6 @@ TEST(graph_processor_sees_ui_edits_without_recompile) {
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
     CHECK_NEAR(output[0], 0.5f, 0.02f);
@@ -78,7 +76,6 @@ TEST(graph_processor_bypass_skips_preamp_gain) {
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
 
@@ -116,7 +113,6 @@ TEST(graph_processor_mixer_applies_per_input_gain) {
     std::vector<float> output(block, 0.0f);
 
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
 
@@ -128,7 +124,6 @@ TEST(graph_processor_rejects_mismatched_empty_graph) {
     AudioGraph g;
     g.clear();
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(16);
     auto compiled = g.compile();
     // empty graph compiles valid with 0 nodes? clear then compile - order empty
     std::vector<int32_t> live(16, 0);
@@ -152,8 +147,6 @@ TEST(graph_processor_block_size_contract) {
 
     GraphProcessor proc(48000.0f);
     constexpr size_t block = 48;
-    proc.set_block_size(block);
-    CHECK_EQ(static_cast<int>(proc.block_size()), static_cast<int>(block));
 
     std::vector<int32_t> live(block, 0);
     std::vector<float> output(block, 0.0f);
@@ -174,7 +167,6 @@ TEST(graph_processor_output_node_ignores_bypass_flag) {
     std::vector<int32_t> live(block, 1073741824);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = compile_chain(g);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
     CHECK_NEAR(output[0], 0.5f, 1e-5f);
@@ -191,7 +183,6 @@ TEST(graph_processor_reports_no_output_without_output_node) {
     std::vector<int32_t> live(block, 1073741824);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = g.compile();
     CHECK(compiled);
     // The pipeline turns this into silence rather than passing the raw input through.

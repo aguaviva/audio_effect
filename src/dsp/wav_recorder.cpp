@@ -30,23 +30,18 @@ bool WavRecorder::render() {
 void WavRecorder::process(const float* const* inputs, int input_count, float* output,
                           size_t sample_count, float sample_rate) {
     copy_input(inputs, input_count, 0, output, sample_count);
-    if (!engine_) {
-        engine_ = std::make_shared<WavRecorderEngine>();
-    }
     if (host_) {
-        engine_->set_path(host_->record_path());
+        engine_.set_path(host_->record_path());
     }
-    engine_->set_armed(armed, sample_rate);
-    engine_->write_samples(output, sample_count);
+    engine_.set_armed(armed, sample_rate);
+    engine_.write_samples(output, sample_count);
 }
 
 WavRecorderEngine::~WavRecorderEngine() {
-    std::lock_guard<std::mutex> lock(mutex_);
     close_file();
 }
 
 void WavRecorderEngine::set_path(const std::string& path) {
-    std::lock_guard<std::mutex> lock(mutex_);
     if (armed_) {
         return;
     }
@@ -56,27 +51,19 @@ void WavRecorderEngine::set_path(const std::string& path) {
 }
 
 void WavRecorderEngine::set_armed(bool armed, float sample_rate) {
-    std::lock_guard<std::mutex> lock(mutex_);
     if (armed == armed_) {
         return;
     }
     if (armed) {
         sample_rate_ = static_cast<uint32_t>(std::max(1.0f, sample_rate));
-        if (open_file(sample_rate)) {
-            armed_ = true;
-            status_ = "Recording " + path_;
-        } else {
-            armed_ = false;
-            status_ = "Failed to open " + path_;
-        }
+        armed_ = open_file();
     } else {
         close_file();
         armed_ = false;
-        status_ = "Saved " + path_;
     }
 }
 
-bool WavRecorderEngine::open_file(float /*sample_rate*/) {
+bool WavRecorderEngine::open_file() {
     close_file();
     std::error_code ec;
     std::filesystem::path p(path_);
@@ -144,7 +131,6 @@ void WavRecorderEngine::close_file() {
 }
 
 void WavRecorderEngine::write_samples(const float* interleaved, size_t sample_count) {
-    std::lock_guard<std::mutex> lock(mutex_);
     if (!armed_ || !file_ || interleaved == nullptr || sample_count == 0) {
         return;
     }
@@ -158,9 +144,4 @@ void WavRecorderEngine::write_samples(const float* interleaved, size_t sample_co
         file_.write(bytes, 2);
         data_bytes_ += 2;
     }
-}
-
-std::string WavRecorderEngine::status() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return status_;
 }

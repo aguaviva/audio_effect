@@ -16,9 +16,6 @@ class GraphProcessor : public GraphHost {
 public:
     explicit GraphProcessor(float sample_rate);
 
-    void set_block_size(size_t block_size) { block_size_ = block_size; }
-    size_t block_size() const { return block_size_; }
-
     void set_loaded_wav(std::shared_ptr<const WavClip> clip);
     void set_record_path(const std::string& path);
 
@@ -28,7 +25,6 @@ public:
                  size_t block_size);
 
     // GraphHost
-    float sample_rate() const override { return sample_rate_; }
     std::shared_ptr<const WavClip> load_wav(const std::string& path) override;
     std::shared_ptr<const WavClip> fallback_wav() const override { return wav_clip_; }
     const std::string& record_path() const override { return record_path_; }

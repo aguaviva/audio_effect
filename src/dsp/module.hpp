@@ -14,7 +14,6 @@ struct WavClip;
 class GraphHost {
 public:
     virtual ~GraphHost() = default;
-    virtual float sample_rate() const = 0;
     virtual std::shared_ptr<const WavClip> load_wav(const std::string& path) = 0;
     virtual std::shared_ptr<const WavClip> fallback_wav() const = 0;
     virtual const std::string& record_path() const = 0;

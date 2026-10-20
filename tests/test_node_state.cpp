@@ -68,14 +68,11 @@ TEST(module_name_and_json_load_by_name) {
     const std::string params = s.write_params();
     CHECK(s.module_name() == "echo");
 
-    NodeState by_name;
+    NodeState loaded;
     size_t i = 0;
-    CHECK(by_name.load_by_module_name("echo", params, i));
-    CHECK(by_name.module_name() == "echo");
-    CHECK_NEAR(by_name.as<node_params::Echo>()->delay_ms, 100.0f, 1e-4f);
-
-    i = 0;
-    CHECK(!by_name.load_by_module_name("nope", params, i));
+    CHECK(loaded.read_params(NodeType::echo, params, i));
+    CHECK(loaded.module_name() == "echo");
+    CHECK_NEAR(loaded.as<node_params::Echo>()->delay_ms, 100.0f, 1e-4f);
 }
 
 TEST(node_state_bypass_defaults_off) {

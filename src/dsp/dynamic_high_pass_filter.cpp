@@ -25,13 +25,6 @@ void DynamicHighPassFilter::process(const float* const* inputs, int input_count,
     }
 }
 
-void DynamicHighPassFilter::reset() {
-    prev_input_l_ = 0.0f;
-    prev_input_r_ = 0.0f;
-    prev_output_l_ = 0.0f;
-    prev_output_r_ = 0.0f;
-}
-
 bool DynamicHighPassFilter::render() {
     bool changed = false;
 

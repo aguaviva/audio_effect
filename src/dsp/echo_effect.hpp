@@ -13,18 +13,12 @@ public:
     float mix = 0.25f;
     int selected_preset = 0; // 0 = Custom
 
-    // Sized for 1 s at 48 kHz; process() grows it if the stream runs faster.
-    explicit EchoEffect(size_t max_delay_samples = 48001);
-
     std::string name() const override { return "echo"; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
-
-    void reset();
-
 
 private:
     std::vector<float> delay_left_;

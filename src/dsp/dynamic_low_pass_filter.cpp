@@ -19,11 +19,6 @@ void DynamicLowPassFilter::process(const float* const* inputs, int input_count, 
     }
 }
 
-void DynamicLowPassFilter::reset() {
-    prev_l_ = 0.0f;
-    prev_r_ = 0.0f;
-}
-
 bool DynamicLowPassFilter::render() {
     bool changed = false;
 

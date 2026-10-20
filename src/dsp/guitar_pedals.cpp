@@ -34,11 +34,6 @@ void DrivePedal::process(const float* const* inputs, int input_count, float* sam
     }
 }
 
-void DrivePedal::reset() {
-    tone_state_l_ = 0.0f;
-    tone_state_r_ = 0.0f;
-}
-
 float DrivePedal::shape(float input, DriveModel model, float drive, float bias, float bias_offset,
                         float positive_scale, float negative_scale, float fuzz_normalization) {
     switch (model) {

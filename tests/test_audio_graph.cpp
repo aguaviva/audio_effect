@@ -67,9 +67,7 @@ TEST(audio_graph_mixer_auto_pins) {
     const int out = g.add_node(NodeType::output, 0, 0);
 
     CHECK_EQ(g.mixer_pin_count(mix), 1);
-    CHECK_EQ(g.mixer_connected_count(mix), 0);
     CHECK(g.add_link(src1, mix, 0));
-    CHECK_EQ(g.mixer_connected_count(mix), 1);
     CHECK_EQ(g.mixer_pin_count(mix), 2);
     CHECK(g.add_link(src2, mix, 1));
     CHECK_EQ(g.mixer_pin_count(mix), 3);

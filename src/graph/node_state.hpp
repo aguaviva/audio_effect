@@ -78,8 +78,6 @@ struct NodeState {
     // Parse a JSON object starting at text[*i] (must be '{'). Advances *i.
     bool read_params(NodeType type, const std::string& text, size_t& i);
 
-    // Resolve module_name against available modules, then load via read_params.
-    bool load_by_module_name(const std::string& module_name, const std::string& text, size_t& i);
 
     template <typename T>
     T* as() {

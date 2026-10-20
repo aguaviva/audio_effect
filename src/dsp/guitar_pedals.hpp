@@ -26,9 +26,6 @@ public:
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
 
-    void reset();
-
-
 private:
     static float shape(float input, DriveModel model, float drive, float bias,
                        float bias_offset, float positive_scale, float negative_scale,

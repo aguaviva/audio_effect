@@ -93,15 +93,6 @@ std::string NodeState::module_name() const {
     return module_->name();
 }
 
-bool NodeState::load_by_module_name(const std::string& module_name, const std::string& text,
-                                    size_t& i) {
-    NodeType type = NodeType::preamp;
-    if (!node_params::try_resolve_name(module_name, type)) {
-        return false;
-    }
-    return read_params(type, text, i);
-}
-
 std::string NodeState::write_params() const {
     std::string out = "{";
     module_json::write_bool(out, "bypassed", bypassed);

@@ -5,11 +5,6 @@
 
 #include "imgui.h"
 
-void NoiseGate::reset() {
-    envelope_ = 0.0f;
-    gain_ = 0.0f;
-}
-
 void NoiseGate::process(const float* const* inputs, int input_count, float* interleaved,
                         size_t sample_count, float sample_rate) {
     copy_input(inputs, input_count, 0, interleaved, sample_count);

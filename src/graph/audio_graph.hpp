@@ -110,11 +110,8 @@ public:
     bool remove_node(int node_id);
     bool add_link(int from_node, int to_node, int to_slot = 0);
     bool remove_link(int link_id);
-    bool remove_link_to(int to_node);
     // Visible mixer input pins: one per connection plus one spare (capped).
     int mixer_pin_count(int node_id) const;
-    int mixer_connected_count(int node_id) const;
-    GraphLink* find_link(int link_id);
     GraphNode* find_node(int node_id);
     const GraphNode* find_node(int node_id) const;
 

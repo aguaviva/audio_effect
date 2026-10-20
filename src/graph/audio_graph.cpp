@@ -95,16 +95,6 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
     return true;
 }
 
-int AudioGraph::mixer_connected_count(int node_id) const {
-    int count = 0;
-    for (const auto& link : links_) {
-        if (link.to_node() == node_id) {
-            ++count;
-        }
-    }
-    return count;
-}
-
 int AudioGraph::mixer_pin_count(int node_id) const {
     const GraphNode* node = find_node(node_id);
     if (!node || !node_is_mixer(node->type())) {
@@ -132,23 +122,6 @@ bool AudioGraph::remove_link(int link_id) {
     }
     links_.erase(it);
     return true;
-}
-
-bool AudioGraph::remove_link_to(int to_node) {
-    size_t before = links_.size();
-    links_.erase(std::remove_if(links_.begin(), links_.end(),
-                                [to_node](const GraphLink& l) { return l.to_node() == to_node; }),
-                 links_.end());
-    return links_.size() != before;
-}
-
-GraphLink* AudioGraph::find_link(int link_id) {
-    for (auto& link : links_) {
-        if (link.id() == link_id) {
-            return &link;
-        }
-    }
-    return nullptr;
 }
 
 GraphNode* AudioGraph::find_node(int node_id) {

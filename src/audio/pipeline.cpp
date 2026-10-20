@@ -34,7 +34,7 @@ bool find_device_id(ma_context* context, ma_device_type type, const std::string&
         (type == ma_device_type_capture) ? capture_count : playback_count;
 
     for (ma_uint32 i = 0; i < count; ++i) {
-        if (infos[i].name && name == infos[i].name) {
+        if (name == infos[i].name) {
             *out_id = infos[i].id;
             return true;
         }
@@ -188,7 +188,6 @@ void filter_processor() {
     enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
-    processor.set_block_size(block_size);
 
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
         auto chunk = g_pipeline.cap_to_filter.pop();
@@ -221,17 +220,10 @@ void filter_processor() {
         }
 
         constexpr double pcm_scale = 2147483648.0;
-        float trigger = g_pipeline.scope_trigger_level.load(std::memory_order_relaxed);
-        for (size_t i = 0; i < block_size; i += CHANNELS) {
-            float input_sample = static_cast<float>(chunk->samples[i]) / 2147483648.0f;
-            g_pipeline.waveform.push_sample(input_sample, out[i], trigger);
-
-            for (size_t ch = 0; ch < CHANNELS; ++ch) {
-                size_t idx = i + ch;
-                double sample = std::clamp(static_cast<double>(out[idx]), -1.0, 1.0);
-                double pcm = std::clamp(sample * pcm_scale, -2147483648.0, 2147483647.0);
-                chunk->samples[idx] = static_cast<int32_t>(std::llround(pcm));
-            }
+        for (size_t i = 0; i < block_size; ++i) {
+            double sample = std::clamp(static_cast<double>(out[i]), -1.0, 1.0);
+            double pcm = std::clamp(sample * pcm_scale, -2147483648.0, 2147483647.0);
+            chunk->samples[i] = static_cast<int32_t>(std::llround(pcm));
         }
 
         while (g_pipeline.running.load(std::memory_order_relaxed) &&
@@ -245,7 +237,6 @@ void offline_processor() {
     enable_flush_denormals_to_zero();
     GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
     const size_t block_size = g_pipeline.samples_per_period;
-    processor.set_block_size(block_size);
     std::vector<int32_t> live(block_size, 0);
     std::vector<float> out(block_size, 0.0f);
 
@@ -312,53 +303,6 @@ size_t AudioBufferQueue::size() const {
     size_t tail = tail_.load(std::memory_order_relaxed);
     if (head >= tail) return head - tail;
     return QUEUE_CAPACITY - (tail - head);
-}
-
-void DoubleBufferedWaveform::push_sample(float input_sample, float output_sample, float trigger_level,
-                                         size_t requested_span_samples) {
-    if (!capturing_frame) {
-        bool crossed_trigger = has_previous_sample &&
-            previous_sample < trigger_level && input_sample >= trigger_level;
-        previous_sample = input_sample;
-        has_previous_sample = true;
-        if (!crossed_trigger) {
-            return;
-        }
-        capturing_frame = true;
-        capture_span_samples = std::max(requested_span_samples, static_cast<size_t>(WAVEFORM_POINTS));
-        sample_counter = 0;
-        raw_samples_in_frame = 0;
-        next_display_point = 1;
-        input_buffer[active_write_index][sample_counter] = input_sample;
-        output_buffer[active_write_index][sample_counter] = output_sample;
-        ++sample_counter;
-        ++raw_samples_in_frame;
-        return;
-    }
-
-    ++raw_samples_in_frame;
-    previous_sample = input_sample;
-    if (next_display_point * (capture_span_samples - 1) <=
-        (raw_samples_in_frame - 1) * (WAVEFORM_POINTS - 1)) {
-        input_buffer[active_write_index][sample_counter] = input_sample;
-        output_buffer[active_write_index][sample_counter] = output_sample;
-        ++sample_counter;
-        ++next_display_point;
-
-        if (sample_counter >= WAVEFORM_POINTS) {
-            sample_counter = 0;
-            size_t completed = active_write_index;
-            active_write_index = 1 - active_write_index;
-            ready_read_index.store(completed, std::memory_order_release);
-            capturing_frame = false;
-        }
-    }
-}
-
-void DoubleBufferedWaveform::get_latest_frame(float* input_destination, float* output_destination) {
-    size_t src = ready_read_index.load(std::memory_order_acquire);
-    std::memcpy(input_destination, input_buffer[src], sizeof(float) * WAVEFORM_POINTS);
-    std::memcpy(output_destination, output_buffer[src], sizeof(float) * WAVEFORM_POINTS);
 }
 
 bool AudioPipeline::open_audio(const char* capture_device, const char* playback_device,

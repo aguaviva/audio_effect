@@ -5,9 +5,6 @@
 
 #include "imgui.h"
 
-EchoEffect::EchoEffect(size_t max_delay_samples)
-    : delay_left_(max_delay_samples, 0.0f), delay_right_(max_delay_samples, 0.0f) {}
-
 void EchoEffect::process(const float* const* inputs, int input_count, float* samples,
                          size_t sample_count, float sample_rate) {
     copy_input(inputs, input_count, 0, samples, sample_count);
@@ -34,12 +31,6 @@ void EchoEffect::process(const float* const* inputs, int input_count, float* sam
         samples[i + 1] = input_right * (1.0f - wet) + delayed_right * wet;
         write_index_ = (write_index_ + 1) % delay_left_.size();
     }
-}
-
-void EchoEffect::reset() {
-    std::fill(delay_left_.begin(), delay_left_.end(), 0.0f);
-    std::fill(delay_right_.begin(), delay_right_.end(), 0.0f);
-    write_index_ = 0;
 }
 
 bool EchoEffect::render() {

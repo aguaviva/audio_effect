@@ -32,29 +32,6 @@ float SimpleReverb::Allpass::process(float input) {
     return output;
 }
 
-SimpleReverb::SimpleReverb() = default;
-
-void SimpleReverb::reset() {
-    for (auto& c : combs_l_) {
-        std::fill(c.buffer.begin(), c.buffer.end(), 0.0f);
-        c.index = 0;
-        c.filter = 0.0f;
-    }
-    for (auto& c : combs_r_) {
-        std::fill(c.buffer.begin(), c.buffer.end(), 0.0f);
-        c.index = 0;
-        c.filter = 0.0f;
-    }
-    for (auto& a : allpass_l_) {
-        std::fill(a.buffer.begin(), a.buffer.end(), 0.0f);
-        a.index = 0;
-    }
-    for (auto& a : allpass_r_) {
-        std::fill(a.buffer.begin(), a.buffer.end(), 0.0f);
-        a.index = 0;
-    }
-}
-
 void SimpleReverb::ensure_buffers(float sample_rate) {
     if (configured_sr_ == sample_rate) {
         return;

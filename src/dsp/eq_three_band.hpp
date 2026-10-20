@@ -18,9 +18,6 @@ public:
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
 
-    void reset();
-
-
 private:
     struct Biquad {
         float b0 = 1, b1 = 0, b2 = 0, a1 = 0, a2 = 0;
@@ -31,7 +28,6 @@ private:
             z2 = b2 * x - a2 * y;
             return y;
         }
-        void clear() { z1 = z2 = 0; }
     };
 
     void design(float sample_rate, float low_gain_db, float mid_gain_db, float high_gain_db);

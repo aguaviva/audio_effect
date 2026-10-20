@@ -17,8 +17,6 @@ public:
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
 
-    void reset();
-
 private:
     float prev_l_{0.0f};
     float prev_r_{0.0f};

@@ -9,15 +9,6 @@ namespace {
 constexpr float kPi = 3.14159265358979323846f;
 }
 
-void EqThreeBand::reset() {
-    low_l_.clear();
-    mid_l_.clear();
-    high_l_.clear();
-    low_r_.clear();
-    mid_r_.clear();
-    high_r_.clear();
-}
-
 void EqThreeBand::low_shelf(Biquad& s, float freq, float gain_db, float sample_rate) {
     const float A = std::pow(10.0f, gain_db / 40.0f);
     const float w0 = 2.0f * kPi * freq / sample_rate;

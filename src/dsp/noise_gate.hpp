@@ -18,9 +18,6 @@ public:
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
                  float sample_rate) override;
 
-    void reset();
-
-
 private:
     float envelope_ = 0.0f;
     float gain_ = 0.0f;

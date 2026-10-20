@@ -25,15 +25,6 @@ namespace {
 // share this width so the right-aligned "out" sits against the output pin.
 constexpr float kNodeWidth = 140.0f;
 
-// Right-align "out" on a fixed-width row (Dummy + SameLine). Use ImGui text so it
-// stays on the imnodes node foreground channel (raw DrawList can land under chrome).
-void draw_output_label(float node_width) {
-    const float label_w = ImGui::CalcTextSize("out").x;
-    ImGui::Dummy(ImVec2(std::max(0.0f, node_width - label_w), ImGui::GetTextLineHeight()));
-    ImGui::SameLine(0.0f, 0.0f);
-    ImGui::TextUnformatted("out");
-}
-
 ImGui::FileBrowser& graph_open_browser() {
     static ImGui::FileBrowser browser(ImGuiFileBrowserFlags_CloseOnEsc |
                                       ImGuiFileBrowserFlags_ConfirmOnEnter |
@@ -590,7 +581,6 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             node.state().bypassed = false;
         }
         ImGui::EndGroup();
-        const float title_row_w = ImGui::GetItemRectSize().x;
         ImNodes::EndNodeTitleBar();
 
         ImGui::PushID(node.id());
@@ -616,7 +606,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
                     ImNodes::BeginInputAttribute(input_pin_id(node.id(), slot));
                     ImGui::PushID(node.id() * 32 + slot);
                     ImGui::AlignTextToFramePadding();
-                    ImGui::Text(name[slot]);
+                    ImGui::TextUnformatted(name[slot]);
                     ImGui::PopID();
                     ImNodes::EndInputAttribute();
                 }

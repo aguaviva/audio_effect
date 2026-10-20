@@ -55,7 +55,6 @@ TEST(white_noise_source_produces_energy) {
     std::vector<int32_t> live(block, 0);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = g.compile();
     CHECK(compiled && compiled->valid);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
@@ -193,7 +192,6 @@ TEST(dry_wet_mix_blends_slots) {
     std::vector<int32_t> live(block, pcm);
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
-    proc.set_block_size(block);
     auto compiled = g.compile();
     CHECK(compiled && compiled->valid);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
