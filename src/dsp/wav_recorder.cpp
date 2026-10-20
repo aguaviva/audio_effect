@@ -16,24 +16,27 @@ constexpr uint64_t kMaxDataBytes = 0xffffffffull - (kWavHeaderBytes - 8);
 } // namespace
 
 std::string WavRecorder::save() const {
-    return "{}";
+    std::string out = "{";
+    module_json::write_string(out, "path", path);
+    out += '}';
+    return out;
 }
 
-bool WavRecorder::load(const std::string& /*json*/) {
+bool WavRecorder::load(const std::string& json) {
+    module_json::read(json, "path", path);
     return true;
 }
 
 bool WavRecorder::render() {
-    return ImGui::Checkbox("Arm Record", &armed);
+    const bool changed = ImGui::Checkbox("Arm Record", &armed);
+    ImGui::TextWrapped("%s", path.c_str());
+    return changed;
 }
 
 void WavRecorder::process(const float* const* inputs, int input_count, float* output,
                           size_t sample_count, float sample_rate) {
     copy_input(inputs, input_count, 0, output, sample_count);
-    if (host_) {
-        engine_.set_path(host_->record_path());
-    }
-    engine_.set_armed(armed, sample_rate);
+    engine_.set_armed(armed, path, sample_rate);
     engine_.write_samples(output, sample_count);
 }
 
@@ -41,36 +44,27 @@ WavRecorderEngine::~WavRecorderEngine() {
     close_file();
 }
 
-void WavRecorderEngine::set_path(const std::string& path) {
-    if (armed_) {
-        return;
-    }
-    if (!path.empty()) {
-        path_ = path;
-    }
-}
-
-void WavRecorderEngine::set_armed(bool armed, float sample_rate) {
+void WavRecorderEngine::set_armed(bool armed, const std::string& path, float sample_rate) {
     if (armed == armed_) {
         return;
     }
     if (armed) {
         sample_rate_ = static_cast<uint32_t>(std::max(1.0f, sample_rate));
-        armed_ = open_file();
+        armed_ = open_file(path);
     } else {
         close_file();
         armed_ = false;
     }
 }
 
-bool WavRecorderEngine::open_file() {
+bool WavRecorderEngine::open_file(const std::string& path) {
     close_file();
     std::error_code ec;
-    std::filesystem::path p(path_);
+    std::filesystem::path p(path);
     if (p.has_parent_path()) {
         std::filesystem::create_directories(p.parent_path(), ec);
     }
-    file_.open(path_, std::ios::binary | std::ios::trunc);
+    file_.open(path, std::ios::binary | std::ios::trunc);
     if (!file_) {
         return false;
     }

@@ -1,7 +1,6 @@
 #include "pipeline.hpp"
 
 #include "dsp/denormals.hpp"
-#include "dsp/wav_generator.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -204,11 +203,6 @@ void filter_processor() {
         }
 
         auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
-        auto wav = std::atomic_load_explicit(&g_pipeline.loaded_wav, std::memory_order_acquire);
-        processor.set_loaded_wav(wav);
-        if (g_pipeline.graph) {
-            processor.set_record_path(g_pipeline.graph->record_path());
-        }
 
         float* out = chunk->work_samples.data();
         bool produced = false;
@@ -243,11 +237,6 @@ void offline_processor() {
     PeriodClock clock(g_pipeline.period_size);
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
         auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
-        auto wav = std::atomic_load_explicit(&g_pipeline.loaded_wav, std::memory_order_acquire);
-        processor.set_loaded_wav(wav);
-        if (g_pipeline.graph) {
-            processor.set_record_path(g_pipeline.graph->record_path());
-        }
         if (compiled) {
             processor.process(*compiled, live.data(), out.data(), block_size);
         }
@@ -516,19 +505,5 @@ void AudioPipeline::stop() {
     stop_silent_capture();
     if (filter.joinable()) {
         filter.join();
-    }
-}
-
-void AudioPipeline::load_wav(const std::string& path) {
-    std::string error;
-    auto clip = WavGenerator::load(path, SAMPLE_RATE, error);
-    if (clip) {
-        std::atomic_store_explicit(&loaded_wav, clip, std::memory_order_release);
-        wav_status = "Loaded " + path;
-        if (graph) {
-            graph->set_wav_path(path);
-        }
-    } else {
-        wav_status = "Load failed: " + error;
     }
 }

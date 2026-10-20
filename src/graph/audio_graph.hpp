@@ -1,7 +1,6 @@
 #pragma once
 
 #include "dsp/module.hpp"
-#include "paths.hpp"
 
 #include <memory>
 #include <mutex>
@@ -69,14 +68,7 @@ public:
     std::vector<GraphNode>& nodes() { return nodes_; }
     std::vector<GraphLink>& links() { return links_; }
 
-    const std::string& wav_path() const { return wav_path_; }
-    void set_wav_path(const std::string& path) { wav_path_ = path; }
-
-    const std::string& record_path() const { return record_path_; }
-    void set_record_path(const std::string& path) { record_path_ = path; }
-
     void clear();
-    void copy_structure_from(const AudioGraph& other);
     std::shared_ptr<const CompiledGraph> compile() const;
 
     void publish(std::shared_ptr<const CompiledGraph> compiled);
@@ -85,8 +77,6 @@ public:
 private:
     std::vector<GraphNode> nodes_;
     std::vector<GraphLink> links_;
-    std::string wav_path_{kDefaultWavPath};
-    std::string record_path_{kDefaultRecordPath};
 
     mutable std::mutex publish_mutex_;
     std::shared_ptr<const CompiledGraph> published_;

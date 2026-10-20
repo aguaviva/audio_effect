@@ -139,13 +139,6 @@ void AudioGraph::clear() {
     links_.clear();
 }
 
-void AudioGraph::copy_structure_from(const AudioGraph& other) {
-    nodes_ = other.nodes_;
-    links_ = other.links_;
-    wav_path_ = other.wav_path_;
-    record_path_ = other.record_path_;
-}
-
 std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     auto compiled = std::make_shared<CompiledGraph>();
 

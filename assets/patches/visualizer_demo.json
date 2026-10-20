@@ -1,6 +1,5 @@
 {
   "version":2,
-  "record_path":"assets/recordings/capture.wav",
   "nodes":[
     {"id":1,"type":"wav_player","x":40,"y":260,"params":{"bypassed":false,"loop":true,"path":"assets/audio/danano.wav"}},
     {"id":2,"type":"preamp","x":280,"y":260,"params":{"bypassed":false,"gain_db":12.000000,"selected_preset":0}},

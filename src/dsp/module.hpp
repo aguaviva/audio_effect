@@ -10,13 +10,12 @@
 
 struct WavClip;
 
-// Host services modules may need during process() (wav cache, record path, etc.).
+// Host services modules may need during process().
 class GraphHost {
 public:
     virtual ~GraphHost() = default;
+    // nullptr when the file cannot be loaded.
     virtual std::shared_ptr<const WavClip> load_wav(const std::string& path) = 0;
-    virtual std::shared_ptr<const WavClip> fallback_wav() const = 0;
-    virtual const std::string& record_path() const = 0;
     virtual const int32_t* live_input() const = 0;
 };
 

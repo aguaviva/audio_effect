@@ -19,7 +19,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 ### Sources / generators
 
 - **Audio Input** — live capture
-- **WAV Player** — loaded WAV clip (loop optional)
+- **WAV Player** — plays its own WAV file (loop optional); a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
 
@@ -50,7 +50,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 ### Sinks
 
-- **WAV Recorder** — pass-through file writer (`assets/recordings/capture.wav` by default; Arm Record)
+- **WAV Recorder** — pass-through file writer; its `path` param defaults to `assets/recordings/capture.wav` (Arm Record)
 - **Output** — device playback
 
 Visualizer nodes sit on the graph like effects (in + out) but only analyze the block and pass it through unchanged.
@@ -78,7 +78,6 @@ Toolbar **Save Graph** / **Load Graph** read and write a small JSON document con
   `bypassed`, optional `muted` (Mixer), and the module's own named settings, e.g.
   `{"bypassed":false,"delay_ms":320,"feedback":0.35,"mix":0.35}` for Echo.
 - `links[]`: `id`, `from`, `to`, `to_slot`
-- `record_path`
 
 Node and link ids must be unique. A new node or link gets the largest existing id + 1.
 Only version 2 files load.

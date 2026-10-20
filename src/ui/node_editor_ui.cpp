@@ -6,7 +6,6 @@
 #include "dsp/audio_output.hpp"
 #include "dsp/mixer.hpp"
 #include "dsp/wav_player.hpp"
-#include "dsp/wav_recorder.hpp"
 #include "graph/graph_io.hpp"
 #include "graph/node_registry.hpp"
 #include "graph/pins.hpp"
@@ -231,11 +230,6 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
         m->ui_slots = graph.input_pin_count(node.id);
     }
     node.module->render();
-    if (node.as<WavRecorder>()) {
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
-        ImGui::TextUnformatted(graph.record_path().c_str());
-        ImGui::PopTextWrapPos();
-    }
 }
 
 static void apply_node_positions(AudioGraph& graph) {
@@ -314,7 +308,6 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
         if (auto* node = graph.find_node(target)) {
             if (auto* p = node->as<WavPlayer>()) {
                 p->set_path(selected);
-                graph.set_wav_path(selected);
                 state.status_message = std::string("WAV Player → ") + selected;
                 node_editor_publish(graph);
             }
@@ -333,10 +326,9 @@ static void draw_diagnostics(NodeEditorUiState& state) {
         static_cast<float>(g_pipeline.cap_to_filter.size()),
         static_cast<float>(g_pipeline.filter_to_play.size())
     };
-    ImGui::Text("XRUNs: %llu | dropped captures: %llu | %s",
+    ImGui::Text("XRUNs: %llu | dropped captures: %llu",
                 static_cast<unsigned long long>(g_pipeline.xrun_count.load()),
-                static_cast<unsigned long long>(g_pipeline.dropped_capture_reads.load()),
-                g_pipeline.wav_status.c_str());
+                static_cast<unsigned long long>(g_pipeline.dropped_capture_reads.load()));
     ImGui::PlotHistogram("##queues", depths, 3, 0, "Free | Cap->Filt | Filt->Play",
                          0.0f, static_cast<float>(QUEUE_CAPACITY), ImVec2(0, 80.0f));
 }

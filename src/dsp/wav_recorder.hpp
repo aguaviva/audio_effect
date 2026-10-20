@@ -1,6 +1,7 @@
 #pragma once
 
 #include "module.hpp"
+#include "paths.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -14,16 +15,15 @@ public:
     WavRecorderEngine& operator=(const WavRecorderEngine&) = delete;
     ~WavRecorderEngine();
 
-    void set_path(const std::string& path);
-    void set_armed(bool armed, float sample_rate);
+    // Opens path when arming; the path is ignored while already armed.
+    void set_armed(bool armed, const std::string& path, float sample_rate);
     void write_samples(const float* interleaved, size_t sample_count);
 
 private:
     void close_file();
-    bool open_file();
+    bool open_file(const std::string& path);
     void patch_header();
 
-    std::string path_{"assets/recordings/capture.wav"};
     std::ofstream file_;
     bool armed_ = false;
     uint32_t sample_rate_ = 48000;
@@ -34,6 +34,7 @@ class WavRecorder : public Module {
 public:
     // Runtime-only: not saved, so opening a patch never starts overwriting a recording.
     bool armed = false;
+    std::string path = kDefaultRecordPath;
 
     std::string name() const override { return "wav_recorder"; }
     std::string save() const override;

@@ -54,8 +54,6 @@ struct AudioPipeline {
     std::atomic<uint64_t> dropped_capture_reads{0};
 
     AudioGraph* graph = nullptr;
-    std::shared_ptr<const WavClip> loaded_wav;
-    std::string wav_status{"No WAV loaded"};
 
     ma_context context{};
     bool context_ready = false;
@@ -88,7 +86,6 @@ struct AudioPipeline {
     // (CI / headless demo). Visualizers and DSP still update in realtime.
     void start_offline();
     void stop();
-    void load_wav(const std::string& path);
 
     bool offline_mode = false;
     std::string capture_device_{"default"};

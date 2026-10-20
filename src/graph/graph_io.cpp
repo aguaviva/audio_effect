@@ -97,10 +97,7 @@ bool parse_link(const std::string& json, GraphLink& link, std::string& error) {
 
 std::string serialize(const AudioGraph& graph) {
     std::string out = "{\n";
-    out += "  \"version\":" + std::to_string(kFileVersion) + ",\n  ";
-    std::string record_path = "{";
-    module_json::write_string(record_path, "record_path", graph.record_path());
-    out += record_path.substr(1) + ",\n";
+    out += "  \"version\":" + std::to_string(kFileVersion) + ",\n";
     out += "  \"nodes\":[\n";
     const auto& nodes = graph.nodes();
     for (size_t n = 0; n < nodes.size(); ++n) {
@@ -125,8 +122,8 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         return false;
     }
 
-    AudioGraph loaded;
-    std::string record_path = kDefaultRecordPath;
+    std::vector<GraphNode> nodes;
+    std::vector<GraphLink> links;
     std::unordered_set<int> node_ids;
     std::unordered_set<int> link_ids;
     bool have_nodes = false;
@@ -134,7 +131,6 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     const bool ok = module_json::for_each_member(
         text, [&](const std::string& key, const std::string& body, size_t& i) {
             if (key == "version") return module_json::skip_value(body, i);
-            if (key == "record_path") return module_json::parse_value(body, i, record_path);
             if (key == "nodes") {
                 have_nodes = true;
                 return module_json::for_each_element(body, i, [&](const std::string& json) {
@@ -144,7 +140,7 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                         error = "Duplicate node id " + std::to_string(node.id);
                         return false;
                     }
-                    loaded.nodes().push_back(std::move(node));
+                    nodes.push_back(std::move(node));
                     return true;
                 });
             }
@@ -156,7 +152,7 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
                         error = "Duplicate link id " + std::to_string(link.id);
                         return false;
                     }
-                    loaded.links().push_back(link);
+                    links.push_back(link);
                     return true;
                 });
             }
@@ -172,15 +168,21 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         return false;
     }
 
+    auto find = [&](int id) -> const Module* {
+        for (const auto& node : nodes) {
+            if (node.id == id) return node.module.get();
+        }
+        return nullptr;
+    };
     // Drop links to missing nodes or pins; a second link into the same pin is an error
     // because every input pin reads exactly one link buffer.
     std::vector<GraphLink> valid_links;
     std::unordered_set<int> used_pins;
-    for (const auto& link : loaded.links()) {
-        const GraphNode* from = loaded.find_node(link.from_node);
-        const GraphNode* to = loaded.find_node(link.to_node);
-        if (!from || from->module->output_count() == 0 || !to || link.to_slot < 0 ||
-            link.to_slot >= to->module->input_count()) {
+    for (const auto& link : links) {
+        const Module* from = find(link.from_node);
+        const Module* to = find(link.to_node);
+        if (!from || from->output_count() == 0 || !to || link.to_slot < 0 ||
+            link.to_slot >= to->input_count()) {
             continue;
         }
         if (!used_pins.insert(input_pin_id(link.to_node, link.to_slot)).second) {
@@ -190,10 +192,9 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         }
         valid_links.push_back(link);
     }
-    loaded.links() = std::move(valid_links);
-    loaded.set_record_path(record_path);
 
-    graph.copy_structure_from(loaded);
+    graph.nodes() = std::move(nodes);
+    graph.links() = std::move(valid_links);
     return true;
 }
 

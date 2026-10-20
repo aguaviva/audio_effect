@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "record_path": "assets/recordings/capture.wav",
   "nodes": [
     {"id":1,"type":"wav_player","x":40,"y":200,"params":{"bypassed":false,"loop":true,"path":"assets/audio/danano.wav"}},
     {"id":2,"type":"audio_input","x":40,"y":420,"params":{"bypassed":false,"device":"default"}},

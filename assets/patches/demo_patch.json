@@ -1,6 +1,5 @@
 {
   "version":2,
-  "record_path":"assets/recordings/capture.wav",
   "nodes":[
     {"id":1,"type":"chord_generator","x":40,"y":220,"params":{"bypassed":false,"chord_index":48}},
     {"id":2,"type":"preamp","x":280,"y":220,"params":{"bypassed":false,"gain_db":6.000000,"selected_preset":0}},

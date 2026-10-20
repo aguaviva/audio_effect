@@ -5,14 +5,6 @@
 GraphProcessor::GraphProcessor(float sample_rate)
     : sample_rate_(sample_rate) {}
 
-void GraphProcessor::set_loaded_wav(std::shared_ptr<const WavClip> clip) {
-    wav_clip_ = std::move(clip);
-}
-
-void GraphProcessor::set_record_path(const std::string& path) {
-    record_path_ = path;
-}
-
 std::shared_ptr<const WavClip> GraphProcessor::load_wav(const std::string& path) {
     if (path.empty()) {
         return nullptr;

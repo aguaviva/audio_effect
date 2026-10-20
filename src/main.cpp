@@ -25,17 +25,6 @@ int main(int argc, char** argv) {
         // Continue — GUI still starts; offline mode keeps visualizers alive.
     }
 
-    // Prefer solo / danano under assets/audio like the previous startup behavior.
-    g_pipeline.load_wav(kPreferredStartupWavPath);
-    if (g_pipeline.loaded_wav) {
-        graph.set_wav_path(kPreferredStartupWavPath);
-    } else {
-        g_pipeline.load_wav(kDefaultWavPath);
-        if (g_pipeline.loaded_wav) {
-            graph.set_wav_path(kDefaultWavPath);
-        }
-    }
-
     // CLI path wins, otherwise assets/patches/default_patch.json.
     const char* graph_path = (argc > 1) ? argv[1] : kDefaultPatchPath;
     NodeEditorUiState ui_state;
@@ -91,8 +80,6 @@ int main(int argc, char** argv) {
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
     node_editor_init();
-
-    std::snprintf(ui_state.wav_path, sizeof(ui_state.wav_path), "%s", graph.wav_path().c_str());
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

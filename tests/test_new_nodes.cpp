@@ -203,11 +203,10 @@ TEST(wav_recorder_writes_file) {
     const char* path = "tests/_tmp_record.wav";
     std::remove(path);
     WavRecorderEngine rec;
-    rec.set_path(path);
-    rec.set_armed(true, 48000.0f);
+    rec.set_armed(true, path, 48000.0f);
     std::vector<float> block(64, 0.1f);
     rec.write_samples(block.data(), block.size());
-    rec.set_armed(false, 48000.0f);
+    rec.set_armed(false, path, 48000.0f);
     FILE* f = std::fopen(path, "rb");
     CHECK(f != nullptr);
     if (f) {
@@ -217,7 +216,6 @@ TEST(wav_recorder_writes_file) {
         std::fclose(f);
     }
     std::remove(path);
-    CHECK_STREQ(kDefaultRecordPath, "assets/recordings/capture.wav");
 }
 
 TEST(wav_recorder_patches_header_when_destroyed_while_armed) {
@@ -225,8 +223,7 @@ TEST(wav_recorder_patches_header_when_destroyed_while_armed) {
     std::remove(path);
     {
         WavRecorderEngine rec;
-        rec.set_path(path);
-        rec.set_armed(true, 48000.0f);
+        rec.set_armed(true, path, 48000.0f);
         std::vector<float> block(64, 0.1f);
         rec.write_samples(block.data(), block.size());
     }
@@ -250,6 +247,15 @@ TEST(wav_recorder_armed_is_not_persisted) {
     WavRecorder loaded;
     CHECK(loaded.load(R"({"armed":true})"));
     CHECK(!loaded.armed);
+}
+
+TEST(wav_recorder_path_is_saved) {
+    WavRecorder rec;
+    CHECK(rec.path == kDefaultRecordPath);
+    rec.path = "out/take.wav";
+    WavRecorder loaded;
+    CHECK(loaded.load(rec.save()));
+    CHECK(loaded.path == "out/take.wav");
 }
 
 TEST(drive_pedal_amount_zero_is_clean_for_every_model) {

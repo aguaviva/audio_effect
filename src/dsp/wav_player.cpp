@@ -37,13 +37,7 @@ void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, flo
     if (lock.owns_lock() && path_ != loaded_path_) {
         loaded_path_ = path_;
         lock.unlock();
-        clip_.reset();
-        if (host_) {
-            clip_ = host_->load_wav(loaded_path_);
-            if (!clip_) {
-                clip_ = host_->fallback_wav();
-            }
-        }
+        clip_ = host_ ? host_->load_wav(loaded_path_) : nullptr;
         wav_.reset();
     }
     if (clip_ && clip_->frame_count() > 0) {
