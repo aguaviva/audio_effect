@@ -7,6 +7,11 @@
 class AudioOutput : public Module {
 public:
     std::string device = "default";
+    bool muted = false;
+    float volume_db = 0.0f;
+
+    static constexpr float kMinVolumeDb = -60.0f;
+    static constexpr float kMaxVolumeDb = 6.0f;
 
     std::string name() const override { return "output"; }
     bool is_output_sink() const override { return true; }
@@ -15,7 +20,8 @@ public:
     bool load(const std::string& json) override;
     bool render() override;
     void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
-                 float /*sample_rate*/) override {
-        copy_input(inputs, input_count, 0, output, sample_count);
-    }
+                 float sample_rate) override;
+
+private:
+    float gain_ = 1.0f; // audio thread only; ramps toward the target to avoid clicks
 };

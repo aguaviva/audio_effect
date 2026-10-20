@@ -218,3 +218,40 @@ TEST(graph_processor_fan_out_feeds_every_link) {
     // Both Output nodes receive the preamp's block and are summed into the device.
     CHECK_NEAR(output[0], 0.5f, 1e-5f);
 }
+
+TEST(graph_processor_output_volume_and_mute) {
+    AudioGraph g;
+    g.clear();
+    const int in = g.add_node(NodeType::audio_input, 0, 0);
+    const int out = g.add_node(NodeType::output, 0, 0);
+    CHECK(g.add_link(in, out));
+    auto* m = g.find_node(out)->state().as<node_params::AudioOutput>();
+    m->volume_db = -6.0206f; // x0.5
+
+    constexpr size_t block = 16;
+    std::vector<int32_t> live(block, 1073741824); // 0.5
+    std::vector<float> output(block, 0.0f);
+    GraphProcessor proc(48000.0f);
+    auto compiled = compile_chain(g);
+    proc.process(*compiled, live.data(), output.data(), block); // ramps 1 -> 0.5
+    CHECK(proc.process(*compiled, live.data(), output.data(), block));
+    CHECK_NEAR(output[0], 0.25f, 1e-4f);
+
+    m->muted = true;
+    proc.process(*compiled, live.data(), output.data(), block); // ramps to 0
+    CHECK(proc.process(*compiled, live.data(), output.data(), block));
+    CHECK_NEAR(output[0], 0.0f, 1e-6f);
+    CHECK_NEAR(output[block - 1], 0.0f, 1e-6f);
+}
+
+TEST(output_mute_and_volume_persist) {
+    AudioOutput out;
+    out.muted = true;
+    out.volume_db = -12.0f;
+    AudioOutput loaded;
+    CHECK(loaded.load(out.save()));
+    CHECK(loaded.muted);
+    CHECK_NEAR(loaded.volume_db, -12.0f, 1e-5f);
+    CHECK(loaded.load(R"({"volume_db":99})"));
+    CHECK_NEAR(loaded.volume_db, AudioOutput::kMaxVolumeDb, 1e-5f);
+}

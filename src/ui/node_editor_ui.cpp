@@ -323,6 +323,7 @@ static void draw_node_params(GraphNode& node, AudioGraph& graph) {
             if (g_pipeline.offline_mode) {
                 ImGui::TextDisabled("offline");
             }
+            render_module(*m, node.id());
         }
         break;
     default:
