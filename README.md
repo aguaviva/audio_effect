@@ -18,8 +18,10 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 ### Sources / generators
 
+Generators (all but Audio Input) have a play/pause button; pausing keeps their place.
+
 - **Audio Input** — live capture
-- **WAV Player** — plays its own WAV file (loop optional); a missing file plays silence
+- **WAV Player** — plays its own WAV file (loop optional) with a seekable progress bar; a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
 

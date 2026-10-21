@@ -96,6 +96,33 @@ TEST(wav_player_plays_its_file_and_silence_when_missing) {
     CHECK_NEAR(energy_of_one_second(), 0.0f, 1e-9f);
 }
 
+TEST(paused_generator_is_silent_and_resumes_where_it_stopped) {
+    WavPlayer paused;
+    WavPlayer reference;
+    CHECK(paused.load("{}"));
+    CHECK(reference.load("{}"));
+    std::vector<float> a(48000, 0.0f);
+    std::vector<float> b(48000, 0.0f);
+    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
+    reference.process(nullptr, 0, b.data(), b.size(), 48000.0f);
+
+    paused.playing = false;
+    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
+    for (float s : a) {
+        CHECK_EQ(s, 0.0f);
+    }
+
+    paused.playing = true;
+    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
+    reference.process(nullptr, 0, b.data(), b.size(), 48000.0f);
+    CHECK(a == b);
+    float energy = 0.0f;
+    for (float s : b) {
+        energy += s * s;
+    }
+    CHECK(energy > 1.0e-3f);
+}
+
 TEST(mixer_dsp_averages_sources) {
     Mixer mixer;
     CHECK(mixer.name() == "mixer");

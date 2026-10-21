@@ -21,6 +21,9 @@ bool ChordGenerator::load(const std::string& json) {
 }
 
 bool ChordGenerator::render() {
+    if (ImGui::Button(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
     ImGui::TextUnformatted("Chord");
     ImGui::SetNextItemWidth(-1.0f);
     if (ImGui::Combo("##chord", &index, chord_combo_items(), kChordCount)) {
@@ -32,6 +35,10 @@ bool ChordGenerator::render() {
 }
 void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                              size_t sample_count, float sample_rate) {
+    if (!playing) {
+        std::fill(output, output + sample_count, 0.0f);
+        return;
+    }
     const int chord = std::clamp(index, 0, kChordCount - 1);
     if (chord != active_chord_) {
         phases_.fill(0.0);

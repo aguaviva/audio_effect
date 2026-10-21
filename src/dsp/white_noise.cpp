@@ -18,12 +18,19 @@ bool WhiteNoise::load(const std::string& json) {
 }
 
 bool WhiteNoise::render() {
+    if (ImGui::Button(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
     ImGui::TextUnformatted("Level");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##wn_level", &level, 0.0f, 1.0f, "%.2f");
 }
 void WhiteNoise::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                          size_t sample_count, float /*sample_rate*/) {
+    if (!playing) {
+        std::fill(output, output + sample_count, 0.0f);
+        return;
+    }
     const float amp = std::clamp(level, 0.0f, 1.0f);
     for (size_t i = 0; i < sample_count; ++i) {
         rng_ = rng_ * 1664525u + 1013904223u;

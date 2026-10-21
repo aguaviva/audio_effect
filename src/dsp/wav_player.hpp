@@ -5,6 +5,7 @@
 #include "wav_generator.hpp"
 #include "ui/file_picker.hpp"
 
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -12,6 +13,7 @@
 class WavPlayer : public Module {
 public:
     bool loop = true;
+    bool playing = true;
 
     // UI thread. set_path() decodes the file; when that fails the player is silent, it
     // returns false and error() says why.
@@ -31,6 +33,7 @@ private:
     FilePicker picker_{"Load WAV", ".wav"};
     std::string path_ = kDefaultWavPath;
     std::string error_;
+    size_t length_ = 0; // samples in the clip set_path() loaded
 
     // Handoff: set_path() fills next_clip_; process() swaps it with clip_, so the replaced
     // clip is freed by the next set_path() on the UI thread, never on the audio thread.
@@ -39,5 +42,5 @@ private:
     bool clip_changed_ = false;
 
     std::shared_ptr<const WavClip> clip_; // audio thread
-    size_t cursor_ = 0;                   // next sample in clip_
+    std::atomic<size_t> cursor_{0};       // next sample in clip_; the UI seeks by setting it
 };

@@ -9,6 +9,7 @@
 bool WavPlayer::set_path(const std::string& path) {
     path_ = path;
     auto clip = WavGenerator::load(path, kSampleRate, error_);
+    length_ = clip ? clip->interleaved_stereo.size() : 0;
     {
         std::lock_guard<std::mutex> lock(clip_mutex_);
         std::swap(next_clip_, clip);
@@ -64,6 +65,20 @@ bool WavPlayer::render() {
         ImGui::PopTextWrapPos();
     }
 
+    if (ImGui::Button(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
+    if (length_ > 0) {
+        const float samples_per_second = 2.0f * kSampleRate;
+        float seconds = std::min(cursor_.load(), length_) / samples_per_second;
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::SliderFloat("##position", &seconds, 0.0f, length_ / samples_per_second,
+                               "%.1f s")) {
+            cursor_ = static_cast<size_t>(seconds * kSampleRate) * 2;
+        }
+    }
+
     changed |= ImGui::Checkbox("Loop", &loop);
     return changed;
 }
@@ -75,19 +90,26 @@ void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, flo
         clip_changed_ = false;
         cursor_ = 0;
     }
+    if (!playing) {
+        std::fill(output, output + sample_count, 0.0f);
+        return;
+    }
     const size_t clip_samples = clip_ ? clip_->interleaved_stereo.size() : 0;
+    size_t start = cursor_;
+    size_t cursor = start;
     size_t written = 0;
     while (written < sample_count && clip_samples > 0) {
-        if (cursor_ >= clip_samples) {
+        if (cursor >= clip_samples) {
             if (!loop) {
                 break;
             }
-            cursor_ = 0;
+            cursor = 0;
         }
-        const size_t n = std::min(sample_count - written, clip_samples - cursor_);
-        std::copy_n(clip_->interleaved_stereo.data() + cursor_, n, output + written);
+        const size_t n = std::min(sample_count - written, clip_samples - cursor);
+        std::copy_n(clip_->interleaved_stereo.data() + cursor, n, output + written);
         written += n;
-        cursor_ += n;
+        cursor += n;
     }
     std::fill(output + written, output + sample_count, 0.0f);
+    cursor_.compare_exchange_strong(start, cursor); // a seek made during this block wins
 }

@@ -9,6 +9,7 @@
 class ChordGenerator : public Module {
 public:
     int index = 0;
+    bool playing = true;
 
     std::string name() const override { return "chord_generator"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }

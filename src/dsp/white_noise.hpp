@@ -8,6 +8,7 @@
 class WhiteNoise : public Module {
 public:
     float level = 0.2f;
+    bool playing = true;
 
     std::string name() const override { return "white_noise"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
