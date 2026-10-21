@@ -393,9 +393,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         ImNodes::EndNodeTitleBar();
 
         ImGui::PushID(node.id);
-        ImGui::BeginChild("child", ImVec2(200.0f, 0.0f), ImGuiChildFlags_AutoResizeY);
-
-        if (ImGui::BeginTable("node_layout", 3, ImGuiTableFlags_SizingFixedFit))
+        if (ImGui::BeginTable("node_layout", 3, ImGuiTableFlags_SizingFixedFit, ImVec2(200.0f, 0.0f)))
         {
             // Setup column widths: column 0 and 2 wrap the pins, column 1 takes the rest (-1.0f)
             ImGui::TableSetupColumn("In", ImGuiTableColumnFlags_WidthFixed);
@@ -443,8 +441,6 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
             ImGui::EndTable();        
         }
-
-        ImGui::EndChild();
         ImGui::PopID();
 
         ImNodes::EndNode();
