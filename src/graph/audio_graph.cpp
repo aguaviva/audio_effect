@@ -4,7 +4,6 @@
 #include "node_registry.hpp"
 
 #include <algorithm>
-#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -140,68 +139,52 @@ void AudioGraph::clear() {
     links_.clear();
 }
 
+// Links are valid here: add_link() and graph_io check endpoints and pins. A loaded file can
+// still contain a cycle, which leaves the graph invalid.
 std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     auto compiled = std::make_shared<CompiledGraph>();
 
-    std::unordered_map<int, std::vector<int>> next_nodes;
-    std::unordered_map<int, std::vector<int>> out_links;
-    std::unordered_map<int, std::vector<CompiledGraph::WiredInput>> ins;
-    std::unordered_map<int, int> indegree;
-
-    for (const auto& node : nodes_) {
-        indegree[node.id] = 0;
-        next_nodes[node.id] = {};
-        out_links[node.id] = {};
-        ins[node.id] = {};
+    std::unordered_map<int, size_t> index; // node id -> position in nodes_
+    std::vector<CompiledGraph::Node> nodes(nodes_.size());
+    for (size_t i = 0; i < nodes_.size(); ++i) {
+        index[nodes_[i].id] = i;
+        nodes[i] = {nodes_[i].id, nodes_[i].module, nodes_[i].bypassed, {}, {}};
     }
+
+    // Each link gets its own buffer; reader[b] is the node that reads buffer b.
+    std::vector<size_t> reader;
+    std::vector<int> waiting(nodes_.size(), 0); // inputs not yet produced, per node
     for (const auto& link : links_) {
-        const GraphNode* to = find_node(link.to_node);
-        if (!indegree.count(link.from_node) || !to || link.to_slot < 0 ||
-            link.to_slot >= to->module->input_count()) {
-            continue;
-        }
-        const int buffer = static_cast<int>(compiled->link_count++);
-        next_nodes[link.from_node].push_back(link.to_node);
-        out_links[link.from_node].push_back(buffer);
-        ins[link.to_node].push_back({buffer, link.to_slot});
-        indegree[link.to_node] += 1;
+        const int buffer = static_cast<int>(reader.size());
+        const size_t to = index.at(link.to_node);
+        reader.push_back(to);
+        nodes[index.at(link.from_node)].outputs.push_back(buffer);
+        nodes[to].inputs.push_back({buffer, link.to_slot});
+        ++waiting[to];
     }
 
-    std::queue<int> ready;
-    for (const auto& [id, deg] : indegree) {
-        if (deg == 0) {
-            ready.push(id);
+    // A node runs once everything feeding it has run. The order doubles as the work queue.
+    std::vector<size_t> order;
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        if (waiting[i] == 0) {
+            order.push_back(i);
         }
     }
-
-    std::vector<int> order_ids;
-    order_ids.reserve(nodes_.size());
-    auto deg = indegree;
-    while (!ready.empty()) {
-        int id = ready.front();
-        ready.pop();
-        order_ids.push_back(id);
-        for (int next : next_nodes[id]) {
-            if (--deg[next] == 0) {
-                ready.push(next);
+    for (size_t k = 0; k < order.size(); ++k) {
+        for (int buffer : nodes[order[k]].outputs) {
+            if (--waiting[reader[buffer]] == 0) {
+                order.push_back(reader[buffer]);
             }
         }
     }
 
-    if (order_ids.size() != nodes_.size()) {
-        compiled->valid = false;
-        return compiled;
-    }
-
-    compiled->order.reserve(order_ids.size());
-    for (int id : order_ids) {
-        const GraphNode* src = find_node(id);
-        if (!src) {
-            continue;
+    compiled->link_count = reader.size();
+    compiled->valid = order.size() == nodes.size();
+    if (compiled->valid) {
+        for (size_t i : order) {
+            compiled->order.push_back(std::move(nodes[i]));
         }
-        compiled->order.push_back({src->id, src->module, src->bypassed, ins[id], out_links[id]});
     }
-    compiled->valid = true;
     return compiled;
 }
 
