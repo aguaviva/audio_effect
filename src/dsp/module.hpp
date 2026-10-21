@@ -3,6 +3,7 @@
 #include "module_json.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -58,7 +59,11 @@ public:
     virtual bool supports_bypass() const { return true; }
     virtual bool is_output_sink() const { return false; }
 
+    // Smoothed time one block takes in this module, in microseconds.
+    float process_us() const { return process_us_.load(std::memory_order_relaxed); }
+
 protected:
     GraphHost* host_ = nullptr;
+    std::atomic<float> process_us_{0.0f}; // written by GraphProcessor
     friend class GraphProcessor;
 };

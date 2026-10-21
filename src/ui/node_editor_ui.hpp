@@ -11,6 +11,7 @@ struct NodeEditorUiState {
     std::string status_message;
     bool positions_need_apply = true;
     bool show_diagnostics = false;
+    bool show_profiler = false;
 
     NodeEditorUiState() {
         std::snprintf(graph_path, sizeof(graph_path), "%s", kDefaultPatchPath);

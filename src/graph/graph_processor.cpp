@@ -1,6 +1,7 @@
 #include "graph_processor.hpp"
 
 #include <algorithm>
+#include <chrono>
 
 GraphProcessor::GraphProcessor(float sample_rate)
     : sample_rate_(sample_rate) {}
@@ -37,12 +38,17 @@ bool GraphProcessor::process(const CompiledGraph& graph,
         const auto& links_out = node.outputs;
         float* out = links_out.empty() ? scratch : buffer(static_cast<size_t>(links_out.front()));
 
+        const auto start = std::chrono::steady_clock::now();
         if (mod.supports_bypass() && node.bypassed) {
             copy_input(inputs, input_count, 0, out, block_size_);
         } else {
             mod.host_ = this;
             mod.process(inputs, input_count, out, block_size_, sample_rate_);
         }
+        const float us = std::chrono::duration<float, std::micro>(
+                             std::chrono::steady_clock::now() - start).count();
+        const float smoothed = mod.process_us_.load(std::memory_order_relaxed);
+        mod.process_us_.store(smoothed + 0.02f * (us - smoothed), std::memory_order_relaxed);
         for (size_t k = 1; k < links_out.size(); ++k) {
             std::copy(out, out + block_size_, buffer(static_cast<size_t>(links_out[k])));
         }

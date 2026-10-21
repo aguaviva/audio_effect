@@ -214,6 +214,7 @@ static void draw_menu_bar(AudioGraph& graph, NodeEditorUiState& state) {
     }
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Diagnostics", nullptr, &state.show_diagnostics);
+        ImGui::MenuItem("Profiler", nullptr, &state.show_profiler);
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
@@ -266,6 +267,37 @@ static void draw_diagnostics(NodeEditorUiState& state) {
                 static_cast<unsigned long long>(g_pipeline.dropped_capture_reads.load()));
     ImGui::PlotHistogram("##queues", depths, 3, 0, "Free | Cap->Filt | Filt->Play",
                          0.0f, static_cast<float>(QUEUE_CAPACITY), ImVec2(0, 80.0f));
+}
+
+static void draw_profiler(const AudioGraph& graph, NodeEditorUiState& state) {
+    if (!state.show_profiler) {
+        return;
+    }
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("Profiler", &state.show_profiler, flags) &&
+        ImGui::BeginTable("profile", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("Module");
+        ImGui::TableSetupColumn("Time per block");
+        ImGui::TableHeadersRow();
+        float total = 0.0f;
+        for (const auto& node : graph.nodes()) {
+            const float us = node.module->process_us();
+            total += us;
+            ImGui::TableNextColumn();
+            ImGui::Text("%s #%d", node_label(*node.module), node.id);
+            ImGui::TableNextColumn();
+            ImGui::Text("%8.1f us", us);
+        }
+        ImGui::TableNextColumn();
+        ImGui::Separator();
+        ImGui::TextUnformatted("Total");
+        ImGui::TableNextColumn();
+        ImGui::Separator();
+        ImGui::Text("%8.1f us", total);
+        ImGui::EndTable();
+    }
+    ImGui::End();
 }
 
 static void context_menu_add_nodes(AudioGraph& graph, NodeEditorUiState& state,
@@ -494,5 +526,6 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
     // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
+    draw_profiler(graph, state);
     draw_message_box();
 }
