@@ -34,6 +34,7 @@ set(AUDIO_EFFECT_SOURCES
   src/graph/graph_processor.cpp
   src/graph/node_registry.cpp
   src/ui/node_editor_ui.cpp
+  src/ui/file_picker.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
   src/dsp/dynamic_low_pass_filter.cpp
@@ -150,6 +151,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/agc.cpp
     src/dsp/wav_recorder.cpp
     src/dsp/wav_player.cpp
+    src/ui/file_picker.cpp
     src/dsp/audio_input.cpp
     src/dsp/audio_output.cpp
     src/dsp/chord_generator.cpp
@@ -167,7 +169,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
   )
   add_executable(graph_tests ${TEST_SOURCES})
   target_include_directories(graph_tests PRIVATE
-    src src/graph src/dsp src/audio tests third_party/imgui)
+    src src/graph src/dsp src/audio tests third_party/imgui third_party/imgui-filebrowser)
   if(NOT MSVC)
     target_compile_options(graph_tests PRIVATE -Wall -Wextra)
   endif()

@@ -1,6 +1,7 @@
 #include "wav_player.hpp"
 
 #include <algorithm>
+#include <cstring>
 
 #include "imgui.h"
 
@@ -26,7 +27,31 @@ bool WavPlayer::load(const std::string& json) {
 }
 
 bool WavPlayer::render() {
-    return ImGui::Checkbox("Loop", &loop);
+    bool changed = false;
+    const std::string picked = picker_.poll();
+    if (!picked.empty()) {
+        set_path(picked);
+        changed = true;
+    }
+
+    const char* slash = std::strrchr(path_.c_str(), '/');
+    const char* leaf = slash ? slash + 1 : path_.c_str();
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float button_width = ImGui::CalcTextSize("...").x + style.FramePadding.x * 2.0f;
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x -
+                           button_width - style.ItemSpacing.x);
+    ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
+    ImGui::PopTextWrapPos();
+    if (ImGui::IsItemHovered() && !path_.empty()) {
+        ImGui::SetTooltip("%s", path_.c_str());
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("...")) {
+        picker_.open(path_);
+    }
+
+    changed |= ImGui::Checkbox("Loop", &loop);
+    return changed;
 }
 void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                         size_t sample_count, float /*sample_rate*/) {

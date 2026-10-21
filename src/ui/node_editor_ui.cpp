@@ -5,11 +5,11 @@
 #include "dsp/audio_input.hpp"
 #include "dsp/audio_output.hpp"
 #include "dsp/mixer.hpp"
-#include "dsp/wav_player.hpp"
 #include "graph/graph_io.hpp"
 #include "graph/node_registry.hpp"
 #include "graph/pins.hpp"
 #include "paths.hpp"
+#include "ui/file_picker.hpp"
 
 #include "imgui.h"
 #include "imfilebrowser.h"
@@ -22,26 +22,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-
-// Opens the browser's file picker and copies the chosen file into dir in the page's file system.
-EM_JS(void, upload_file_to, (const char* dir, const char* accept), {
-    const d = UTF8ToString(dir);
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = UTF8ToString(accept);
-    input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        FS.mkdirTree(d);
-        FS.writeFile(d + '/' + file.name, bytes);
-    };
-    input.click();
-});
-#endif
 
 namespace {
 
@@ -77,87 +57,8 @@ ImGui::FileBrowser& graph_save_browser() {
     return browser;
 }
 
-#ifdef __EMSCRIPTEN__
-// Directory the pending upload is written to; a fresh one per upload, so a re-uploaded
-// file with the same name is not served from the WAV cache.
-std::string& wav_upload_dir() {
-    static std::string dir;
-    return dir;
-}
-
-std::string first_file_in(const std::string& dir) {
-    std::error_code ec;
-    for (const auto& entry : std::filesystem::directory_iterator(dir, ec)) {
-        return entry.path().string();
-    }
-    return {};
-}
-#else
-ImGui::FileBrowser& wav_open_browser() {
-    static ImGui::FileBrowser browser(ImGuiFileBrowserFlags_CloseOnEsc |
-                                      ImGuiFileBrowserFlags_ConfirmOnEnter |
-                                      ImGuiFileBrowserFlags_EditPathString);
-    static bool configured = false;
-    if (!configured) {
-        browser.SetTitle("Load WAV");
-        browser.SetTypeFilters({".wav", ".WAV"});
-        configured = true;
-    }
-    return browser;
-}
-#endif
-
-// Target node id for the WAV file picker (-1 = none / legacy toolbar unused).
-int& wav_picker_node_id() {
-    static int id = -1;
-    return id;
-}
-
 void copy_path_to_buf(char* buf, size_t n, const std::filesystem::path& path) {
     std::snprintf(buf, n, "%s", path.string().c_str());
-}
-
-void open_browser_near_path(ImGui::FileBrowser& browser, const char* path_hint,
-                            bool enter_filename = false) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    const fs::path hint = path_hint ? fs::path(path_hint) : fs::path{};
-    if (!hint.empty()) {
-        if (fs::is_directory(hint, ec)) {
-            browser.SetDirectory(hint);
-        } else if (hint.has_parent_path() && fs::is_directory(hint.parent_path(), ec)) {
-            browser.SetDirectory(hint.parent_path());
-        }
-        if (enter_filename && hint.has_filename() && !fs::is_directory(hint, ec)) {
-            browser.SetInputName(hint.filename().string());
-        }
-    }
-    browser.Open();
-}
-
-void open_wav_picker(int node_id, [[maybe_unused]] const std::string& current_path) {
-    wav_picker_node_id() = node_id;
-#ifdef __EMSCRIPTEN__
-    static int uploads = 0;
-    wav_upload_dir() = "/uploads/" + std::to_string(++uploads);
-    upload_file_to(wav_upload_dir().c_str(), ".wav");
-#else
-    open_browser_near_path(wav_open_browser(), current_path.c_str());
-#endif
-}
-
-void assign_picked_wav(AudioGraph& graph, NodeEditorUiState& state, const std::string& path) {
-    const int target = wav_picker_node_id();
-    wav_picker_node_id() = -1;
-    if (auto* node = graph.find_node(target)) {
-        if (auto* p = node->as<WavPlayer>()) {
-            p->set_path(path);
-            state.status_message = std::string("WAV Player → ") + path;
-            node_editor_publish(graph);
-        }
-    } else {
-        state.status_message = "No WAV Player selected for file";
-    }
 }
 
 } // namespace
@@ -243,21 +144,7 @@ static void draw_device_error(const char* stream_prefix) {
 }
 
 static void draw_node_params(GraphNode& node, AudioGraph& graph) {
-    if (auto* m = node.as<WavPlayer>()) {
-        // File picker uses shared browser state — keep the "..." button here.
-        const char* slash = std::strrchr(m->path().c_str(), '/');
-        const char* leaf = slash ? slash + 1 : m->path().c_str();
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
-        ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
-        ImGui::PopTextWrapPos();
-        if (ImGui::IsItemHovered() && !m->path().empty()) {
-            ImGui::SetTooltip("%s", m->path().c_str());
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("...")) {
-            open_wav_picker(node.id, m->path());
-        }
-    } else if (auto* m = node.as<AudioInput>()) {
+    if (auto* m = node.as<AudioInput>()) {
         static std::vector<AudioDevice> devices = list_capture_devices();
         static std::vector<const char*> labels;
         ImGui::TextUnformatted("Device");
@@ -358,24 +245,6 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
             state.status_message = error;
         }
     }
-
-#ifdef __EMSCRIPTEN__
-    if (!wav_upload_dir().empty()) {
-        const std::string uploaded = first_file_in(wav_upload_dir());
-        if (!uploaded.empty()) {
-            wav_upload_dir().clear();
-            assign_picked_wav(graph, state, uploaded);
-        }
-    }
-#else
-    auto& open_wav = wav_open_browser();
-    open_wav.Display();
-    if (open_wav.HasSelected()) {
-        const std::string selected = open_wav.GetSelected().string();
-        open_wav.ClearSelected();
-        assign_picked_wav(graph, state, selected);
-    }
-#endif
 }
 
 static void draw_diagnostics(NodeEditorUiState& state) {

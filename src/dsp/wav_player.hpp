@@ -3,6 +3,7 @@
 #include "module.hpp"
 #include "paths.hpp"
 #include "wav_generator.hpp"
+#include "ui/file_picker.hpp"
 
 #include <memory>
 #include <mutex>
@@ -25,6 +26,7 @@ public:
                  float sample_rate) override;
 
 private:
+    FilePicker picker_{"Load WAV", ".wav"};
     std::mutex path_mutex_;
     std::string path_ = kDefaultWavPath;
     std::shared_ptr<const WavClip> clip_;
