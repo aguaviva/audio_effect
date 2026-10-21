@@ -47,7 +47,6 @@ struct CompiledGraph {
 
     std::vector<Node> order; // topological order
     size_t link_count = 0;
-    bool valid = false;
 };
 
 class AudioGraph {
@@ -55,7 +54,8 @@ public:
     // Returns the new node id, or -1 when no module has this name.
     int add_node(const std::string& type, float x, float y);
     bool remove_node(int node_id);
-    bool add_link(int from_node, int to_node, int to_slot = 0);
+    // On refusal, why (if given) says what was wrong, worded for the user.
+    bool add_link(int from_node, int to_node, int to_slot = 0, std::string* why = nullptr);
     bool remove_link(int link_id);
     // Input pins to show: the module's count, except a Mixer shows one per connection
     // plus one spare.
@@ -69,7 +69,9 @@ public:
     std::vector<GraphLink>& links() { return links_; }
 
     void clear();
+    // Nodes in a cycle cannot be ordered and are left out.
     std::shared_ptr<const CompiledGraph> compile() const;
+    bool has_cycle() const { return compile()->order.size() != nodes_.size(); }
 
     // UI thread. Replaced snapshots are freed here, never on the audio thread, once the
     // audio thread has let go of them.

@@ -2,11 +2,9 @@
 
 #include "audio_graph.hpp"
 #include "dsp/module.hpp"
-#include "dsp/wav_generator.hpp"
 
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 // Runs a compiled graph. Knows Module only — no concrete DSP types.
@@ -21,7 +19,6 @@ public:
                  size_t block_size);
 
     // GraphHost
-    std::shared_ptr<const WavClip> load_wav(const std::string& path) override;
     const float* live_input() const override { return live_input_; }
 
 private:
@@ -30,7 +27,6 @@ private:
     float sample_rate_;
     size_t block_size_ = 0;
     const float* live_input_ = nullptr;
-    std::unordered_map<std::string, std::shared_ptr<const WavClip>> wav_cache_;
     // One block per link, plus one scratch block for nodes with no outgoing links.
     std::vector<float> buffers_;
 };

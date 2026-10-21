@@ -4,17 +4,17 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 
-struct WavClip;
+// The rate the audio engine runs every module at.
+constexpr uint32_t kSampleRate = 48000;
 
 // Host services modules may need during process().
 class GraphHost {
 public:
     virtual ~GraphHost() = default;
-    // nullptr when the file cannot be loaded.
-    virtual std::shared_ptr<const WavClip> load_wav(const std::string& path) = 0;
     // Captured device block (interleaved float), or nullptr.
     virtual const float* live_input() const = 0;
 };

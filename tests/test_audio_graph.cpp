@@ -37,7 +37,9 @@ TEST(audio_graph_rejects_cycles_and_duplicates) {
     const int b = g.add_node("low_pass", 0, 0);
     CHECK(g.add_link(a, b));
     CHECK(!g.add_link(a, b));      // duplicate
-    CHECK(!g.add_link(b, a));      // cycle
+    std::string why;
+    CHECK(!g.add_link(b, a, 0, &why)); // cycle
+    CHECK(why.find("cycle") != std::string::npos);
     CHECK(!g.add_link(a, a));      // self
 }
 
@@ -63,7 +65,6 @@ TEST(audio_graph_compile_gives_every_link_a_buffer) {
     CHECK(g.add_link(src, fx_a));
     CHECK(g.add_link(src, fx_b));
     auto compiled = g.compile();
-    CHECK(compiled->valid);
     CHECK_EQ(static_cast<int>(compiled->link_count), 2);
     const auto& first = compiled->order.front();
     CHECK_EQ(first.id, src);
@@ -100,7 +101,6 @@ TEST(audio_graph_compile_topological_order) {
     CHECK(g.add_link(b, c));
     auto compiled = g.compile();
     CHECK(compiled);
-    CHECK(compiled->valid);
     CHECK_EQ(static_cast<int>(compiled->order.size()), 3);
     CHECK(compiled->order.front().module->name() == "wav_player");
     CHECK(compiled->order.back().module->name() == "output");
@@ -123,7 +123,6 @@ TEST(audio_graph_default_patch_has_mixer_and_output) {
     CHECK(has_wav);
     auto compiled = g.compile();
     CHECK(compiled);
-    CHECK(compiled->valid);
 }
 
 TEST(audio_graph_frees_deleted_modules_on_publishing_thread) {

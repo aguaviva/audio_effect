@@ -87,7 +87,7 @@ void render_chunk(GraphProcessor& processor, AudioChunk& chunk, std::vector<floa
 #ifdef __EMSCRIPTEN__
 // No threads on the web: the playback callback renders each block itself.
 std::unique_ptr<AudioChunk> next_played_chunk(AudioPipeline& pipe) {
-    static GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
+    static GraphProcessor processor(static_cast<float>(kSampleRate));
     static std::vector<float> out;
     auto chunk = pipe.cap_to_filter.pop();
     if (!chunk) {
@@ -151,7 +151,7 @@ bool init_device(AudioPipeline& pipe, ma_device_type type, const std::string& na
     config.capture.channels = CHANNELS;
     config.playback.format = ma_format_f32;
     config.playback.channels = CHANNELS;
-    config.sampleRate = SAMPLE_RATE;
+    config.sampleRate = kSampleRate;
     config.periodSizeInFrames = AUDIO_PERIOD_FRAMES;
     config.pUserData = &pipe;
 
@@ -209,8 +209,8 @@ private:
     std::chrono::nanoseconds elapsed(uint64_t periods) const {
         constexpr uint64_t kNsPerSecond = 1000000000ull;
         const uint64_t frames = periods * frames_per_period_;
-        return std::chrono::nanoseconds((frames / SAMPLE_RATE) * kNsPerSecond +
-                                        (frames % SAMPLE_RATE) * kNsPerSecond / SAMPLE_RATE);
+        return std::chrono::nanoseconds((frames / kSampleRate) * kNsPerSecond +
+                                        (frames % kSampleRate) * kNsPerSecond / kSampleRate);
     }
 
     uint64_t frames_per_period_;
@@ -220,7 +220,7 @@ private:
 
 void filter_processor() {
     enable_flush_denormals_to_zero();
-    GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
+    GraphProcessor processor(static_cast<float>(kSampleRate));
     const size_t block_size = g_pipeline.samples_per_period;
     std::vector<float> out(block_size, 0.0f);
 
@@ -249,7 +249,7 @@ void filter_processor() {
 
 void offline_processor() {
     enable_flush_denormals_to_zero();
-    GraphProcessor processor(static_cast<float>(SAMPLE_RATE));
+    GraphProcessor processor(static_cast<float>(kSampleRate));
     const size_t block_size = g_pipeline.samples_per_period;
     std::vector<float> live(block_size, 0.0f);
     std::vector<float> out(block_size, 0.0f);

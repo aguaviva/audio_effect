@@ -63,16 +63,17 @@ int main(int argc, char** argv) {
 
     // CLI path wins, otherwise assets/patches/default_patch.json.
     const char* graph_path = (argc > 1) ? argv[1] : kDefaultPatchPath;
-    if (!node_editor_load(graph, ui_state, graph_path)) {
-        std::fprintf(stderr, "%s\n", ui_state.status_message.c_str());
-    }
+    node_editor_load(graph, ui_state, graph_path); // a failure shows in the message box
 
     if (g_pipeline.playback_ready) {
         g_pipeline.start();
     } else {
         // No sound card (CI / VM): still run the graph so WAV + visualizers animate.
         g_pipeline.start_offline();
-        ui_state.status_message += " | Offline audio (no device)";
+        if (!ui_state.status_message.empty()) {
+            ui_state.status_message += " | ";
+        }
+        ui_state.status_message += "Offline audio (no device)";
     }
 
     if (!glfwInit()) {

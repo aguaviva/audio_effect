@@ -5,22 +5,6 @@
 GraphProcessor::GraphProcessor(float sample_rate)
     : sample_rate_(sample_rate) {}
 
-std::shared_ptr<const WavClip> GraphProcessor::load_wav(const std::string& path) {
-    if (path.empty()) {
-        return nullptr;
-    }
-    auto it = wav_cache_.find(path);
-    if (it != wav_cache_.end()) {
-        return it->second;
-    }
-    std::string error;
-    auto clip = WavGenerator::load(path, static_cast<uint32_t>(sample_rate_), error);
-    if (clip) {
-        wav_cache_[path] = clip;
-    }
-    return clip;
-}
-
 bool GraphProcessor::process(const CompiledGraph& graph,
                              const float* live_input,
                              float* out_float,
@@ -30,7 +14,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
     }
     block_size_ = block_size;
     std::fill(out_float, out_float + block_size_, 0.0f);
-    if (!graph.valid || graph.order.empty()) {
+    if (graph.order.empty()) {
         return false;
     }
 

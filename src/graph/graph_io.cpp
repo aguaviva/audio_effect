@@ -193,8 +193,15 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         valid_links.push_back(link);
     }
 
-    graph.nodes() = std::move(nodes);
-    graph.links() = std::move(valid_links);
+    AudioGraph loaded;
+    loaded.nodes() = std::move(nodes);
+    loaded.links() = std::move(valid_links);
+    if (loaded.has_cycle()) {
+        error = "The graph contains a cycle: a signal feeds back into itself.";
+        return false;
+    }
+    graph.nodes() = std::move(loaded.nodes());
+    graph.links() = std::move(loaded.links());
     return true;
 }
 

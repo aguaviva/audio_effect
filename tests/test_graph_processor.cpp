@@ -11,7 +11,6 @@
 static std::shared_ptr<const CompiledGraph> compile_chain(AudioGraph& g) {
     auto compiled = g.compile();
     CHECK(compiled);
-    CHECK(compiled->valid);
     return compiled;
 }
 
@@ -181,7 +180,7 @@ TEST(graph_processor_reports_no_output_without_output_node) {
     auto compiled = g.compile();
     CHECK(compiled);
     // The pipeline turns this into silence rather than passing the raw input through.
-    CHECK(!compiled->valid || !proc.process(*compiled, live.data(), output.data(), block));
+    CHECK(!proc.process(*compiled, live.data(), output.data(), block));
 }
 
 TEST(graph_processor_fan_out_feeds_every_link) {

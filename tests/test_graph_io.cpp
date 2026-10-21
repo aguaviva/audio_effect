@@ -124,15 +124,17 @@ TEST(graph_io_rejects_two_links_into_one_input_pin) {
     CHECK(error.find("already connected") != std::string::npos);
 }
 
-TEST(graph_io_loaded_cycle_compiles_invalid) {
+TEST(graph_io_rejects_cycles) {
     const char* text = R"({"version":2,"nodes":[
         {"id":1,"type":"preamp","x":0,"y":0},
         {"id":2,"type":"preamp","x":0,"y":0}],
         "links":[{"id":1,"from":1,"to":2,"to_slot":0},{"id":2,"from":2,"to":1,"to_slot":0}]})";
     AudioGraph g;
     std::string error;
-    CHECK(graph_io::deserialize(g, text, error));
-    CHECK(!g.compile()->valid);
+    const int before = g.add_node("output", 0, 0);
+    CHECK(!graph_io::deserialize(g, text, error));
+    CHECK(error.find("cycle") != std::string::npos);
+    CHECK(g.find_node(before) != nullptr); // the graph is left as it was
 }
 
 TEST(graph_io_params_may_precede_type) {

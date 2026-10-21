@@ -4,10 +4,17 @@
 #include <cstring>
 
 #include "imgui.h"
+#include "ui/message_box.hpp"
 
-void WavPlayer::set_path(const std::string& path) {
-    std::lock_guard<std::mutex> lock(path_mutex_);
+bool WavPlayer::set_path(const std::string& path) {
     path_ = path;
+    auto clip = WavGenerator::load(path, kSampleRate, error_);
+    {
+        std::lock_guard<std::mutex> lock(clip_mutex_);
+        std::swap(next_clip_, clip);
+        clip_changed_ = true;
+    }
+    return error_.empty(); // clip now holds the replaced one, freed here outside the lock
 }
 
 std::string WavPlayer::save() const {
@@ -30,7 +37,9 @@ bool WavPlayer::render() {
     bool changed = false;
     const std::string picked = picker_.poll();
     if (!picked.empty()) {
-        set_path(picked);
+        if (!set_path(picked)) {
+            show_error("Could not load " + picked + ":\n" + error_);
+        }
         changed = true;
     }
 
@@ -49,17 +58,21 @@ bool WavPlayer::render() {
     if (ImGui::SmallButton("...")) {
         picker_.open(path_);
     }
+    if (!error_.empty()) {
+        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", error_.c_str());
+        ImGui::PopTextWrapPos();
+    }
 
     changed |= ImGui::Checkbox("Loop", &loop);
     return changed;
 }
 void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
                         size_t sample_count, float /*sample_rate*/) {
-    std::unique_lock<std::mutex> lock(path_mutex_, std::try_to_lock);
-    if (lock.owns_lock() && path_ != loaded_path_) {
-        loaded_path_ = path_;
-        lock.unlock();
-        clip_ = host_ ? host_->load_wav(loaded_path_) : nullptr;
+    std::unique_lock<std::mutex> lock(clip_mutex_, std::try_to_lock);
+    if (lock.owns_lock() && clip_changed_) {
+        std::swap(clip_, next_clip_);
+        clip_changed_ = false;
         cursor_ = 0;
     }
     const size_t clip_samples = clip_ ? clip_->interleaved_stereo.size() : 0;

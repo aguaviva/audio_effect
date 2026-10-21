@@ -19,9 +19,13 @@ EM_JS(void, upload_file_to, (const char* dir, const char* accept), {
     input.onchange = async () => {
         const file = input.files[0];
         if (!file) return;
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        FS.mkdirTree(d);
-        FS.writeFile(d + '/' + file.name, bytes);
+        try {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            FS.mkdirTree(d);
+            FS.writeFile(d + '/' + file.name, bytes);
+        } catch (e) {
+            console.error('Upload of ' + file.name + ' failed:', e);
+        }
     };
     input.click();
 });
@@ -52,8 +56,7 @@ FilePicker::~FilePicker() = default;
 
 #ifdef __EMSCRIPTEN__
 void FilePicker::open(const std::string& /*current_path*/) {
-    // A fresh directory per upload, so a re-uploaded file with the same name is not
-    // served from the WAV cache.
+    // A fresh directory per upload, so poll() finds only the file from this upload.
     static int uploads = 0;
     upload_dir_ = "/uploads/" + std::to_string(++uploads);
     upload_file_to(upload_dir_.c_str(), extension_.c_str());

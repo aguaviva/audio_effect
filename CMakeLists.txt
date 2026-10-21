@@ -35,6 +35,7 @@ set(AUDIO_EFFECT_SOURCES
   src/graph/node_registry.cpp
   src/ui/node_editor_ui.cpp
   src/ui/file_picker.cpp
+  src/ui/message_box.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
   src/dsp/dynamic_low_pass_filter.cpp
@@ -152,6 +153,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/wav_recorder.cpp
     src/dsp/wav_player.cpp
     src/ui/file_picker.cpp
+    src/ui/message_box.cpp
     src/dsp/audio_input.cpp
     src/dsp/audio_output.cpp
     src/dsp/chord_generator.cpp

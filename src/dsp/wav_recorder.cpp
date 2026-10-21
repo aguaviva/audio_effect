@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "imgui.h"
+#include "ui/message_box.hpp"
 
 namespace {
 
@@ -29,6 +30,12 @@ bool WavRecorder::load(const std::string& json) {
 
 bool WavRecorder::render() {
     const bool changed = ImGui::Checkbox("Arm Record", &armed);
+    if (changed && armed) {
+        engine_.clear_failure();
+    } else if (armed && engine_.failed()) {
+        armed = false;
+        show_error("Could not record: " + path + " cannot be written.");
+    }
     ImGui::TextWrapped("%s", path.c_str());
     return changed;
 }
@@ -45,12 +52,14 @@ WavRecorderEngine::~WavRecorderEngine() {
 }
 
 void WavRecorderEngine::set_armed(bool armed, const std::string& path, float sample_rate) {
-    if (armed == armed_) {
+    if (armed == requested_) {
         return;
     }
+    requested_ = armed;
     if (armed) {
         sample_rate_ = static_cast<uint32_t>(std::max(1.0f, sample_rate));
         armed_ = open_file(path);
+        failed_.store(!armed_, std::memory_order_relaxed);
     } else {
         close_file();
         armed_ = false;

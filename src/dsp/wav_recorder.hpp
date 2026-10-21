@@ -3,6 +3,7 @@
 #include "module.hpp"
 #include "paths.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -15,9 +16,13 @@ public:
     WavRecorderEngine& operator=(const WavRecorderEngine&) = delete;
     ~WavRecorderEngine();
 
-    // Opens path when arming; the path is ignored while already armed.
+    // Audio thread. Opens path when arming, once per arm: if that fails, failed() is set
+    // and nothing is written until the next arm.
     void set_armed(bool armed, const std::string& path, float sample_rate);
     void write_samples(const float* interleaved, size_t sample_count);
+    // UI thread.
+    bool failed() const { return failed_.load(std::memory_order_relaxed); }
+    void clear_failure() { failed_.store(false, std::memory_order_relaxed); }
 
 private:
     void close_file();
@@ -25,7 +30,9 @@ private:
     void patch_header();
 
     std::ofstream file_;
+    bool requested_ = false;
     bool armed_ = false;
+    std::atomic<bool> failed_{false};
     uint32_t sample_rate_ = 48000;
     uint64_t data_bytes_ = 0;
 };

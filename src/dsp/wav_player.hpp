@@ -13,9 +13,11 @@ class WavPlayer : public Module {
 public:
     bool loop = true;
 
-    // Written by the UI thread, read by the audio thread; set_path() is the only writer.
+    // UI thread. set_path() decodes the file; when that fails the player is silent, it
+    // returns false and error() says why.
     const std::string& path() const { return path_; }
-    void set_path(const std::string& path);
+    bool set_path(const std::string& path);
+    const std::string& error() const { return error_; }
 
     std::string name() const override { return "wav_player"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
@@ -27,9 +29,15 @@ public:
 
 private:
     FilePicker picker_{"Load WAV", ".wav"};
-    std::mutex path_mutex_;
     std::string path_ = kDefaultWavPath;
-    std::shared_ptr<const WavClip> clip_;
-    std::string loaded_path_;
-    size_t cursor_ = 0; // next sample in clip_
+    std::string error_;
+
+    // Handoff: set_path() fills next_clip_; process() swaps it with clip_, so the replaced
+    // clip is freed by the next set_path() on the UI thread, never on the audio thread.
+    std::mutex clip_mutex_;
+    std::shared_ptr<const WavClip> next_clip_;
+    bool clip_changed_ = false;
+
+    std::shared_ptr<const WavClip> clip_; // audio thread
+    size_t cursor_ = 0;                   // next sample in clip_
 };

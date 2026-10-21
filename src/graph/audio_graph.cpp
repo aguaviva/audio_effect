@@ -22,6 +22,9 @@ int AudioGraph::add_node(const std::string& type, float x, float y) {
     if (!module) {
         return -1;
     }
+    // Every module in a graph has been through load(): from its patch file, or from its
+    // defaults here (a WAV Player decodes its default file).
+    module->load("{}");
     const int id = next_free_id(nodes_);
     nodes_.push_back({id, x, y, false, std::move(module)});
     return id;
@@ -42,26 +45,24 @@ bool AudioGraph::remove_node(int node_id) {
     return true;
 }
 
-bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
-    if (from_node == to_node) {
+bool AudioGraph::add_link(int from_node, int to_node, int to_slot, std::string* why) {
+    auto refuse = [why](const char* reason) {
+        if (why) *why = reason;
         return false;
-    }
+    };
     const GraphNode* from = find_node(from_node);
     const GraphNode* to = find_node(to_node);
-    if (!from || !to || from->module->output_count() == 0) {
-        return false;
+    if (!from || !to || from->module->output_count() == 0 || to_slot < 0 ||
+        to_slot >= input_pin_count(to_node)) {
+        return refuse("Connect an output pin to an input pin.");
     }
-    if (to_slot < 0 || to_slot >= input_pin_count(to_node)) {
-        return false;
-    }
-
     std::unordered_set<int> visited;
     std::vector<int> stack{to_node};
     while (!stack.empty()) {
         int current = stack.back();
         stack.pop_back();
         if (current == from_node) {
-            return false;
+            return refuse("That link would create a cycle: the signal would feed back into itself.");
         }
         if (!visited.insert(current).second) {
             continue;
@@ -76,7 +77,7 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot) {
     // One link per input pin; fan-in goes through a Mixer.
     for (const auto& link : links_) {
         if (link.to_node == to_node && link.to_slot == to_slot) {
-            return false;
+            return refuse("That input is already connected. Combine signals with a Mixer.");
         }
     }
 
@@ -139,8 +140,7 @@ void AudioGraph::clear() {
     links_.clear();
 }
 
-// Links are valid here: add_link() and graph_io check endpoints and pins. A loaded file can
-// still contain a cycle, which leaves the graph invalid.
+// Links are valid here: add_link() and graph_io check endpoints, pins and cycles.
 std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     auto compiled = std::make_shared<CompiledGraph>();
 
@@ -179,11 +179,8 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     }
 
     compiled->link_count = reader.size();
-    compiled->valid = order.size() == nodes.size();
-    if (compiled->valid) {
-        for (size_t i : order) {
-            compiled->order.push_back(std::move(nodes[i]));
-        }
+    for (size_t i : order) {
+        compiled->order.push_back(std::move(nodes[i]));
     }
     return compiled;
 }

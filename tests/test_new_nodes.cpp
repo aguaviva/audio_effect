@@ -57,7 +57,7 @@ TEST(white_noise_source_produces_energy) {
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();
-    CHECK(compiled && compiled->valid);
+    CHECK(compiled);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
 
     float energy = 0.0f;
@@ -90,7 +90,9 @@ TEST(wav_player_plays_its_file_and_silence_when_missing) {
     };
     CHECK(energy_of_one_second() > 1.0e-3f);
 
-    player->set_path("assets/audio/does_not_exist.wav");
+    CHECK(player->error().empty());
+    CHECK(!player->set_path("assets/audio/does_not_exist.wav"));
+    CHECK(!player->error().empty());
     CHECK_NEAR(energy_of_one_second(), 0.0f, 1e-9f);
 }
 
@@ -220,7 +222,7 @@ TEST(dry_wet_mix_blends_slots) {
     std::vector<float> output(block, 0.0f);
     GraphProcessor proc(48000.0f);
     auto compiled = g.compile();
-    CHECK(compiled && compiled->valid);
+    CHECK(compiled);
     CHECK(proc.process(*compiled, live.data(), output.data(), block));
     // 0.5 * (0.25 + ~0.5) ≈ 0.375
     CHECK_NEAR(output[0], 0.375f, 0.04f);

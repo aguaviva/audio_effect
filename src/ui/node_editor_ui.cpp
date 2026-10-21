@@ -10,6 +10,7 @@
 #include "graph/pins.hpp"
 #include "paths.hpp"
 #include "ui/file_picker.hpp"
+#include "ui/message_box.hpp"
 
 #include "imgui.h"
 #include "imfilebrowser.h"
@@ -84,7 +85,7 @@ void node_editor_publish(AudioGraph& graph) {
 bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::string& path) {
     std::string error;
     if (!graph_io::load_from_file(graph, path, error)) {
-        state.status_message = error;
+        show_error("Could not load " + path + ":\n" + error);
         return false;
     }
     std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", path.c_str());
@@ -242,7 +243,7 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
         if (graph_io::save_to_file(graph, state.graph_path, error)) {
             state.status_message = std::string("Saved ") + state.graph_path;
         } else {
-            state.status_message = error;
+            show_error(std::string("Could not save ") + state.graph_path + ":\n" + error);
         }
     }
 }
@@ -432,12 +433,13 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         const int from = node_id_from_pin(start_attr);
         const int to = node_id_from_pin(end_attr);
         const int to_slot = is_output_pin(end_attr) ? 0 : input_slot_from_pin(end_attr);
+        std::string why = "Connect an output pin to an input pin.";
         if (is_output_pin(start_attr) && !is_output_pin(end_attr) &&
-            graph.add_link(from, to, to_slot)) {
+            graph.add_link(from, to, to_slot, &why)) {
             node_editor_publish(graph);
             state.status_message = "Linked nodes";
         } else {
-            state.status_message = "Link rejected (cycle, bad pins, or input already connected)";
+            show_error(why);
         }
     }
 
@@ -483,6 +485,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
     ImGui::End();
 
-    // Modal file browsers sit above the fullscreen editor window.
+    // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
+    draw_message_box();
 }

@@ -14,7 +14,6 @@
 #include <thread>
 #include <vector>
 
-#define SAMPLE_RATE 48000
 #define CHANNELS 2
 #define QUEUE_CAPACITY 16
 #define AUDIO_PERIOD_FRAMES 256
