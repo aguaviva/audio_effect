@@ -195,33 +195,37 @@ static void sync_node_positions(AudioGraph& graph) {
     }
 }
 
-static void draw_toolbar(AudioGraph& graph, NodeEditorUiState& state) {
-    ImGui::TextUnformatted("Audio Graph");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(220.0f);
-    ImGui::InputText("##graph_path", state.graph_path, sizeof(state.graph_path));
-    ImGui::SameLine();
-    if (ImGui::Button("Save Graph")) {
-        open_browser_near_path(graph_save_browser(), state.graph_path, true);
+static void draw_menu_bar(AudioGraph& graph, NodeEditorUiState& state) {
+    if (!ImGui::BeginMenuBar()) {
+        return;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Load Graph")) {
-        open_browser_near_path(graph_open_browser(), state.graph_path);
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Load Graph...")) {
+            open_browser_near_path(graph_open_browser(), state.graph_path);
+        }
+        if (ImGui::MenuItem("Save Graph...")) {
+            open_browser_near_path(graph_save_browser(), state.graph_path, true);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Default")) {
+            node_editor_load(graph, state, kDefaultPatchPath);
+        }
+        ImGui::EndMenu();
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Reset Default")) {
-        node_editor_load(graph, state, kDefaultPatchPath);
+    if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Diagnostics", nullptr, &state.show_diagnostics);
+        ImGui::EndMenu();
     }
-
-    ImGui::Checkbox("Diagnostics", &state.show_diagnostics);
-
-    if (!state.status_message.empty()) {
-        ImGui::TextWrapped("%s", state.status_message.c_str());
+    if (ImGui::BeginMenu("Help")) {
+        ImGui::TextUnformatted("Right-click the canvas to add nodes.\n"
+                               "One link per input (combine with a Mixer); outputs can fan out.\n"
+                               "Ctrl+drag a pin to detach its link.\n"
+                               "Title-bar Byp toggles bypass.\n"
+                               "Mixer mute checkbox silences a slot.\n"
+                               "Delete removes the selection.");
+        ImGui::EndMenu();
     }
-    ImGui::TextDisabled(
-        "Right-click canvas to add nodes. One link per input (combine with a Mixer); outputs can fan out. "
-        "Ctrl+drag pin to detach. Title-bar Byp toggles bypass. "
-        "Mixer mute checkbox silences a slot. Delete removes selection.");
+    ImGui::EndMenuBar();
 }
 
 static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
@@ -302,11 +306,14 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
     ImGui::Begin("Audio Node Graph", nullptr, flags);
-    draw_toolbar(graph, state);
+    draw_menu_bar(graph, state);
+    if (!state.status_message.empty()) {
+        ImGui::TextWrapped("%s", state.status_message.c_str());
+    }
     draw_diagnostics(state);
     ImGui::Separator();
 

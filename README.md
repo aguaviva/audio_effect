@@ -73,7 +73,7 @@ You can delete links/nodes, add stages from the context menu, and rewire arbitra
 
 ## Load / save
 
-Toolbar **Save Graph** / **Load Graph** read and write a small JSON document containing:
+**File > Save Graph** / **Load Graph** read and write a small JSON document containing:
 
 - `version`: currently `2`
 - `nodes[]`: `id`, `type`, `x`, `y`, `params`. `params` is a JSON object holding
@@ -128,7 +128,7 @@ cmake --build build
 ./build/graph_tests               # unit tests
 ```
 
-On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **Reset Default** reloads `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
+On launch the app loads `assets/patches/default_patch.json`. Pass another graph path as the first argument to override: `./build/audio_effect_gui assets/patches/demo_patch.json`. **File > Reset Default** reloads `assets/patches/default_patch.json`. Run from the repo root so relative asset paths resolve.
 
 ### Web build (Emscripten)
 
