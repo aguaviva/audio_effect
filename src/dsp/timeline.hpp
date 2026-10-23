@@ -51,6 +51,9 @@ private:
     bool load_track(int track, const std::string& path);
     void publish();
     void play_button();
+    // start, moved so the clip's start or end meets the nearest edge of another clip
+    // within a few pixels.
+    int64_t snap(int track, int64_t start) const;
 
     // UI thread.
     std::array<Track, kTracks> tracks_;

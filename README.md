@@ -24,7 +24,7 @@ Generators (all but Audio Input) have a play/pause button; pausing keeps their p
 - **WAV Player** — plays its own WAV file (loop optional) with a seekable progress bar; a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
-- **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node); drag a waveform to move it in time, click the ruler to place the cursor, and Play starts from the cursor
+- **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node); drag a waveform to move it in time (it snaps to the start or end of other clips), click the ruler to place the cursor, and Play starts from the cursor
 
 ### Effects
 

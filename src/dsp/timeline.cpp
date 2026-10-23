@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
 
@@ -120,6 +121,29 @@ void Timeline::publish() {
     std::swap(next_, placed);
     changed_ = true;
 } // placed now holds the replaced clips, freed here outside the lock
+
+int64_t Timeline::snap(int track, int64_t start) const {
+    constexpr float kSnapPixels = 8.0f;
+    const int64_t length = static_cast<int64_t>(tracks_[track].clip->interleaved_stereo.size() / 2);
+    int64_t best = static_cast<int64_t>(kSnapPixels * frames_per_pixel_);
+    int64_t snapped = start;
+    for (int t = 0; t < kTracks; ++t) {
+        const Track& other = tracks_[t];
+        if (t == track || !other.clip) {
+            continue;
+        }
+        const int64_t other_end = other.start + static_cast<int64_t>(other.clip->interleaved_stereo.size() / 2);
+        for (int64_t edge : {other.start, other_end}) {
+            for (int64_t candidate : {edge, edge - length}) {
+                if (candidate >= 0 && std::abs(candidate - start) < best) {
+                    best = std::abs(candidate - start);
+                    snapped = candidate;
+                }
+            }
+        }
+    }
+    return snapped;
+}
 
 // Play starts from the cursor; Stop leaves the cursor where it is.
 void Timeline::play_button() {
@@ -252,7 +276,7 @@ void Timeline::render_window() {
         }
         if (dragging_ == t) {
             if (ImGui::IsItemActive()) {
-                const int64_t start = std::max<int64_t>(0, frame_at(io.MousePos.x) - grab_frame_);
+                const int64_t start = snap(t, std::max<int64_t>(0, frame_at(io.MousePos.x) - grab_frame_));
                 if (start != tr.start) {
                     tr.start = start;
                     publish();
