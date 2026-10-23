@@ -30,9 +30,9 @@ bool Spectrum::render() {
     return false;
 }
 
-void Spectrum::process(const float* const* inputs, int input_count, float* const* outputs,
+void Spectrum::process(const float* const* inputs, int input_count,
                        size_t sample_count, float /*sample_rate*/) {
-    const float* in = pass_through(inputs, input_count, outputs, sample_count);
+    const float* in = pass_through(inputs, input_count, sample_count);
 
     constexpr size_t kN = 256;
     constexpr float kPi = 3.14159265358979323846f;

@@ -41,9 +41,9 @@ bool VuMeter::render() {
     return changed;
 }
 
-void VuMeter::process(const float* const* inputs, int input_count, float* const* outputs,
+void VuMeter::process(const float* const* inputs, int input_count,
                       size_t sample_count, float /*sample_rate*/) {
-    const float* in = pass_through(inputs, input_count, outputs, sample_count);
+    const float* in = pass_through(inputs, input_count, sample_count);
 
     const size_t frames = in ? sample_count / 2 : 0;
     float peak = 0.0f;

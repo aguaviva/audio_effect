@@ -24,7 +24,7 @@ Generators (all but Audio Input) have a play/pause button; pausing keeps their p
 - **WAV Player** — plays its own WAV file (loop optional) with a seekable progress bar; a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
-- **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node); drag a waveform to move it in time (it snaps to the start or end of other clips), click the ruler to place the cursor, and Play starts from the cursor
+- **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node), one output pin per track; drag a waveform to move it in time (it snaps to the start or end of other clips), click the ruler to place the cursor, and Play starts from the cursor
 
 ### Effects
 
@@ -68,7 +68,7 @@ Connections are **not** limited to a fixed linear chain. Any acyclic wiring is a
 
 ### Buffer contract
 
-The graph uses **one global block size** (audio period × channels). Every link owns a buffer of that size: its source node writes it and its destination node reads it. A node with several outgoing links writes the first and the block is copied to the others.
+The graph uses **one global block size** (audio period × channels). Every link owns a buffer of that size, with its own id: its source node writes it and its destination node reads it. Before each block, every module's output pins are pointed at buffers (`set_output_buffer`): a pin writes the buffer of its first link, the block is copied to the pin's other links, and a pin with no link gets no buffer and outputs nothing. Each output pin shows a small level meter.
 
 You can delete links/nodes, add stages from the context menu, and rewire arbitrarily. The audio thread loads a compiled snapshot of the graph each period so parameter and topology edits apply live.
 
@@ -80,7 +80,7 @@ You can delete links/nodes, add stages from the context menu, and rewire arbitra
 - `nodes[]`: `id`, `type`, `x`, `y`, `params`. `params` is a JSON object holding
   `bypassed`, optional `muted` (Mixer), and the module's own named settings, e.g.
   `{"bypassed":false,"delay_ms":320,"feedback":0.35,"mix":0.35}` for Echo.
-- `links[]`: `id`, `from`, `to`, `to_slot`
+- `links[]`: `id`, `from`, `from_slot` (output pin, 0 when missing), `to`, `to_slot`
 
 Node and link ids must be unique. A new node or link gets the largest existing id + 1.
 Only version 2 files load.

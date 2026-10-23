@@ -38,7 +38,7 @@ public:
     bool load(const std::string& json) override;
     bool render() override;
     void render_window() override;
-    void process(const float* const* inputs, int input_count, float* const* outputs, size_t sample_count,
+    void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 
 private:

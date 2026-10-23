@@ -5,9 +5,9 @@
 
 #include "imgui.h"
 
-void ValveCompressor::process(const float* const* inputs, int input_count, float* const* outputs,
+void ValveCompressor::process(const float* const* inputs, int input_count,
                               size_t num_samples, float sample_rate) {
-    float* samples = outputs[0];
+    float* samples = output_buffer(0);
     if (!samples) {
         return;
     }

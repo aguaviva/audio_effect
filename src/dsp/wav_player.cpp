@@ -82,7 +82,7 @@ bool WavPlayer::render() {
     changed |= ImGui::Checkbox("Loop", &loop);
     return changed;
 }
-void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
+void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/,
                         size_t sample_count, float /*sample_rate*/) {
     std::unique_lock<std::mutex> lock(clip_mutex_, std::try_to_lock);
     if (lock.owns_lock() && clip_changed_) {
@@ -91,7 +91,7 @@ void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, flo
         cursor_ = 0;
     }
     // Unlinked, it writes nothing but keeps moving through the clip.
-    float* output = outputs[0];
+    float* output = output_buffer(0);
     if (!playing) {
         if (output) {
             std::fill(output, output + sample_count, 0.0f);

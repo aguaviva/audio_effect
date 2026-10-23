@@ -371,7 +371,7 @@ void Timeline::render_window() {
     ImGui::End();
 }
 
-void Timeline::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
+void Timeline::process(const float* const* /*inputs*/, int /*input_count*/,
                        size_t sample_count, float /*sample_rate*/) {
     std::unique_lock<std::mutex> lock(placed_mutex_, std::try_to_lock);
     if (lock.owns_lock() && changed_) {
@@ -379,8 +379,8 @@ void Timeline::process(const float* const* /*inputs*/, int /*input_count*/, floa
         changed_ = false;
     }
     for (int t = 0; t < kTracks; ++t) {
-        if (outputs[t]) {
-            std::fill(outputs[t], outputs[t] + sample_count, 0.0f);
+        if (output_buffer(t)) {
+            std::fill(output_buffer(t), output_buffer(t) + sample_count, 0.0f);
         }
     }
     if (!playing) {
@@ -390,7 +390,7 @@ void Timeline::process(const float* const* /*inputs*/, int /*input_count*/, floa
     const int64_t frames = static_cast<int64_t>(sample_count / 2);
     for (int t = 0; t < kTracks; ++t) {
         const Placed& p = placed_[t];
-        float* out = outputs[t];
+        float* out = output_buffer(t);
         if (!p.clip || !out) {
             continue;
         }

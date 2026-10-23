@@ -27,9 +27,9 @@ bool DryWetMix::render() {
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##dw_mix", &mix, 0.0f, 1.0f, "%.2f");
 }
-void DryWetMix::process(const float* const* inputs, int input_count, float* const* outputs,
+void DryWetMix::process(const float* const* inputs, int input_count,
                         size_t sample_count, float /*sample_rate*/) {
-    float* output = outputs[0];
+    float* output = output_buffer(0);
     if (!output) {
         return;
     }

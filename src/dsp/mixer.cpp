@@ -60,9 +60,9 @@ bool Mixer::render() {
     return changed;
 }
 
-void Mixer::process(const float* const* inputs, int input_count, float* const* outputs,
+void Mixer::process(const float* const* inputs, int input_count,
                     size_t sample_count, float /*sample_rate*/) {
-    float* output = outputs[0];
+    float* output = output_buffer(0);
     if (!output) {
         return;
     }

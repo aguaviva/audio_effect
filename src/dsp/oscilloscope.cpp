@@ -29,9 +29,9 @@ bool Oscilloscope::render() {
     return false;
 }
 
-void Oscilloscope::process(const float* const* inputs, int input_count, float* const* outputs,
+void Oscilloscope::process(const float* const* inputs, int input_count,
                            size_t sample_count, float /*sample_rate*/) {
-    const float* in = pass_through(inputs, input_count, outputs, sample_count);
+    const float* in = pass_through(inputs, input_count, sample_count);
 
     const size_t frames = sample_count / 2;
     std::unique_lock<std::mutex> lock(points_mutex_, std::try_to_lock);

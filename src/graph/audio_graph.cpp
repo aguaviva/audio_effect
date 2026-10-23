@@ -172,13 +172,13 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
     }
     for (size_t k = 0; k < order.size(); ++k) {
         for (const auto& out : nodes[order[k]].outputs) {
-            if (--waiting[reader[out.link]] == 0) {
-                order.push_back(reader[out.link]);
+            if (--waiting[reader[out.buffer]] == 0) {
+                order.push_back(reader[out.buffer]);
             }
         }
     }
 
-    compiled->link_count = reader.size();
+    compiled->buffer_count = reader.size();
     for (size_t i : order) {
         compiled->order.push_back(std::move(nodes[i]));
     }

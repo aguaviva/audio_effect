@@ -33,9 +33,9 @@ bool AudioOutput::render() {
     return changed;
 }
 
-void AudioOutput::process(const float* const* inputs, int input_count, float* const* outputs,
+void AudioOutput::process(const float* const* inputs, int input_count,
                           size_t sample_count, float /*sample_rate*/) {
-    float* output = outputs[0];
+    float* output = output_buffer(0);
     copy_input(inputs, input_count, 0, output, sample_count);
 
     const float target = muted ? 0.0f : std::pow(10.0f, volume_db / 20.0f);

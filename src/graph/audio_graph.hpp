@@ -30,15 +30,15 @@ struct GraphLink {
     int to_slot = 0;
 };
 
-// Snapshot consumed by the audio thread. Every link owns one audio buffer, numbered
-// 0..link_count-1: its source node writes it and its destination node reads it.
+// Snapshot consumed by the audio thread. Every link owns one audio buffer with its own id,
+// 0..buffer_count-1: the link's source node writes it and its destination node reads it.
 struct CompiledGraph {
     struct WiredInput {
-        int link = -1;
+        int buffer = -1;
         int to_slot = 0;
     };
     struct WiredOutput {
-        int link = -1;
+        int buffer = -1;
         int from_slot = 0;
     };
 
@@ -47,11 +47,11 @@ struct CompiledGraph {
         std::shared_ptr<Module> module;
         bool bypassed = false;
         std::vector<WiredInput> inputs;
-        std::vector<WiredOutput> outputs; // links this node writes
+        std::vector<WiredOutput> outputs; // buffers this node writes, one per outgoing link
     };
 
     std::vector<Node> order; // topological order
-    size_t link_count = 0;
+    size_t buffer_count = 0;
 };
 
 class AudioGraph {

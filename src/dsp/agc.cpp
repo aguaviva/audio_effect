@@ -9,9 +9,9 @@ static float time_coef(float ms, float sample_rate) {
     return std::exp(-1.0f / std::max(1.0f, ms * 0.001f * sample_rate));
 }
 
-void Agc::process(const float* const* inputs, int input_count, float* const* outputs,
+void Agc::process(const float* const* inputs, int input_count,
                   size_t sample_count, float sample_rate) {
-    float* output = outputs[0];
+    float* output = output_buffer(0);
     if (!output) {
         return;
     }

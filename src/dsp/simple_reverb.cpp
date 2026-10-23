@@ -58,9 +58,9 @@ void SimpleReverb::ensure_buffers(float sample_rate) {
     }
 }
 
-void SimpleReverb::process(const float* const* inputs, int input_count, float* const* outputs,
+void SimpleReverb::process(const float* const* inputs, int input_count,
                            size_t sample_count, float sample_rate) {
-    float* interleaved = outputs[0];
+    float* interleaved = output_buffer(0);
     if (!interleaved) {
         return;
     }

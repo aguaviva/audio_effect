@@ -58,7 +58,7 @@ TEST(audio_graph_one_link_per_input_pin) {
     CHECK(!g.add_link(a, 0, out, 0)); // output pin already taken
 }
 
-TEST(audio_graph_compile_gives_every_link_a_buffer) {
+TEST(audio_graph_compile_gives_every_link_its_own_buffer) {
     AudioGraph g;
     g.clear();
     const int src = g.add_node("white_noise", 0, 0);
@@ -67,11 +67,11 @@ TEST(audio_graph_compile_gives_every_link_a_buffer) {
     CHECK(g.add_link(src, 0, fx_a, 0));
     CHECK(g.add_link(src, 0, fx_b, 0));
     auto compiled = g.compile();
-    CHECK_EQ(static_cast<int>(compiled->link_count), 2);
+    CHECK_EQ(static_cast<int>(compiled->buffer_count), 2);
     const auto& first = compiled->order.front();
     CHECK_EQ(first.id, src);
     CHECK_EQ(static_cast<int>(first.outputs.size()), 2);
-    CHECK(first.outputs[0].link != first.outputs[1].link);
+    CHECK(first.outputs[0].buffer != first.outputs[1].buffer);
 }
 
 TEST(audio_graph_links_leave_from_output_slots) {

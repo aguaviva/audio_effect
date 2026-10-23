@@ -25,18 +25,12 @@
 #include <thread>
 #include <vector>
 
-// Output pointers for a module whose output pin 0 is linked to block.
-struct Out {
-    float* pins[Module::kMaxOutputs] = {};
-    explicit Out(float* block) { pins[0] = block; }
-    operator float* const*() const { return pins; }
-};
-
 // Runs a single-input module on block, feeding it a copy of block as its input link.
 static void run_effect(Module& module, std::vector<float>& block) {
     const std::vector<float> in = block;
     const float* inputs[] = {in.data()};
-    module.process(inputs, 1, Out(block.data()), block.size(), 48000.0f);
+    module.set_output_buffer(0, block.data());
+    module.process(inputs, 1, block.size(), 48000.0f);
 }
 
 TEST(registry_resolves_module_names_and_pins) {
@@ -112,18 +106,20 @@ TEST(paused_generator_is_silent_and_resumes_where_it_stopped) {
     CHECK(reference.load("{}"));
     std::vector<float> a(48000, 0.0f);
     std::vector<float> b(48000, 0.0f);
-    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
-    reference.process(nullptr, 0, Out(b.data()), b.size(), 48000.0f);
+    paused.set_output_buffer(0, a.data());
+    reference.set_output_buffer(0, b.data());
+    paused.process(nullptr, 0, a.size(), 48000.0f);
+    reference.process(nullptr, 0, b.size(), 48000.0f);
 
     paused.playing = false;
-    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
+    paused.process(nullptr, 0, a.size(), 48000.0f);
     for (float s : a) {
         CHECK_EQ(s, 0.0f);
     }
 
     paused.playing = true;
-    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
-    reference.process(nullptr, 0, Out(b.data()), b.size(), 48000.0f);
+    paused.process(nullptr, 0, a.size(), 48000.0f);
+    reference.process(nullptr, 0, b.size(), 48000.0f);
     CHECK(a == b);
     float energy = 0.0f;
     for (float s : b) {
@@ -165,10 +161,9 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     constexpr size_t kBlock = 4096;
     std::vector<float> track2(kBlock, 1.0f);
     std::vector<float> track3(kBlock, 1.0f);
-    float* outputs[Module::kMaxOutputs] = {};
-    outputs[1] = track2.data();
-    outputs[2] = track3.data();
-    timeline.process(nullptr, 0, outputs, kBlock, 48000.0f);
+    timeline.set_output_buffer(1, track2.data());
+    timeline.set_output_buffer(2, track3.data());
+    timeline.process(nullptr, 0, kBlock, 48000.0f);
     for (size_t i = 0; i < kBlock; ++i) {
         CHECK_EQ(track2[i], 0.0f);
     }
@@ -187,7 +182,8 @@ TEST(mixer_dsp_averages_sources) {
     std::vector<float> b(8, 0.6f);
     std::vector<float> out(8, -1.0f);
     const float* sources[] = {a.data(), b.data()};
-    mixer.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
+    mixer.set_output_buffer(0, out.data());
+    mixer.process(sources, 2, out.size(), 48000.0f);
     CHECK_NEAR(out[0], 0.4f, 1e-5f);
     CHECK_NEAR(out[7], 0.4f, 1e-5f);
 }
@@ -211,7 +207,8 @@ TEST(mixer_gains_save_load_and_scale) {
     const float* sources[] = {a.data(), b.data()};
     mixer.gain[0] = 1.0f;
     mixer.gain[1] = 0.0f;
-    mixer.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
+    mixer.set_output_buffer(0, out.data());
+    mixer.process(sources, 2, out.size(), 48000.0f);
     // average of (1*1 + 1*0) / 2 = 0.5
     CHECK_NEAR(out[0], 0.5f, 1e-5f);
 }
@@ -228,7 +225,8 @@ TEST(mixer_mute_skips_input_and_persists) {
     std::vector<float> b(4, 0.6f);
     std::vector<float> out(4, 0.0f);
     const float* sources[] = {a.data(), b.data()};
-    loaded.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
+    loaded.set_output_buffer(0, out.data());
+    loaded.process(sources, 2, out.size(), 48000.0f);
     CHECK_NEAR(out[0], 0.2f, 1e-5f);
 }
 
@@ -236,7 +234,8 @@ TEST(effect_with_unconnected_input_outputs_silence) {
     EqThreeBand eq;
     std::vector<float> out(16, 1.0f);
     const float* inputs[] = {nullptr};
-    eq.process(inputs, 1, Out(out.data()), out.size(), 48000.0f);
+    eq.set_output_buffer(0, out.data());
+    eq.process(inputs, 1, out.size(), 48000.0f);
     for (float s : out) {
         CHECK_NEAR(s, 0.0f, 1e-6f);
     }

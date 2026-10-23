@@ -13,7 +13,7 @@ public:
     std::string save() const override { return "{}"; }
     bool load(const std::string& /*json*/) override { return true; }
     bool render() override;
-    void process(const float* const* inputs, int input_count, float* const* outputs, size_t sample_count,
+    void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 
 private:
