@@ -1,12 +1,11 @@
 #pragma once
 
+#include "miniaudio.h"
 #include "module.hpp"
 #include "paths.hpp"
 
 #include <atomic>
 #include <cstddef>
-#include <cstdint>
-#include <fstream>
 #include <string>
 
 class WavRecorderEngine {
@@ -26,15 +25,12 @@ public:
 
 private:
     void close_file();
-    bool open_file(const std::string& path);
-    void patch_header();
+    bool open_file(const std::string& path, float sample_rate);
 
-    std::ofstream file_;
+    ma_encoder encoder_;
     bool requested_ = false;
-    bool armed_ = false;
+    bool armed_ = false; // encoder_ is open
     std::atomic<bool> failed_{false};
-    uint32_t sample_rate_ = 48000;
-    uint64_t data_bytes_ = 0;
 };
 
 class WavRecorder : public Module {

@@ -48,6 +48,7 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/agc.cpp
   src/dsp/wav_recorder.cpp
   src/dsp/wav_player.cpp
+  src/dsp/wav_generator.cpp
   src/dsp/audio_input.cpp
   src/dsp/audio_output.cpp
   src/dsp/chord_generator.cpp
@@ -70,6 +71,7 @@ set(AUDIO_EFFECT_SOURCES
 )
 
 add_executable(audio_effect_gui ${AUDIO_EFFECT_SOURCES})
+target_compile_definitions(audio_effect_gui PRIVATE MA_NO_MP3 MA_NO_FLAC)
 
 target_include_directories(audio_effect_gui PRIVATE
   src
@@ -153,6 +155,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/agc.cpp
     src/dsp/wav_recorder.cpp
     src/dsp/wav_player.cpp
+    src/dsp/wav_generator.cpp
     src/ui/file_picker.cpp
     src/ui/message_box.cpp
     src/dsp/audio_input.cpp
@@ -170,10 +173,13 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     third_party/imgui/imgui_draw.cpp
     third_party/imgui/imgui_tables.cpp
     third_party/imgui/imgui_widgets.cpp
+    third_party/miniaudio/miniaudio.c
   )
   add_executable(graph_tests ${TEST_SOURCES})
+  target_compile_definitions(graph_tests PRIVATE MA_NO_MP3 MA_NO_FLAC)
   target_include_directories(graph_tests PRIVATE
-    src src/graph src/dsp src/audio tests third_party/imgui third_party/imgui-filebrowser)
+    src src/graph src/dsp src/audio tests third_party/imgui third_party/imgui-filebrowser
+    third_party/miniaudio)
   if(NOT MSVC)
     target_compile_options(graph_tests PRIVATE -Wall -Wextra)
   endif()

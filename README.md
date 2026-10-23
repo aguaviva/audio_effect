@@ -11,7 +11,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 - Effects, visualizers, and sources have a title-bar **Byp** toggle (dry pass-through; a bypassed source is silent). Delete selected nodes/links with Delete.
 - **Load / save** the graph (node positions, types, parameters, and connections) as JSON via an ImGui file browser ([AirGuanZ/imgui-filebrowser](https://github.com/AirGuanZ/imgui-filebrowser)); WAV load uses the same picker.
 - Live capture and playback via miniaudio (interleaved stereo 32-bit float at 48 kHz, float end to end).
-- WAV loading supports uncompressed PCM, mono or stereo, 16-, 24-, and 32-bit samples (converted/resampled to stereo 48 kHz).
+- WAVs are read and written with miniaudio: any PCM or float WAV loads (converted/resampled to stereo 48 kHz); the recorder writes stereo 32-bit float.
 - Optional queue/XRUN diagnostics; per-node Oscilloscope visualizer on the graph.
 
 ## Node inventory

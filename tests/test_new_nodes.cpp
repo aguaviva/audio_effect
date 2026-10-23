@@ -315,7 +315,7 @@ TEST(wav_recorder_writes_file) {
     std::remove(path);
 }
 
-TEST(wav_recorder_patches_header_when_destroyed_while_armed) {
+TEST(wav_recorder_finishes_file_when_destroyed_while_armed) {
     const char* path = "tests/_tmp_record_destroyed.wav";
     std::remove(path);
     {
@@ -324,15 +324,12 @@ TEST(wav_recorder_patches_header_when_destroyed_while_armed) {
         std::vector<float> block(64, 0.1f);
         rec.write_samples(block.data(), block.size());
     }
-    FILE* f = std::fopen(path, "rb");
-    CHECK(f != nullptr);
-    if (f) {
-        unsigned char h[44]{};
-        CHECK_EQ(static_cast<int>(std::fread(h, 1, 44, f)), 44);
-        CHECK(std::memcmp(h, "RIFF", 4) == 0);
-        const uint32_t data_size = h[40] | (h[41] << 8) | (h[42] << 16) | (uint32_t{h[43]} << 24);
-        CHECK_EQ(static_cast<int>(data_size), 128);
-        std::fclose(f);
+    std::string error;
+    auto clip = WavGenerator::load(path, 48000, error);
+    CHECK(clip != nullptr);
+    if (clip) {
+        CHECK_EQ(static_cast<int>(clip->interleaved_stereo.size()), 64);
+        CHECK_NEAR(clip->interleaved_stereo[63], 0.1f, 1e-6f);
     }
     std::remove(path);
 }
