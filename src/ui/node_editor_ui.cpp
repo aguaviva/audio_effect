@@ -522,6 +522,9 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
     // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
+    for (auto& node : graph.nodes()) {
+        node.module->render_window();
+    }
     draw_profiler(graph, state);
     draw_message_box();
 }

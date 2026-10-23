@@ -52,6 +52,7 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/audio_output.cpp
   src/dsp/chord_generator.cpp
   src/dsp/white_noise.cpp
+  src/dsp/timeline.cpp
   src/dsp/dry_wet_mix.cpp
   src/dsp/vu_meter.cpp
   src/dsp/oscilloscope.cpp
@@ -158,6 +159,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/audio_output.cpp
     src/dsp/chord_generator.cpp
     src/dsp/white_noise.cpp
+    src/dsp/timeline.cpp
     src/dsp/dry_wet_mix.cpp
     src/dsp/vu_meter.cpp
     src/dsp/oscilloscope.cpp

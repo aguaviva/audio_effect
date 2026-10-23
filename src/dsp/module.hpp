@@ -41,6 +41,8 @@ public:
     virtual std::string save() const = 0;
     virtual bool load(const std::string& json) = 0;
     virtual bool render() = 0;
+    // Windows of the module's own, drawn outside the node editor once per frame.
+    virtual void render_window() {}
 
     // inputs[pin] is the buffer of the link wired into that pin, or nullptr when the pin is
     // unconnected. output is never null and must be fully written.

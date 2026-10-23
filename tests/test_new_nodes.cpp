@@ -9,6 +9,7 @@
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
+#include "dsp/timeline.hpp"
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
@@ -17,6 +18,7 @@
 #include "graph/node_registry.hpp"
 #include "paths.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -121,6 +123,45 @@ TEST(paused_generator_is_silent_and_resumes_where_it_stopped) {
         energy += s * s;
     }
     CHECK(energy > 1.0e-3f);
+}
+
+TEST(waveform_peaks_match_a_direct_scan) {
+    WavClip clip;
+    for (int i = 0; i < 10000; ++i) {
+        const float v = std::sin(i * 0.013f) * (i % 7 == 0 ? 1.0f : 0.5f);
+        clip.interleaved_stereo.push_back(v);
+        clip.interleaved_stereo.push_back(-0.25f * v);
+    }
+    const WaveformPeaks peaks(clip);
+    CHECK_EQ(peaks.levels.back().size(), static_cast<size_t>(1));
+    for (size_t begin : {0u, 10u, 640u, 3000u}) {
+        for (size_t len : {5u, 64u, 300u, 4096u}) {
+            const size_t end = std::min<size_t>(begin + len, 5000);
+            // Whole buckets are read, so the envelope covers at least the exact range.
+            const auto [lo, hi] = peaks.range(clip, begin, end);
+            const auto first = clip.interleaved_stereo.begin();
+            auto [elo, ehi] = std::minmax_element(first + 2 * begin, first + 2 * end);
+            CHECK(lo <= *elo && hi >= *ehi);
+        }
+    }
+}
+
+TEST(timeline_plays_a_clip_from_where_it_is_placed) {
+    Timeline timeline;
+    CHECK(timeline.load(std::string("{\"track3_path\":\"") + kDefaultWavPath +
+                        "\",\"track3_start\":1000}"));
+    std::string error;
+    auto clip = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
+    CHECK(clip != nullptr);
+    timeline.playing = true;
+    std::vector<float> out(4096, 1.0f);
+    timeline.process(nullptr, 0, out.data(), out.size(), 48000.0f);
+    for (size_t i = 0; i < 2000; ++i) {
+        CHECK_EQ(out[i], 0.0f);
+    }
+    for (size_t i = 2000; i < out.size(); ++i) {
+        CHECK_EQ(out[i], clip->interleaved_stereo[i - 2000]);
+    }
 }
 
 TEST(mixer_dsp_averages_sources) {
