@@ -33,8 +33,12 @@ bool ChordGenerator::render() {
     index = std::clamp(index, 0, kChordCount - 1);
     return false;
 }
-void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
                              size_t sample_count, float sample_rate) {
+    float* output = outputs[0];
+    if (!output) {
+        return;
+    }
     if (!playing) {
         std::fill(output, output + sample_count, 0.0f);
         return;

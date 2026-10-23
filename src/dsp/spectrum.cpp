@@ -30,19 +30,19 @@ bool Spectrum::render() {
     return false;
 }
 
-void Spectrum::process(const float* const* inputs, int input_count, float* output,
+void Spectrum::process(const float* const* inputs, int input_count, float* const* outputs,
                        size_t sample_count, float /*sample_rate*/) {
-    copy_input(inputs, input_count, 0, output, sample_count);
+    const float* in = pass_through(inputs, input_count, outputs, sample_count);
 
     constexpr size_t kN = 256;
     constexpr float kPi = 3.14159265358979323846f;
-    const size_t n = std::min(sample_count / 2, kN);
+    const size_t n = in ? std::min(sample_count / 2, kN) : 0;
     float bins[kBins]{};
     if (n >= 2) {
         float windowed[kN]{};
         for (size_t i = 0; i < n; ++i) {
             const float w = 0.5f * (1.0f - std::cos(2.0f * kPi * i / (n - 1)));
-            windowed[i] = 0.5f * (output[i * 2] + output[i * 2 + 1]) * w;
+            windowed[i] = 0.5f * (in[i * 2] + in[i * 2 + 1]) * w;
         }
         // Cheap linear DFT bins (k = 1..32) — enough for a small in-node spectrum.
         for (int b = 0; b < kBins; ++b) {

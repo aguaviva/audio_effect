@@ -25,11 +25,18 @@
 #include <thread>
 #include <vector>
 
+// Output pointers for a module whose output pin 0 is linked to block.
+struct Out {
+    float* pins[Module::kMaxOutputs] = {};
+    explicit Out(float* block) { pins[0] = block; }
+    operator float* const*() const { return pins; }
+};
+
 // Runs a single-input module on block, feeding it a copy of block as its input link.
 static void run_effect(Module& module, std::vector<float>& block) {
     const std::vector<float> in = block;
     const float* inputs[] = {in.data()};
-    module.process(inputs, 1, block.data(), block.size(), 48000.0f);
+    module.process(inputs, 1, Out(block.data()), block.size(), 48000.0f);
 }
 
 TEST(registry_resolves_module_names_and_pins) {
@@ -52,7 +59,7 @@ TEST(white_noise_source_produces_energy) {
     const int noise = g.add_node("white_noise", 0, 0);
     const int out = g.add_node("output", 0, 0);
     g.find_node(noise)->as<WhiteNoise>()->level = 0.5f;
-    CHECK(g.add_link(noise, out));
+    CHECK(g.add_link(noise, 0, out, 0));
 
     constexpr size_t block = 256;
     std::vector<float> live(block, 0.0f);
@@ -73,7 +80,7 @@ TEST(wav_player_plays_its_file_and_silence_when_missing) {
     AudioGraph g;
     const int wav = g.add_node("wav_player", 0, 0);
     const int out = g.add_node("output", 0, 0);
-    CHECK(g.add_link(wav, out));
+    CHECK(g.add_link(wav, 0, out, 0));
     auto* player = g.find_node(wav)->as<WavPlayer>();
     auto compiled = g.compile();
     GraphProcessor proc(48000.0f);
@@ -105,18 +112,18 @@ TEST(paused_generator_is_silent_and_resumes_where_it_stopped) {
     CHECK(reference.load("{}"));
     std::vector<float> a(48000, 0.0f);
     std::vector<float> b(48000, 0.0f);
-    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
-    reference.process(nullptr, 0, b.data(), b.size(), 48000.0f);
+    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
+    reference.process(nullptr, 0, Out(b.data()), b.size(), 48000.0f);
 
     paused.playing = false;
-    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
+    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
     for (float s : a) {
         CHECK_EQ(s, 0.0f);
     }
 
     paused.playing = true;
-    paused.process(nullptr, 0, a.data(), a.size(), 48000.0f);
-    reference.process(nullptr, 0, b.data(), b.size(), 48000.0f);
+    paused.process(nullptr, 0, Out(a.data()), a.size(), 48000.0f);
+    reference.process(nullptr, 0, Out(b.data()), b.size(), 48000.0f);
     CHECK(a == b);
     float energy = 0.0f;
     for (float s : b) {
@@ -154,13 +161,22 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     auto clip = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
     CHECK(clip != nullptr);
     timeline.playing = true;
-    std::vector<float> out(4096, 1.0f);
-    timeline.process(nullptr, 0, out.data(), out.size(), 48000.0f);
-    for (size_t i = 0; i < 2000; ++i) {
-        CHECK_EQ(out[i], 0.0f);
+    // Only pins 2 and 3 are linked: track 2 is empty, track 3 plays on its own pin.
+    constexpr size_t kBlock = 4096;
+    std::vector<float> track2(kBlock, 1.0f);
+    std::vector<float> track3(kBlock, 1.0f);
+    float* outputs[Module::kMaxOutputs] = {};
+    outputs[1] = track2.data();
+    outputs[2] = track3.data();
+    timeline.process(nullptr, 0, outputs, kBlock, 48000.0f);
+    for (size_t i = 0; i < kBlock; ++i) {
+        CHECK_EQ(track2[i], 0.0f);
     }
-    for (size_t i = 2000; i < out.size(); ++i) {
-        CHECK_EQ(out[i], clip->interleaved_stereo[i - 2000]);
+    for (size_t i = 0; i < 2000; ++i) {
+        CHECK_EQ(track3[i], 0.0f);
+    }
+    for (size_t i = 2000; i < kBlock; ++i) {
+        CHECK_EQ(track3[i], clip->interleaved_stereo[i - 2000]);
     }
 }
 
@@ -171,7 +187,7 @@ TEST(mixer_dsp_averages_sources) {
     std::vector<float> b(8, 0.6f);
     std::vector<float> out(8, -1.0f);
     const float* sources[] = {a.data(), b.data()};
-    mixer.process(sources, 2, out.data(), out.size(), 48000.0f);
+    mixer.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
     CHECK_NEAR(out[0], 0.4f, 1e-5f);
     CHECK_NEAR(out[7], 0.4f, 1e-5f);
 }
@@ -195,7 +211,7 @@ TEST(mixer_gains_save_load_and_scale) {
     const float* sources[] = {a.data(), b.data()};
     mixer.gain[0] = 1.0f;
     mixer.gain[1] = 0.0f;
-    mixer.process(sources, 2, out.data(), out.size(), 48000.0f);
+    mixer.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
     // average of (1*1 + 1*0) / 2 = 0.5
     CHECK_NEAR(out[0], 0.5f, 1e-5f);
 }
@@ -212,7 +228,7 @@ TEST(mixer_mute_skips_input_and_persists) {
     std::vector<float> b(4, 0.6f);
     std::vector<float> out(4, 0.0f);
     const float* sources[] = {a.data(), b.data()};
-    loaded.process(sources, 2, out.data(), out.size(), 48000.0f);
+    loaded.process(sources, 2, Out(out.data()), out.size(), 48000.0f);
     CHECK_NEAR(out[0], 0.2f, 1e-5f);
 }
 
@@ -220,7 +236,7 @@ TEST(effect_with_unconnected_input_outputs_silence) {
     EqThreeBand eq;
     std::vector<float> out(16, 1.0f);
     const float* inputs[] = {nullptr};
-    eq.process(inputs, 1, out.data(), out.size(), 48000.0f);
+    eq.process(inputs, 1, Out(out.data()), out.size(), 48000.0f);
     for (float s : out) {
         CHECK_NEAR(s, 0.0f, 1e-6f);
     }
@@ -279,11 +295,11 @@ TEST(dry_wet_mix_blends_slots) {
     g.find_node(pre_a)->as<Preamp>()->gain_db = 0.0f;
     g.find_node(pre_b)->as<Preamp>()->gain_db = 6.0f;
     g.find_node(mix)->as<DryWetMix>()->mix = 0.5f;
-    CHECK(g.add_link(in, pre_a));
-    CHECK(g.add_link(in, pre_b));
-    CHECK(g.add_link(pre_a, mix, 0));
-    CHECK(g.add_link(pre_b, mix, 1));
-    CHECK(g.add_link(mix, out));
+    CHECK(g.add_link(in, 0, pre_a, 0));
+    CHECK(g.add_link(in, 0, pre_b, 0));
+    CHECK(g.add_link(pre_a, 0, mix, 0));
+    CHECK(g.add_link(pre_b, 0, mix, 1));
+    CHECK(g.add_link(mix, 0, out, 0));
 
     constexpr size_t block = 32;
     std::vector<float> live(block, 0.25f);

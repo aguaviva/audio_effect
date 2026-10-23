@@ -25,6 +25,7 @@ struct GraphNode {
 struct GraphLink {
     int id = 0;
     int from_node = 0;
+    int from_slot = 0;
     int to_node = 0;
     int to_slot = 0;
 };
@@ -36,13 +37,17 @@ struct CompiledGraph {
         int link = -1;
         int to_slot = 0;
     };
+    struct WiredOutput {
+        int link = -1;
+        int from_slot = 0;
+    };
 
     struct Node {
         int id = 0;
         std::shared_ptr<Module> module;
         bool bypassed = false;
         std::vector<WiredInput> inputs;
-        std::vector<int> outputs; // links this node writes
+        std::vector<WiredOutput> outputs; // links this node writes
     };
 
     std::vector<Node> order; // topological order
@@ -55,7 +60,7 @@ public:
     int add_node(const std::string& type, float x, float y);
     bool remove_node(int node_id);
     // On refusal, why (if given) says what was wrong, worded for the user.
-    bool add_link(int from_node, int to_node, int to_slot = 0, std::string* why = nullptr);
+    bool add_link(int from_node, int from_slot, int to_node, int to_slot, std::string* why = nullptr);
     bool remove_link(int link_id);
     // Input pins to show: the module's count, except a Mixer shows one per connection
     // plus one spare.

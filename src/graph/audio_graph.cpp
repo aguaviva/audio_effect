@@ -45,15 +45,15 @@ bool AudioGraph::remove_node(int node_id) {
     return true;
 }
 
-bool AudioGraph::add_link(int from_node, int to_node, int to_slot, std::string* why) {
+bool AudioGraph::add_link(int from_node, int from_slot, int to_node, int to_slot, std::string* why) {
     auto refuse = [why](const char* reason) {
         if (why) *why = reason;
         return false;
     };
     const GraphNode* from = find_node(from_node);
     const GraphNode* to = find_node(to_node);
-    if (!from || !to || from->module->output_count() == 0 || to_slot < 0 ||
-        to_slot >= input_pin_count(to_node)) {
+    if (!from || !to || from_slot < 0 || from_slot >= from->module->output_count() ||
+        to_slot < 0 || to_slot >= input_pin_count(to_node)) {
         return refuse("Connect an output pin to an input pin.");
     }
     std::unordered_set<int> visited;
@@ -81,7 +81,7 @@ bool AudioGraph::add_link(int from_node, int to_node, int to_slot, std::string* 
         }
     }
 
-    links_.push_back({next_free_id(links_), from_node, to_node, to_slot});
+    links_.push_back({next_free_id(links_), from_node, from_slot, to_node, to_slot});
     return true;
 }
 
@@ -158,7 +158,7 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
         const int buffer = static_cast<int>(reader.size());
         const size_t to = index.at(link.to_node);
         reader.push_back(to);
-        nodes[index.at(link.from_node)].outputs.push_back(buffer);
+        nodes[index.at(link.from_node)].outputs.push_back({buffer, link.from_slot});
         nodes[to].inputs.push_back({buffer, link.to_slot});
         ++waiting[to];
     }
@@ -171,9 +171,9 @@ std::shared_ptr<const CompiledGraph> AudioGraph::compile() const {
         }
     }
     for (size_t k = 0; k < order.size(); ++k) {
-        for (int buffer : nodes[order[k]].outputs) {
-            if (--waiting[reader[buffer]] == 0) {
-                order.push_back(reader[buffer]);
+        for (const auto& out : nodes[order[k]].outputs) {
+            if (--waiting[reader[out.link]] == 0) {
+                order.push_back(reader[out.link]);
             }
         }
     }

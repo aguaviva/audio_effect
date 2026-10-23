@@ -7,8 +7,12 @@
 
 namespace guitar_pedals {
 
-void DrivePedal::process(const float* const* inputs, int input_count, float* samples,
+void DrivePedal::process(const float* const* inputs, int input_count, float* const* outputs,
                          size_t sample_count, float sample_rate) {
+    float* samples = outputs[0];
+    if (!samples) {
+        return;
+    }
     copy_input(inputs, input_count, 0, samples, sample_count);
     const DriveModel mdl = static_cast<DriveModel>(std::clamp(model, 0, 2));
     // Pre-gain is 1 + amount so amount 0 is a clean-ish unity stage. A raw gain of 0

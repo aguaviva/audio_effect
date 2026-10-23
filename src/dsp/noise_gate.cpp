@@ -5,8 +5,12 @@
 
 #include "imgui.h"
 
-void NoiseGate::process(const float* const* inputs, int input_count, float* interleaved,
+void NoiseGate::process(const float* const* inputs, int input_count, float* const* outputs,
                         size_t sample_count, float sample_rate) {
+    float* interleaved = outputs[0];
+    if (!interleaved) {
+        return;
+    }
     copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;

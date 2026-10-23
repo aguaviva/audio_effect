@@ -25,8 +25,12 @@ bool WhiteNoise::render() {
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##wn_level", &level, 0.0f, 1.0f, "%.2f");
 }
-void WhiteNoise::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+void WhiteNoise::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
                          size_t sample_count, float /*sample_rate*/) {
+    float* output = outputs[0];
+    if (!output) {
+        return;
+    }
     if (!playing) {
         std::fill(output, output + sample_count, 0.0f);
         return;

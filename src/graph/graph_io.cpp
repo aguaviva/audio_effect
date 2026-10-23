@@ -32,6 +32,7 @@ std::string link_json(const GraphLink& link) {
     std::string out = "{";
     module_json::write_int(out, "id", link.id);
     module_json::write_int(out, "from", link.from_node);
+    module_json::write_int(out, "from_slot", link.from_slot);
     module_json::write_int(out, "to", link.to_node);
     module_json::write_int(out, "to_slot", link.to_slot);
     out += '}';
@@ -77,6 +78,7 @@ bool parse_link(const std::string& json, GraphLink& link, std::string& error) {
         json, [&](const std::string& key, const std::string& text, size_t& i) {
             if (key == "id") return module_json::parse_value(text, i, link.id);
             if (key == "from") return module_json::parse_value(text, i, link.from_node);
+            if (key == "from_slot") return module_json::parse_value(text, i, link.from_slot);
             if (key == "to") return module_json::parse_value(text, i, link.to_node);
             if (key == "to_slot") return module_json::parse_value(text, i, link.to_slot);
             error = "Unknown link field: " + key;
@@ -181,8 +183,8 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     for (const auto& link : links) {
         const Module* from = find(link.from_node);
         const Module* to = find(link.to_node);
-        if (!from || from->output_count() == 0 || !to || link.to_slot < 0 ||
-            link.to_slot >= to->input_count()) {
+        if (!from || link.from_slot < 0 || link.from_slot >= from->output_count() || !to ||
+            link.to_slot < 0 || link.to_slot >= to->input_count()) {
             continue;
         }
         if (!used_pins.insert(input_pin_id(link.to_node, link.to_slot)).second) {

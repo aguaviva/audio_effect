@@ -17,7 +17,7 @@ public:
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
-    void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
+    void process(const float* const* inputs, int input_count, float* const* outputs, size_t sample_count,
                  float sample_rate) override;
 
 private:

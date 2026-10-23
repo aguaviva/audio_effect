@@ -3,6 +3,7 @@
 #include "module_json.hpp"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -31,6 +32,16 @@ inline void copy_input(const float* const* inputs, int input_count, int slot, fl
     }
 }
 
+// For modules that pass their input through and look at it: copies input pin 0 to output
+// pin 0 when that is linked, and returns the input (nullptr when unconnected).
+inline const float* pass_through(const float* const* inputs, int input_count,
+                                 float* const* outputs, size_t sample_count) {
+    if (outputs[0]) {
+        copy_input(inputs, input_count, 0, outputs[0], sample_count);
+    }
+    return input_count > 0 ? inputs[0] : nullptr;
+}
+
 // Common graph-module interface. Controllable fields live on the concrete class.
 class Module {
 public:
@@ -45,13 +56,17 @@ public:
     virtual void render_window() {}
 
     // inputs[pin] is the buffer of the link wired into that pin, or nullptr when the pin is
-    // unconnected. output is never null and must be fully written.
-    virtual void process(const float* const* inputs, int input_count, float* output,
+    // unconnected. outputs[pin] is the buffer of a link from that output pin, or nullptr when
+    // nothing is linked to it; every non-null buffer must be fully written. outputs has
+    // kMaxOutputs entries. A sink (no output pins) gets outputs[0], which goes to the device.
+    virtual void process(const float* const* inputs, int input_count, float* const* outputs,
                          size_t sample_count, float sample_rate) = 0;
 
     static constexpr int kMaxInputs = 8;
+    static constexpr int kMaxOutputs = 16;
 
-    // Pin names. Sources have no inputs, sinks no outputs; at most kMaxInputs inputs.
+    // Pin names. Sources have no inputs, sinks no outputs; at most kMaxInputs inputs and
+    // kMaxOutputs outputs.
     virtual void get_inputs(int *count, const char* const** str) const { static const char* input_names[] = {"in"}; *count=1; *str=input_names; }
     virtual void get_outputs(int *count, const char* const** str) const { static const char* output_names[] = {"out"}; *count=1; *str=output_names; }
 
@@ -63,9 +78,13 @@ public:
 
     // Smoothed time one block takes in this module, in microseconds.
     float process_us() const { return process_us_.load(std::memory_order_relaxed); }
+    // Peak of an output pin, held and falling about 35 dB a second.
+    float output_level(int slot) const { return output_levels_[slot].load(std::memory_order_relaxed); }
 
 protected:
     GraphHost* host_ = nullptr;
-    std::atomic<float> process_us_{0.0f}; // written by GraphProcessor
+    // Written by GraphProcessor.
+    std::atomic<float> process_us_{0.0f};
+    std::array<std::atomic<float>, kMaxOutputs> output_levels_{};
     friend class GraphProcessor;
 };

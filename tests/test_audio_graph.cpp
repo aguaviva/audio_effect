@@ -4,16 +4,18 @@
 #include "graph/graph_io.hpp"
 #include "paths.hpp"
 
+#include <algorithm>
+
 TEST(audio_graph_rejects_unknown_type_and_bad_pins) {
     AudioGraph g;
     CHECK_EQ(g.add_node("not_a_module", 0, 0), -1);
     const int src = g.add_node("white_noise", 0, 0);
     const int out = g.add_node("output", 0, 0);
     const int fx = g.add_node("preamp", 0, 0);
-    CHECK(!g.add_link(out, fx)); // output has no output pin
-    CHECK(!g.add_link(fx, src)); // sources have no input pin
-    CHECK(!g.add_link(src, fx, 1)); // preamp has one input
-    CHECK(g.add_link(src, fx));
+    CHECK(!g.add_link(out, 0, fx, 0)); // output has no output pin
+    CHECK(!g.add_link(fx, 0, src, 0)); // sources have no input pin
+    CHECK(!g.add_link(src, 0, fx, 1)); // preamp has one input
+    CHECK(g.add_link(src, 0, fx, 0));
 }
 
 TEST(audio_graph_add_remove_nodes_and_links) {
@@ -22,8 +24,8 @@ TEST(audio_graph_add_remove_nodes_and_links) {
     const int a = g.add_node("wav_player", 0, 0);
     const int b = g.add_node("preamp", 10, 0);
     const int c = g.add_node("output", 20, 0);
-    CHECK(g.add_link(a, b));
-    CHECK(g.add_link(b, c));
+    CHECK(g.add_link(a, 0, b, 0));
+    CHECK(g.add_link(b, 0, c, 0));
     CHECK_EQ(static_cast<int>(g.links().size()), 2);
     CHECK(g.remove_node(b));
     CHECK_EQ(static_cast<int>(g.nodes().size()), 2);
@@ -35,12 +37,12 @@ TEST(audio_graph_rejects_cycles_and_duplicates) {
     g.clear();
     const int a = g.add_node("preamp", 0, 0);
     const int b = g.add_node("low_pass", 0, 0);
-    CHECK(g.add_link(a, b));
-    CHECK(!g.add_link(a, b));      // duplicate
+    CHECK(g.add_link(a, 0, b, 0));
+    CHECK(!g.add_link(a, 0, b, 0));      // duplicate
     std::string why;
-    CHECK(!g.add_link(b, a, 0, &why)); // cycle
+    CHECK(!g.add_link(b, 0, a, 0, &why)); // cycle
     CHECK(why.find("cycle") != std::string::npos);
-    CHECK(!g.add_link(a, a));      // self
+    CHECK(!g.add_link(a, 0, a, 0));      // self
 }
 
 TEST(audio_graph_one_link_per_input_pin) {
@@ -50,10 +52,10 @@ TEST(audio_graph_one_link_per_input_pin) {
     const int b = g.add_node("chord_generator", 0, 0);
     const int fx = g.add_node("preamp", 0, 0);
     const int out = g.add_node("output", 0, 0);
-    CHECK(g.add_link(a, fx));
-    CHECK(!g.add_link(b, fx)); // fan-in needs a mixer
-    CHECK(g.add_link(fx, out));
-    CHECK(!g.add_link(a, out)); // output pin already taken
+    CHECK(g.add_link(a, 0, fx, 0));
+    CHECK(!g.add_link(b, 0, fx, 0)); // fan-in needs a mixer
+    CHECK(g.add_link(fx, 0, out, 0));
+    CHECK(!g.add_link(a, 0, out, 0)); // output pin already taken
 }
 
 TEST(audio_graph_compile_gives_every_link_a_buffer) {
@@ -62,14 +64,29 @@ TEST(audio_graph_compile_gives_every_link_a_buffer) {
     const int src = g.add_node("white_noise", 0, 0);
     const int fx_a = g.add_node("preamp", 0, 0);
     const int fx_b = g.add_node("low_pass", 0, 0);
-    CHECK(g.add_link(src, fx_a));
-    CHECK(g.add_link(src, fx_b));
+    CHECK(g.add_link(src, 0, fx_a, 0));
+    CHECK(g.add_link(src, 0, fx_b, 0));
     auto compiled = g.compile();
     CHECK_EQ(static_cast<int>(compiled->link_count), 2);
     const auto& first = compiled->order.front();
     CHECK_EQ(first.id, src);
     CHECK_EQ(static_cast<int>(first.outputs.size()), 2);
-    CHECK(first.outputs[0] != first.outputs[1]);
+    CHECK(first.outputs[0].link != first.outputs[1].link);
+}
+
+TEST(audio_graph_links_leave_from_output_slots) {
+    AudioGraph g;
+    g.clear();
+    const int timeline = g.add_node("timeline", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    const int fx = g.add_node("preamp", 0, 0);
+    CHECK(g.add_link(timeline, 4, out, 0));
+    CHECK(!g.add_link(timeline, 6, fx, 0)); // no seventh track
+    auto compiled = g.compile();
+    const auto& node = *std::find_if(compiled->order.begin(), compiled->order.end(),
+                                     [&](const CompiledGraph::Node& n) { return n.id == timeline; });
+    CHECK_EQ(static_cast<int>(node.outputs.size()), 1);
+    CHECK_EQ(node.outputs[0].from_slot, 4);
 }
 
 TEST(audio_graph_mixer_auto_pins) {
@@ -81,12 +98,12 @@ TEST(audio_graph_mixer_auto_pins) {
     const int out = g.add_node("output", 0, 0);
 
     CHECK_EQ(g.input_pin_count(mix), 1);
-    CHECK(g.add_link(src1, mix, 0));
+    CHECK(g.add_link(src1, 0, mix, 0));
     CHECK_EQ(g.input_pin_count(mix), 2);
-    CHECK(g.add_link(src2, mix, 1));
+    CHECK(g.add_link(src2, 0, mix, 1));
     CHECK_EQ(g.input_pin_count(mix), 3);
-    CHECK(!g.add_link(src1, mix, 1)); // slot occupied
-    CHECK(g.add_link(mix, out));
+    CHECK(!g.add_link(src1, 0, mix, 1)); // slot occupied
+    CHECK(g.add_link(mix, 0, out, 0));
     CHECK_EQ(g.input_pin_count(out), 1);
     CHECK_EQ(g.input_pin_count(src1), 0);
 }
@@ -97,8 +114,8 @@ TEST(audio_graph_compile_topological_order) {
     const int a = g.add_node("wav_player", 0, 0);
     const int b = g.add_node("preamp", 0, 0);
     const int c = g.add_node("output", 0, 0);
-    CHECK(g.add_link(a, b));
-    CHECK(g.add_link(b, c));
+    CHECK(g.add_link(a, 0, b, 0));
+    CHECK(g.add_link(b, 0, c, 0));
     auto compiled = g.compile();
     CHECK(compiled);
     CHECK_EQ(static_cast<int>(compiled->order.size()), 3);

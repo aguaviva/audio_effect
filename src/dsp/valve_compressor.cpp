@@ -5,8 +5,12 @@
 
 #include "imgui.h"
 
-void ValveCompressor::process(const float* const* inputs, int input_count, float* samples,
+void ValveCompressor::process(const float* const* inputs, int input_count, float* const* outputs,
                               size_t num_samples, float sample_rate) {
+    float* samples = outputs[0];
+    if (!samples) {
+        return;
+    }
     copy_input(inputs, input_count, 0, samples, num_samples);
     float threshold = std::pow(10.0f, threshold_db / 20.0f);
     float attack_coefficient = std::exp(-1.0f / (sample_rate * attack_ms * 0.001f));

@@ -41,15 +41,15 @@ bool VuMeter::render() {
     return changed;
 }
 
-void VuMeter::process(const float* const* inputs, int input_count, float* output,
+void VuMeter::process(const float* const* inputs, int input_count, float* const* outputs,
                       size_t sample_count, float /*sample_rate*/) {
-    copy_input(inputs, input_count, 0, output, sample_count);
+    const float* in = pass_through(inputs, input_count, outputs, sample_count);
 
-    const size_t frames = sample_count / 2;
+    const size_t frames = in ? sample_count / 2 : 0;
     float peak = 0.0f;
     double sum_sq = 0.0;
     for (size_t i = 0; i < frames; ++i) {
-        const float s = 0.5f * (output[i * 2] + output[i * 2 + 1]);
+        const float s = 0.5f * (in[i * 2] + in[i * 2 + 1]);
         peak = std::max(peak, std::abs(s));
         sum_sq += static_cast<double>(s) * s;
     }

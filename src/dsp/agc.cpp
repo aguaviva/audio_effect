@@ -9,8 +9,12 @@ static float time_coef(float ms, float sample_rate) {
     return std::exp(-1.0f / std::max(1.0f, ms * 0.001f * sample_rate));
 }
 
-void Agc::process(const float* const* inputs, int input_count, float* output,
+void Agc::process(const float* const* inputs, int input_count, float* const* outputs,
                   size_t sample_count, float sample_rate) {
+    float* output = outputs[0];
+    if (!output) {
+        return;
+    }
     copy_input(inputs, input_count, 0, output, sample_count);
 
     constexpr float kDbToLn = 0.11512925f; // ln(10) / 20

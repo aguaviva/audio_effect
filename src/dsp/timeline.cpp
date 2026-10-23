@@ -71,6 +71,13 @@ std::string track_key(int track, const char* field) {
 
 } // namespace
 
+void Timeline::get_outputs(int* count, const char* const** str) const {
+    static const char* names[] = {"track 1", "track 2", "track 3", "track 4", "track 5", "track 6"};
+    static_assert(std::size(names) == kTracks, "one name per track");
+    *count = kTracks;
+    *str = names;
+}
+
 std::string Timeline::save() const {
     std::string out = "{";
     module_json::write_int(out, "cursor", static_cast<int>(cursor_));
@@ -364,30 +371,35 @@ void Timeline::render_window() {
     ImGui::End();
 }
 
-void Timeline::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+void Timeline::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
                        size_t sample_count, float /*sample_rate*/) {
     std::unique_lock<std::mutex> lock(placed_mutex_, std::try_to_lock);
     if (lock.owns_lock() && changed_) {
         std::swap(placed_, next_);
         changed_ = false;
     }
-    std::fill(output, output + sample_count, 0.0f);
+    for (int t = 0; t < kTracks; ++t) {
+        if (outputs[t]) {
+            std::fill(outputs[t], outputs[t] + sample_count, 0.0f);
+        }
+    }
     if (!playing) {
         return;
     }
     int64_t start = position_;
     const int64_t frames = static_cast<int64_t>(sample_count / 2);
-    for (const Placed& p : placed_) {
-        if (!p.clip) {
+    for (int t = 0; t < kTracks; ++t) {
+        const Placed& p = placed_[t];
+        float* out = outputs[t];
+        if (!p.clip || !out) {
             continue;
         }
         const float* clip = p.clip->interleaved_stereo.data();
         const int64_t clip_frames = static_cast<int64_t>(p.clip->interleaved_stereo.size() / 2);
         const int64_t begin = std::max(start, p.start);
         const int64_t end = std::min(start + frames, p.start + clip_frames);
-        for (int64_t f = begin; f < end; ++f) {
-            output[2 * (f - start)] += clip[2 * (f - p.start)];
-            output[2 * (f - start) + 1] += clip[2 * (f - p.start) + 1];
+        if (begin < end) {
+            std::copy(clip + 2 * (begin - p.start), clip + 2 * (end - p.start), out + 2 * (begin - start));
         }
     }
     position_.compare_exchange_strong(start, start + frames); // a seek made during this block wins

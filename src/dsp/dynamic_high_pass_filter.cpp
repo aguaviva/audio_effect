@@ -4,8 +4,12 @@
 
 #include "imgui.h"
 
-void DynamicHighPassFilter::process(const float* const* inputs, int input_count, float* samples,
+void DynamicHighPassFilter::process(const float* const* inputs, int input_count, float* const* outputs,
                                     size_t num_samples, float sample_rate) {
+    float* samples = outputs[0];
+    if (!samples) {
+        return;
+    }
     copy_input(inputs, input_count, 0, samples, num_samples);
     float dt = 1.0f / sample_rate;
     float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff_hz);

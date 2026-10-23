@@ -30,11 +30,11 @@ bool WavRecorder::render() {
     return changed;
 }
 
-void WavRecorder::process(const float* const* inputs, int input_count, float* output,
+void WavRecorder::process(const float* const* inputs, int input_count, float* const* outputs,
                           size_t sample_count, float sample_rate) {
-    copy_input(inputs, input_count, 0, output, sample_count);
+    const float* in = pass_through(inputs, input_count, outputs, sample_count);
     engine_.set_armed(armed, path, sample_rate);
-    engine_.write_samples(output, sample_count);
+    engine_.write_samples(in, sample_count);
 }
 
 WavRecorderEngine::~WavRecorderEngine() {

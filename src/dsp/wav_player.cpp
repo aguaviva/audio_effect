@@ -82,7 +82,7 @@ bool WavPlayer::render() {
     changed |= ImGui::Checkbox("Loop", &loop);
     return changed;
 }
-void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
                         size_t sample_count, float /*sample_rate*/) {
     std::unique_lock<std::mutex> lock(clip_mutex_, std::try_to_lock);
     if (lock.owns_lock() && clip_changed_) {
@@ -90,8 +90,12 @@ void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, flo
         clip_changed_ = false;
         cursor_ = 0;
     }
+    // Unlinked, it writes nothing but keeps moving through the clip.
+    float* output = outputs[0];
     if (!playing) {
-        std::fill(output, output + sample_count, 0.0f);
+        if (output) {
+            std::fill(output, output + sample_count, 0.0f);
+        }
         return;
     }
     const size_t clip_samples = clip_ ? clip_->interleaved_stereo.size() : 0;
@@ -106,10 +110,14 @@ void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/, flo
             cursor = 0;
         }
         const size_t n = std::min(sample_count - written, clip_samples - cursor);
-        std::copy_n(clip_->interleaved_stereo.data() + cursor, n, output + written);
+        if (output) {
+            std::copy_n(clip_->interleaved_stereo.data() + cursor, n, output + written);
+        }
         written += n;
         cursor += n;
     }
-    std::fill(output + written, output + sample_count, 0.0f);
+    if (output) {
+        std::fill(output + written, output + sample_count, 0.0f);
+    }
     cursor_.compare_exchange_strong(start, cursor); // a seek made during this block wins
 }

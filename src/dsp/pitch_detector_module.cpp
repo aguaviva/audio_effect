@@ -16,15 +16,18 @@ bool PitchDetectorModule::render() {
     return false;
 }
 
-void PitchDetectorModule::process(const float* const* inputs, int input_count, float* output,
+void PitchDetectorModule::process(const float* const* inputs, int input_count, float* const* outputs,
                                   size_t sample_count, float sample_rate) {
-    copy_input(inputs, input_count, 0, output, sample_count);
+    const float* in = pass_through(inputs, input_count, outputs, sample_count);
+    if (!in) {
+        return;
+    }
     if (!detector_ || detector_rate_ != sample_rate) {
         detector_ = std::make_unique<PitchDetector>(sample_rate);
         detector_rate_ = sample_rate;
     }
     float frequency_hz = 0.0f;
-    if (detector_->process(output, sample_count, 2, frequency_hz)) {
+    if (detector_->process(in, sample_count, 2, frequency_hz)) {
         frequency_hz_.store(frequency_hz, std::memory_order_relaxed);
     }
 }

@@ -27,6 +27,6 @@ private:
     float sample_rate_;
     size_t block_size_ = 0;
     const float* live_input_ = nullptr;
-    // One block per link, plus one scratch block for nodes with no outgoing links.
+    // One block per link, plus one that sinks write for the device.
     std::vector<float> buffers_;
 };

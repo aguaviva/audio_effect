@@ -18,8 +18,12 @@ bool AudioInput::load(const std::string& json) {
 bool AudioInput::render() {
     return false;
 }
-void AudioInput::process(const float* const* /*inputs*/, int /*input_count*/, float* output,
+void AudioInput::process(const float* const* /*inputs*/, int /*input_count*/, float* const* outputs,
                          size_t sample_count, float /*sample_rate*/) {
+    float* output = outputs[0];
+    if (!output) {
+        return;
+    }
     const float* live = host_ ? host_->live_input() : nullptr;
     if (live) {
         std::copy(live, live + sample_count, output);

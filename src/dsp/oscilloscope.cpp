@@ -29,9 +29,9 @@ bool Oscilloscope::render() {
     return false;
 }
 
-void Oscilloscope::process(const float* const* inputs, int input_count, float* output,
+void Oscilloscope::process(const float* const* inputs, int input_count, float* const* outputs,
                            size_t sample_count, float /*sample_rate*/) {
-    copy_input(inputs, input_count, 0, output, sample_count);
+    const float* in = pass_through(inputs, input_count, outputs, sample_count);
 
     const size_t frames = sample_count / 2;
     std::unique_lock<std::mutex> lock(points_mutex_, std::try_to_lock);
@@ -40,7 +40,7 @@ void Oscilloscope::process(const float* const* inputs, int input_count, float* o
     }
     for (int i = 0; i < kPoints; ++i) {
         const size_t f = static_cast<size_t>(i) * (frames - 1) / (kPoints - 1);
-        const float mono = 0.5f * (output[f * 2] + output[f * 2 + 1]);
+        const float mono = in ? 0.5f * (in[f * 2] + in[f * 2 + 1]) : 0.0f;
         points_[i] = std::clamp(mono * display_gain, -1.5f, 1.5f);
     }
 }

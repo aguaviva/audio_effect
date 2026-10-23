@@ -24,19 +24,21 @@ struct WaveformPeaks {
     std::pair<float, float> range(const WavClip& clip, size_t begin, size_t end) const;
 };
 
-// Six tracks of WAV clips placed in time. Plays from the cursor into its output.
+// Six tracks of WAV clips placed in time, one output pin each. Plays from the cursor.
 class Timeline : public Module {
 public:
     static constexpr int kTracks = 6;
+    static_assert(kTracks <= kMaxOutputs, "every track needs an output pin");
     bool playing = false;
 
     std::string name() const override { return "timeline"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
+    void get_outputs(int* count, const char* const** str) const override;
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
     void render_window() override;
-    void process(const float* const* inputs, int input_count, float* output, size_t sample_count,
+    void process(const float* const* inputs, int input_count, float* const* outputs, size_t sample_count,
                  float sample_rate) override;
 
 private:

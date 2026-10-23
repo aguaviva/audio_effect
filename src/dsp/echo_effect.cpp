@@ -5,8 +5,12 @@
 
 #include "imgui.h"
 
-void EchoEffect::process(const float* const* inputs, int input_count, float* samples,
+void EchoEffect::process(const float* const* inputs, int input_count, float* const* outputs,
                          size_t sample_count, float sample_rate) {
+    float* samples = outputs[0];
+    if (!samples) {
+        return;
+    }
     copy_input(inputs, input_count, 0, samples, sample_count);
     const size_t needed = static_cast<size_t>(std::max(1.0f, sample_rate)) + 1;
     if (delay_left_.size() < needed) {

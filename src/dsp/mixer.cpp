@@ -60,8 +60,12 @@ bool Mixer::render() {
     return changed;
 }
 
-void Mixer::process(const float* const* inputs, int input_count, float* output,
+void Mixer::process(const float* const* inputs, int input_count, float* const* outputs,
                     size_t sample_count, float /*sample_rate*/) {
+    float* output = outputs[0];
+    if (!output) {
+        return;
+    }
     std::fill(output, output + sample_count, 0.0f);
 
     size_t connected = 0;

@@ -17,6 +17,7 @@
 #include "imnodes.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -60,6 +61,20 @@ ImGui::FileBrowser& graph_save_browser() {
 
 void copy_path_to_buf(char* buf, size_t n, const std::filesystem::path& path) {
     std::snprintf(buf, n, "%s", path.string().c_str());
+}
+
+// A short bar beside an output pin: its peak on a -60..0 dB scale, red once it clips.
+void draw_level_meter(float peak) {
+    const float height = ImGui::GetTextLineHeight();
+    const ImVec2 size(24.0f, 6.0f);
+    ImGui::Dummy(ImVec2(size.x, height));
+    const ImVec2 item = ImGui::GetItemRectMin();
+    const ImVec2 min(item.x, item.y + 0.5f * (height - size.y));
+    const float fill = std::clamp(1.0f + std::log10(std::max(peak, 1e-6f)) / 3.0f, 0.0f, 1.0f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y), IM_COL32(25, 25, 25, 255));
+    draw->AddRectFilled(min, ImVec2(min.x + size.x * fill, min.y + size.y),
+                        peak >= 1.0f ? IM_COL32(220, 60, 50, 255) : IM_COL32(80, 200, 90, 255));
 }
 
 } // namespace
@@ -432,9 +447,11 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
                 int outputs;
                 const char* const* name;
                 node.module->get_outputs(&outputs, &name);
-                if (outputs>0) {
-                    ImNodes::BeginOutputAttribute(output_pin_id(node.id));
-                    ImGui::TextUnformatted(name[0]);
+                for (int slot = 0; slot < outputs; ++slot) {
+                    ImNodes::BeginOutputAttribute(output_pin_id(node.id, slot));
+                    draw_level_meter(node.module->output_level(slot));
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(name[slot]);
                     ImNodes::EndOutputAttribute();
                 }
             }
@@ -447,7 +464,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     }
 
     for (const auto& link : graph.links()) {
-        ImNodes::Link(link.id, output_pin_id(link.from_node),
+        ImNodes::Link(link.id, output_pin_id(link.from_node, link.from_slot),
                       input_pin_id(link.to_node, link.to_slot));
     }
 
@@ -465,12 +482,10 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         if (!is_output_pin(start_attr) && is_output_pin(end_attr)) {
             std::swap(start_attr, end_attr);
         }
-        const int from = node_id_from_pin(start_attr);
-        const int to = node_id_from_pin(end_attr);
-        const int to_slot = is_output_pin(end_attr) ? 0 : input_slot_from_pin(end_attr);
         std::string why = "Connect an output pin to an input pin.";
         if (is_output_pin(start_attr) && !is_output_pin(end_attr) &&
-            graph.add_link(from, to, to_slot, &why)) {
+            graph.add_link(node_id_from_pin(start_attr), output_slot_from_pin(start_attr),
+                           node_id_from_pin(end_attr), input_slot_from_pin(end_attr), &why)) {
             node_editor_publish(graph);
             state.status_message = "Linked nodes";
         } else {

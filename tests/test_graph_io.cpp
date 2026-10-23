@@ -67,8 +67,8 @@ TEST(graph_io_preserves_mixer_to_slot) {
     const int a = g.add_node("wav_player", 0, 0);
     const int b = g.add_node("preamp", 0, 0);
     const int m = g.add_node("mixer", 0, 0);
-    CHECK(g.add_link(a, m, 0));
-    CHECK(g.add_link(b, m, 1));
+    CHECK(g.add_link(a, 0, m, 0));
+    CHECK(g.add_link(b, 0, m, 1));
 
     std::string error;
     AudioGraph loaded;
@@ -108,8 +108,25 @@ TEST(graph_io_new_ids_follow_largest_loaded_id) {
     CHECK(graph_io::deserialize(g, text, error));
     const int added = g.add_node("preamp", 0, 0);
     CHECK_EQ(added, 10);
-    CHECK(g.add_link(added, 7));
+    CHECK(g.add_link(added, 0, 7, 0));
     CHECK_EQ(g.links().back().id, 5);
+}
+
+TEST(graph_io_keeps_output_slots_and_drops_missing_ones) {
+    const char* text = R"({"version":2,"nodes":[
+        {"id":1,"type":"timeline","x":0,"y":0},
+        {"id":2,"type":"output","x":0,"y":0},
+        {"id":3,"type":"preamp","x":0,"y":0}],
+        "links":[{"id":1,"from":1,"from_slot":5,"to":2,"to_slot":0},
+                 {"id":2,"from":1,"from_slot":6,"to":3,"to_slot":0}]})";
+    AudioGraph g;
+    std::string error;
+    CHECK(graph_io::deserialize(g, text, error));
+    CHECK_EQ(static_cast<int>(g.links().size()), 1); // the timeline has no seventh output
+    AudioGraph loaded;
+    CHECK(graph_io::deserialize(loaded, graph_io::serialize(g), error));
+    CHECK_EQ(static_cast<int>(loaded.links().size()), 1);
+    CHECK_EQ(loaded.links().front().from_slot, 5);
 }
 
 TEST(graph_io_rejects_two_links_into_one_input_pin) {
