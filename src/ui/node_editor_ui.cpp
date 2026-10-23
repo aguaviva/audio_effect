@@ -380,7 +380,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         // Measure the real title-row width (Text + optional Byp) instead of estimating.
         ImGui::BeginGroup();
         ImGui::TextUnformatted(title);
-        if (node.module->output_count() > 0) {
+        if (node.module->bypassable()) {
             ImGui::PushID(node.id);
             bool& bypassed = node.bypassed;
             ImGui::SameLine();

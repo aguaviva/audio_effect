@@ -66,6 +66,8 @@ public:
 
     int input_count() const { int n = 0; const char* const* s = nullptr; get_inputs(&n, &s); return n; }
     int output_count() const { int n = 0; const char* const* s = nullptr; get_outputs(&n, &s); return n; }
+    // Bypass passes the input through, so it needs exactly one input and an output.
+    bool bypassable() const { return input_count() == 1 && output_count() > 0; }
 
     virtual bool is_output_sink() const { return false; }
 

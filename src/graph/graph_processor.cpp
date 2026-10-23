@@ -51,7 +51,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
         }
 
         const auto start = std::chrono::steady_clock::now();
-        if (node.bypassed && mod.output_count() > 0) {
+        if (node.bypassed && mod.bypassable()) {
             if (float* out = mod.output_buffer(0)) {
                 copy_input(inputs, input_count, 0, out, block_size_);
             }

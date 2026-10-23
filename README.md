@@ -8,7 +8,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 - Fullscreen ImGui **node editor** (imnodes) for free wiring of audio nodes.
 - **Right-click** the canvas to add nodes from the inventory below.
-- Every node with an output has a title-bar **Byp** toggle (passes its first input through; a bypassed source is silent). Delete selected nodes/links with Delete.
+- Every node with exactly one input and an output has a title-bar **Byp** toggle (passes its input through). Delete selected nodes/links with Delete.
 - **Load / save** the graph (node positions, types, parameters, and connections) as JSON via an ImGui file browser ([AirGuanZ/imgui-filebrowser](https://github.com/AirGuanZ/imgui-filebrowser)); WAV load uses the same picker.
 - Live capture and playback via miniaudio (interleaved stereo 32-bit float at 48 kHz, float end to end).
 - WAVs are read and written with miniaudio: any PCM or float WAV loads (converted/resampled to stereo 48 kHz); the recorder writes stereo 32-bit float.

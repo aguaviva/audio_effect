@@ -46,6 +46,13 @@ TEST(registry_resolves_module_names_and_pins) {
     CHECK_EQ(make_module("output")->output_count(), 0);
     for (const char* name : {"vu_meter", "oscilloscope", "spectrum", "pitch_detector"}) {
         CHECK_EQ(make_module(name)->output_count(), 0);
+        CHECK(!make_module(name)->bypassable());
+    }
+    CHECK(!make_module("mixer")->bypassable());
+    CHECK(!make_module("dry_wet_mix")->bypassable());
+    CHECK(make_module("preamp")->bypassable());
+    for (const char* name : {"white_noise", "wav_player", "chord_generator", "audio_input", "timeline"}) {
+        CHECK(!make_module(name)->bypassable());
     }
     CHECK_STREQ(node_label(*make_module("pitch_detector")), "Pitch Detector");
 }
