@@ -46,7 +46,6 @@ TEST(registry_resolves_module_names_and_pins) {
     CHECK_EQ(make_module("output")->output_count(), 0);
     for (const char* name : {"vu_meter", "oscilloscope", "spectrum", "pitch_detector"}) {
         CHECK_EQ(make_module(name)->output_count(), 0);
-        CHECK(!make_module(name)->supports_bypass());
     }
     CHECK_STREQ(node_label(*make_module("pitch_detector")), "Pitch Detector");
 }

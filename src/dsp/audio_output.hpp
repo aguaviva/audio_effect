@@ -16,7 +16,6 @@ public:
     std::string name() const override { return "output"; }
     void get_outputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
     bool is_output_sink() const override { return true; }
-    bool supports_bypass() const override { return false; }
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;

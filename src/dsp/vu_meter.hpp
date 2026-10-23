@@ -15,7 +15,6 @@ public:
     bool load(const std::string& json) override;
     bool render() override;
     void get_outputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
-    bool supports_bypass() const override { return false; }
     void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 

@@ -67,7 +67,6 @@ public:
     int input_count() const { int n = 0; const char* const* s = nullptr; get_inputs(&n, &s); return n; }
     int output_count() const { int n = 0; const char* const* s = nullptr; get_outputs(&n, &s); return n; }
 
-    virtual bool supports_bypass() const { return true; }
     virtual bool is_output_sink() const { return false; }
 
     // Smoothed time one block takes in this module, in microseconds.

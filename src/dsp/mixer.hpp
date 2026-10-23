@@ -18,7 +18,6 @@ public:
     int ui_slots = kChannels;
 
     std::string name() const override { return "mixer"; }
-    bool supports_bypass() const override { return false; }
     std::string save() const override;
     bool load(const std::string& json) override;
     void get_inputs(int *count, const char* const** str) const override;

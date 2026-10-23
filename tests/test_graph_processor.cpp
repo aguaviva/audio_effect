@@ -184,7 +184,6 @@ TEST(graph_processor_output_node_ignores_bypass_flag) {
     const int out = g.add_node("output", 0, 0);
     CHECK(g.add_link(in, 0, out, 0));
     g.find_node(out)->bypassed = true;
-    CHECK(!g.find_node(out)->module->supports_bypass());
 
     constexpr size_t block = 16;
     std::vector<float> live(block, 0.5f);
