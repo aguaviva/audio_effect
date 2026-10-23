@@ -8,7 +8,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 - Fullscreen ImGui **node editor** (imnodes) for free wiring of audio nodes.
 - **Right-click** the canvas to add nodes from the inventory below.
-- Effects, visualizers, and sources have a title-bar **Byp** toggle (dry pass-through; a bypassed source is silent). Delete selected nodes/links with Delete.
+- Effects and sources have a title-bar **Byp** toggle (dry pass-through; a bypassed source is silent). Delete selected nodes/links with Delete.
 - **Load / save** the graph (node positions, types, parameters, and connections) as JSON via an ImGui file browser ([AirGuanZ/imgui-filebrowser](https://github.com/AirGuanZ/imgui-filebrowser)); WAV load uses the same picker.
 - Live capture and playback via miniaudio (interleaved stereo 32-bit float at 48 kHz, float end to end).
 - WAVs are read and written with miniaudio: any PCM or float WAV loads (converted/resampled to stereo 48 kHz); the recorder writes stereo 32-bit float.
@@ -44,19 +44,19 @@ Generators (all but Audio Input) have a play/pause button; pausing keeps their p
 - **Mixer** — several inputs auto-detected from connections (grows/shrinks, max 8), one output; equal-weight average of connected input blocks (`mixer` in saved graphs; links use `to_slot`)
 - **Dry/Wet Mix** — two inputs (`dry` / `wet`) with a wet blend control
 
-### Visualizers (pass-through)
+### Visualizers
 
-- **VU Meter** — peak / RMS meters (does not alter audio)
+- **VU Meter** — peak / RMS meters
 - **Oscilloscope** — waveform view of the current block
 - **Spectrum** — inexpensive 32-bin magnitude spectrum
-- **Pitch Detector** — estimated frequency (Hz) and note name (pass-through)
+- **Pitch Detector** — estimated frequency (Hz) and note name
 
 ### Sinks
 
 - **WAV Recorder** — pass-through file writer; its `path` param defaults to `assets/recordings/capture.wav` (Arm Record)
 - **Output** — device playback
 
-Visualizer nodes sit on the graph like effects (in + out) but only analyze the block and pass it through unchanged.
+Visualizers have an input and no outputs: link the signal you want to see into them, alongside wherever else it goes.
 
 ## Graph topology
 

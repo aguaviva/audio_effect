@@ -18,7 +18,7 @@ bool PitchDetectorModule::render() {
 
 void PitchDetectorModule::process(const float* const* inputs, int input_count,
                                   size_t sample_count, float sample_rate) {
-    const float* in = pass_through(inputs, input_count, sample_count);
+    const float* in = input_count > 0 ? inputs[0] : nullptr;
     if (!in) {
         return;
     }

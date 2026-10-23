@@ -199,6 +199,14 @@ TEST(graph_io_bundled_patches_load) {
         std::string error;
         CHECK(graph_io::load_from_file(g, path, error));
         CHECK(!g.nodes().empty());
+
+        std::ifstream file(path);
+        const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        size_t links_in_file = 0;
+        for (size_t at = text.find("\"from\":"); at != std::string::npos; at = text.find("\"from\":", at + 1)) {
+            ++links_in_file;
+        }
+        CHECK_EQ(g.links().size(), links_in_file);
     }
 }
 

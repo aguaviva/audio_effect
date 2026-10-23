@@ -43,7 +43,7 @@ bool VuMeter::render() {
 
 void VuMeter::process(const float* const* inputs, int input_count,
                       size_t sample_count, float /*sample_rate*/) {
-    const float* in = pass_through(inputs, input_count, sample_count);
+    const float* in = input_count > 0 ? inputs[0] : nullptr;
 
     const size_t frames = in ? sample_count / 2 : 0;
     float peak = 0.0f;

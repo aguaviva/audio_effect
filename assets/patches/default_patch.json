@@ -8,10 +8,10 @@
     {"id":5,"type":"mixer","x":760,"y":220,"params":{"bypassed":false,"gain_0":1.000000,"gain_1":1.000000,"gain_2":1.000000,"gain_3":1.000000,"gain_4":1.000000,"gain_5":1.000000,"gain_6":1.000000,"gain_7":1.000000}},
     {"id":6,"type":"high_pass","x":1000,"y":220,"params":{"bypassed":false,"cutoff_hz":70.000000,"selected_preset":0}},
     {"id":7,"type":"low_pass","x":1240,"y":220,"params":{"bypassed":false,"cutoff_hz":8000.000000,"selected_preset":0}},
-    {"id":8,"type":"vu_meter","x":1480,"y":80,"params":{"bypassed":false,"display_gain":1.000000,"decay":0.850000}},
-    {"id":9,"type":"oscilloscope","x":1480,"y":280,"params":{"bypassed":false,"display_gain":1.000000}},
-    {"id":10,"type":"spectrum","x":1480,"y":480,"params":{"bypassed":false,"display_gain":1.000000}},
-    {"id":11,"type":"output","x":1720,"y":220,"params":{"bypassed":false,"device":"default"}}
+    {"id":8,"type":"vu_meter","x":1480,"y":250,"params":{"bypassed":false,"display_gain":1.000000,"decay":0.850000}},
+    {"id":9,"type":"oscilloscope","x":1480,"y":430,"params":{"bypassed":false,"display_gain":1.000000}},
+    {"id":10,"type":"spectrum","x":1480,"y":570,"params":{"bypassed":false,"display_gain":1.000000}},
+    {"id":11,"type":"output","x":1480,"y":60,"params":{"bypassed":false,"device":"default"}}
   ],
   "links":[
     {"id":1,"from":1,"to":2,"to_slot":0},
@@ -22,8 +22,8 @@
     {"id":6,"from":5,"to":6,"to_slot":0},
     {"id":7,"from":6,"to":7,"to_slot":0},
     {"id":8,"from":7,"to":8,"to_slot":0},
-    {"id":9,"from":8,"to":9,"to_slot":0},
-    {"id":10,"from":9,"to":10,"to_slot":0},
-    {"id":11,"from":10,"to":11,"to_slot":0}
+    {"id":9,"from":7,"to":9,"to_slot":0},
+    {"id":10,"from":7,"to":10,"to_slot":0},
+    {"id":11,"from":7,"to":11,"to_slot":0}
   ]
 }
