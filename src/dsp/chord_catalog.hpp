@@ -109,12 +109,12 @@ inline double midi_note_to_hz(double midi_note) {
     return 440.0 * std::pow(2.0, (midi_note - 69.0) / 12.0);
 }
 
-// Six-voice voicing built from C2..B2 roots upward.
+// Six-voice voicing built from C4..B4 roots upward.
 inline std::array<double, kChordVoices> chord_note_frequencies(int index) {
     int root = 0;
     ChordQuality quality = ChordQuality::major;
     chord_decode(index, root, quality);
-    const int root_midi = 36 + root; // C2 .. B2
+    const int root_midi = 60 + root; // C4 .. B4
     const auto intervals = chord_intervals(quality);
     std::array<double, kChordVoices> frequencies{};
     for (int voice = 0; voice < kChordVoices; ++voice) {
