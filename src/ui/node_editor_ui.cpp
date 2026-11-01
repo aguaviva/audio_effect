@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -438,7 +439,10 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             // --- Column 1: Slider (with your -1.0f width requirement) ---
             ImGui::TableSetColumnIndex(1);        
             ImGui::PushID(node.id);
-            draw_node_params(node, graph);
+            {
+                std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+                draw_node_params(node, graph);
+            }
             ImGui::PopID();
 
             // --- Column 2: Output Pin ---
@@ -538,6 +542,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
     for (auto& node : graph.nodes()) {
+        std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
         node.module->render_window();
     }
     draw_profiler(graph, state);

@@ -5,7 +5,8 @@ imgui.ini
 assets/recordings/
 build/
 build-web/
-
+artifacts/
 build/
 media/
 *.png
+*.o

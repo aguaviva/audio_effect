@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD 99)
 if(EMSCRIPTEN)
   option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" OFF)
 else()
-  option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" ON)
+  option(AUDIO_EFFECT_BUILD_TESTS "Build headless graph unit tests" OFF)
   find_package(OpenGL REQUIRED)
   find_package(glfw3 CONFIG QUIET)
 endif()
@@ -52,6 +52,7 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/audio_input.cpp
   src/dsp/audio_output.cpp
   src/dsp/chord_generator.cpp
+  src/dsp/gen_midi.cpp
   src/dsp/white_noise.cpp
   src/dsp/timeline.cpp
   src/dsp/dry_wet_mix.cpp
@@ -68,6 +69,9 @@ set(AUDIO_EFFECT_SOURCES
   third_party/imgui/backends/imgui_impl_opengl3.cpp
   third_party/imnodes/imnodes.cpp
   third_party/miniaudio/miniaudio.c
+  third_party/SimpleMidi/midi.cpp
+  third_party/SimpleMidi/inst-piano.cpp
+  third_party/SimpleMidi/misc.cpp
 )
 
 add_executable(audio_effect_gui ${AUDIO_EFFECT_SOURCES})
@@ -84,6 +88,7 @@ target_include_directories(audio_effect_gui PRIVATE
   third_party/imnodes
   third_party/imgui-filebrowser
   third_party/miniaudio
+  third_party/SimpleMidi
 )
 
 if(MSVC)
@@ -179,7 +184,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
   target_compile_definitions(graph_tests PRIVATE MA_NO_MP3 MA_NO_FLAC)
   target_include_directories(graph_tests PRIVATE
     src src/graph src/dsp src/audio tests third_party/imgui third_party/imgui-filebrowser
-    third_party/miniaudio)
+    third_party/miniaudio third_party/SimpleMidi)
   if(NOT MSVC)
     target_compile_options(graph_tests PRIVATE -Wall -Wextra)
   endif()

@@ -23,6 +23,7 @@
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
+#include "dsp/gen_midi.hpp"
 
 namespace {
 
@@ -50,6 +51,7 @@ const std::vector<NodeKind>& node_kinds() {
         {"Audio Input", "Sources", make<AudioInput>},
         {"WAV Player", "Sources", make<WavPlayer>},
         {"Chord Generator", "Sources", make<ChordGenerator>},
+        {"Midi Generator", "Sources", make<Midi>},
         {"White Noise", "Sources", make<WhiteNoise>},
         {"Timeline", "Sources", make<Timeline>},
         {"Echo", "Effects", make<EchoEffect>},

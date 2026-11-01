@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 
 // The rate the audio engine runs every module at.
@@ -71,6 +72,8 @@ public:
 
     virtual bool is_output_sink() const { return false; }
 
+    std::mutex& control_mutex() const { return control_mutex_; }
+
     // Smoothed time one block takes in this module, in microseconds.
     float process_us() const { return process_us_.load(std::memory_order_relaxed); }
     // Peak of an output pin, held and falling about 35 dB a second.
@@ -93,5 +96,6 @@ protected:
     friend class GraphProcessor;
 
 private:
+    mutable std::mutex control_mutex_;
     std::array<float*, kMaxOutputs> output_buffers_{};
 };

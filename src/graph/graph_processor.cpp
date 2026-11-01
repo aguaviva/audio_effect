@@ -62,7 +62,11 @@ bool GraphProcessor::process(const CompiledGraph& graph,
             }
         } else {
             mod.host_ = this;
-            mod.process(inputs, input_count, block_size_, sample_rate_);
+            std::unique_lock<std::mutex> control_lock(mod.control_mutex(), std::try_to_lock);
+            // Never wait on UI work from the audio thread; contention reuses this module's last block.
+            if (control_lock.owns_lock()) {
+                mod.process(inputs, input_count, block_size_, sample_rate_);
+            }
         }
         const float us = std::chrono::duration<float, std::micro>(
                              std::chrono::steady_clock::now() - start).count();

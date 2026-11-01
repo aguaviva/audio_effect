@@ -20,10 +20,15 @@ bool WavRecorder::load(const std::string& json) {
 
 bool WavRecorder::render() {
     const bool changed = ImGui::Checkbox("Arm Record", &armed);
-    if (changed && armed) {
-        engine_.clear_failure();
-    } else if (armed && engine_.failed()) {
+    if (changed) {
+        if (armed) {
+            engine_.clear_failure();
+        }
+        engine_.set_armed(armed, path, static_cast<float>(kSampleRate));
+    }
+    if (armed && engine_.failed()) {
         armed = false;
+        engine_.set_armed(false, path, static_cast<float>(kSampleRate));
         show_error("Could not record: " + path + " cannot be written.");
     }
     ImGui::TextWrapped("%s", path.c_str());
@@ -31,9 +36,8 @@ bool WavRecorder::render() {
 }
 
 void WavRecorder::process(const float* const* inputs, int input_count,
-                          size_t sample_count, float sample_rate) {
+                          size_t sample_count, float /*sample_rate*/) {
     const float* in = pass_through(inputs, input_count, sample_count);
-    engine_.set_armed(armed, path, sample_rate);
     engine_.write_samples(in, sample_count);
 }
 

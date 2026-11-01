@@ -114,7 +114,6 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
     if (!pipe || !out || needed == 0) {
         return;
     }
-
     while (pipe->playback_staging.size() < needed) {
         auto chunk = next_played_chunk(*pipe);
         if (!chunk) {
@@ -227,7 +226,7 @@ void filter_processor() {
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
         auto chunk = g_pipeline.cap_to_filter.pop();
         if (!chunk) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
 
@@ -242,7 +241,7 @@ void filter_processor() {
 
         while (g_pipeline.running.load(std::memory_order_relaxed) &&
                !g_pipeline.filter_to_play.push(std::move(chunk))) {
-            std::this_thread::yield();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 }
