@@ -1,0 +1,17 @@
+{
+  "version":2,
+  "nodes":[
+    {"id":1,"type":"midi","x":552.000000,"y":264.000000,"params":{"bypassed":false,"path":"/repos/audio_effect/assets/audio/MetalGearMSX_OperationIntrudeN313.mid"}},
+    {"id":2,"type":"mixer","x":829.000000,"y":257.000000,"params":{"bypassed":false,"gain_0":1.000000,"muted_0":false,"gain_1":1.000000,"muted_1":false,"gain_2":1.000000,"muted_2":false,"gain_3":1.000000,"muted_3":false,"gain_4":1.000000,"muted_4":false,"gain_5":1.000000,"muted_5":false,"gain_6":1.000000,"muted_6":false,"gain_7":1.000000,"muted_7":false}},
+    {"id":3,"type":"output","x":1185.000000,"y":322.000000,"params":{"bypassed":false,"device":"default","muted":false,"volume_db":0.000000}}
+  ],
+  "links":[
+    {"id":1,"from":1,"from_slot":0,"to":2,"to_slot":0},
+    {"id":2,"from":1,"from_slot":1,"to":2,"to_slot":1},
+    {"id":3,"from":1,"from_slot":2,"to":2,"to_slot":2},
+    {"id":4,"from":1,"from_slot":3,"to":2,"to_slot":3},
+    {"id":5,"from":1,"from_slot":4,"to":2,"to_slot":4},
+    {"id":6,"from":1,"from_slot":5,"to":2,"to_slot":5},
+    {"id":7,"from":2,"from_slot":0,"to":3,"to_slot":0}
+  ]
+}

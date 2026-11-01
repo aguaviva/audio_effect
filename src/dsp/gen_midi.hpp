@@ -3,6 +3,7 @@
 #include "module.hpp"
 #include "wav_generator.hpp"
 #include "ui/file_picker.hpp"
+#include "ui/piano_roll.hpp"
 
 #include <array>
 #include <atomic>
@@ -13,6 +14,7 @@
 #include <utility>
 #include <vector>
 #include "midi.h"
+#include "inst-piano.h"
 
 // Six tracks of WAV clips placed in time, one output pin each. Plays from the cursor.
 class Midi : public Module {
@@ -39,4 +41,7 @@ private:
     unsigned char *pMidi_buffer;
     size_t midi_size;
     MidiSong midi_song;
+    std::array<Instrument *, kTracks> instruments_;
+    std::array<audio_effect::PianoRollEditor, kTracks> piano_rolls_;
+    std::array<bool, kTracks> piano_roll_open_{};
 };

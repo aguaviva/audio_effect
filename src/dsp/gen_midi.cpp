@@ -26,10 +26,31 @@ bool Midi::set_path(const std::string& path) {
         midi_song.Reset();
 
         midi_song.LoadMidi(pMidi_buffer, midi_size);
+
         for (uint32_t t = 0; t < midi_song.GetTrackCount(); t++)
         {
-            midi_song.GetTrack(t)->pPiano = GetNewPiano();
+            Instrument *inst  = GetNewPiano(); 
+            instruments_[t] = inst;
+            midi_song.pFunc[t] = [inst](uint8_t* pdata, size_t size) {
+                    inst->send_midi(pdata, size);
+            };
+        }        
+
+        for (uint32_t channel = 0; channel < midi_song.GetTrackCount(); channel++)
+        {
+            MidiTrack *mt = midi_song.GetTrack(channel);
+            audio_effect::PianoRollEditor *pPR = &piano_rolls_[channel];
+            uint32_t c = mt->m_pMidiState->m_microSecondsPerMidiTick;
+            uint32_t time = 0;
+            do {
+                time = mt->play(time, [pPR, time](uint8_t* pdata, size_t size){
+                    unsigned char subType = pdata[0] >> 4;
+                    if (subType >= 0x8 && subType <= 0xB)        
+                    pPR->AddNote(pdata[1],time/256,1);
+                });
+            } while(time!=NO_EVENTS);
         }
+        midi_song.Reset();
     }
     return error_.empty(); // clip now holds the replaced one, freed here outside the lock
 }
@@ -80,11 +101,42 @@ bool Midi::render() {
     if (ImGui::SmallButton("reset")) {
         midi_song.Reset();
     }
-    ImGui::Text("%f",midi_song.get_elapsed_milliseconds()/1000.0f);        
+    ImGui::Text("%f",midi_song.get_elapsed_milliseconds()/1000.0f);
+    for (int channel = 0; channel < kTracks; ++channel) {
+        ImGui::PushID(channel);
+        ImGui::Text("Channel %d", channel + 1);
+        ImGui::SameLine();
+        if (ImGui::SmallButton(piano_roll_open_[channel] ? "Hide Piano Roll" : "Open Piano Roll")) {
+            piano_roll_open_[channel] = !piano_roll_open_[channel];
+        }
+        ImGui::PopID();
+    }
     return changed;
 }
 
 void Midi::render_window() {
+    for (int channel = 0; channel < kTracks; ++channel) {
+        if (!piano_roll_open_[channel]) {
+            continue;
+        }
+
+        char title[96];
+        std::snprintf(title, sizeof(title), "Piano Roll - Channel %d###midi_piano_%p_%d",
+                      channel + 1, static_cast<void*>(this), channel);
+        ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
+        if (channel < static_cast<int>(midi_song.GetTrackCount())) {
+            MidiTrack* track = midi_song.GetTrack(static_cast<uint32_t>(channel));
+            if (track) {
+                piano_rolls_[channel].SetTimeSignature(
+                    static_cast<int>(track->m_timesignatureNum),
+                    static_cast<int>(track->m_timesignatureDen));
+            }
+        }
+        if (ImGui::Begin(title, &piano_roll_open_[channel])) {
+            piano_rolls_[channel].Render("##piano_roll", ImVec2(0.0f, 520.0f));
+        }
+        ImGui::End();
+    }
 }
 
 void Midi::process(const float* const* /*inputs*/, int /*input_count*/,
@@ -111,7 +163,7 @@ void Midi::process(const float* const* /*inputs*/, int /*input_count*/,
             float *pOut = output_buffer(t);
             if (midi_song.GetTrack(t)!=NULL && pOut)
             {
-                midi_song.GetTrack(t)->pPiano->render_samples(n_samples, pOut + (2*offset));
+                instruments_[t]->render_samples(n_samples, pOut + (2*offset));
             }
         }                    
         size -= n_samples;                
