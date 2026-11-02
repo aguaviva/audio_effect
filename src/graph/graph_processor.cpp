@@ -1,5 +1,7 @@
 #include "graph_processor.hpp"
 
+#include "dsp/transport.hpp"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -26,6 +28,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
     }
     float* sink_block = buffer(graph.buffer_count);
     live_input_ = live_input;
+    transport().begin_block();
     const float release = std::exp(-static_cast<float>(block_size_ / 2) / (0.25f * sample_rate_));
 
     bool wrote_output = false;
@@ -101,5 +104,6 @@ bool GraphProcessor::process(const CompiledGraph& graph,
         }
     }
 
+    transport().end_block(static_cast<int64_t>(block_size_ / 2));
     return wrote_output;
 }

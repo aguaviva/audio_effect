@@ -18,16 +18,16 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 ### Sources / generators
 
-Generators (all but Audio Input) have a play/pause button; pausing keeps their place.
+The WAV Player, Midi Generator and Clip Timeline share one transport: Play/Pause and Stop on any of them (or in the timeline) start, pause or rewind all three together, and they stay in step. The Chord Generator and White Noise have a play/pause button of their own.
 
 - **Audio Input** — live capture
-- **WAV Player** — plays its own WAV file (loop optional) with a seekable progress bar; a missing file plays silence
+- **WAV Player** — plays its own WAV file from the start of the transport (loop optional), with a progress bar that seeks; a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
-- **Midi Generator** — plays a MIDI file, one piano and output pin per track (up to 10); each track's piano roll shows the notes and a playhead that follows playback (optionally scrolling with it). Pause keeps the place, Stop goes back to the start. Tracks are listed by name; a roll opens scrolled to its notes, with bar numbers and seconds (following the song's tempo map) on its ruler. Dragging a selected note moves or resizes the whole selection; Ctrl+C / X / V / D copy, cut, paste at the mouse, and duplicate (the clipboard is shared between tracks)
-- **Clip Timeline** — six tracks of WAV clips, one output pin per track, placed in the timeline window: drag a waveform to move it in time (it snaps to the start or end of other clips), click a lane to place the cursor, and Play starts from the cursor
+- **Midi Generator** — plays a MIDI file, one piano and output pin per track (up to 10); each track's piano roll shows the notes and a playhead that follows playback (optionally scrolling with it). Tracks are listed by name; a roll opens scrolled to its notes, with bar numbers and seconds (following the song's tempo map) on its ruler. Dragging a selected note moves or resizes the whole selection; Ctrl+C / X / V / D copy, cut, paste at the mouse, and duplicate (the clipboard is shared between tracks)
+- **Clip Timeline** — six tracks of WAV clips, one output pin per track, placed in the timeline window: drag a waveform to move it in time (it snaps to the start or end of other clips)
 
-**View > Timeline** opens a zoomable timeline with a track for every source: waveforms for the WAV Player (click to seek) and the Clip Timeline, the notes of each Midi Generator track (its name opens the piano roll), and a band for the others. Each shows where it is playing. **View > Timeline Tracks** shows or hides each source's tracks.
+**View > Timeline** opens a zoomable timeline with a track for every source: waveforms for the WAV Player (repeated while it loops) and the Clip Timeline, the notes of each Midi Generator track (its name opens the piano roll), and a band for the others. One cursor across all the tracks shows the transport; press the ruler or any track to move it there, and Space plays and pauses. **View > Timeline Tracks** shows or hides each source's tracks.
 
 ### Effects
 

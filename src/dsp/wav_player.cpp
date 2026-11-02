@@ -1,8 +1,10 @@
 #include "wav_player.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
+#include "dsp/transport.hpp"
 #include "imgui.h"
 #include "ui/message_box.hpp"
 
@@ -67,17 +69,19 @@ bool WavPlayer::render() {
         ImGui::PopTextWrapPos();
     }
 
-    if (ImGui::Button(playing ? "Pause###play" : "Play###play")) {
-        playing = !playing;
-    }
+    transport_controls();
     if (length_ > 0) {
-        const float samples_per_second = 2.0f * kSampleRate;
-        float seconds = std::min(cursor_.load(), length_) / samples_per_second;
-        ImGui::SameLine();
+        // Where the transport is in the clip.
+        const size_t frames = length_ / 2;
+        const int64_t frame = transport().position();
+        const size_t in_clip = loop ? static_cast<size_t>(frame) % frames
+                                    : std::min(static_cast<size_t>(frame), frames);
+        float seconds = static_cast<float>(in_clip) / kSampleRate;
         ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::SliderFloat("##position", &seconds, 0.0f, length_ / samples_per_second,
+        if (ImGui::SliderFloat("##position", &seconds, 0.0f, static_cast<float>(frames) / kSampleRate,
                                "%.1f s")) {
-            cursor_ = static_cast<size_t>(seconds * kSampleRate) * 2;
+            transport().seek(static_cast<int64_t>(frame) - static_cast<int64_t>(in_clip) +
+                             static_cast<int64_t>(seconds * kSampleRate));
         }
     }
 
@@ -88,10 +92,6 @@ bool WavPlayer::render() {
 bool WavPlayer::render_timeline(Timeline& timeline, const char* title) {
     timeline.BeginTrack("clip");
     ImGui::TextUnformatted(title);
-    if (ImGui::SmallButton(playing ? "Pause###play" : "Play###play")) {
-        playing = !playing;
-    }
-    ImGui::SameLine();
     const char* slash = std::strrchr(path_.c_str(), '/');
     const char* leaf = slash ? slash + 1 : path_.c_str();
     ImGui::TextDisabled("%s%s", leaf[0] ? leaf : "(no file)", loop ? " (loop)" : "");
@@ -99,52 +99,43 @@ bool WavPlayer::render_timeline(Timeline& timeline, const char* title) {
         ImGui::SetTooltip("%s", path_.c_str());
     }
     if (shown_clip_ && length_ > 0) {
-        if (timeline.LaneActive()) {
-            const size_t frame = static_cast<size_t>(timeline.MouseSeconds() * kSampleRate);
-            cursor_ = std::min(2 * frame, length_ - 2);
-        }
         timeline.Clip(*shown_clip_, *peaks_, 0.0, kSampleRate);
-        timeline.Playhead(static_cast<double>(std::min(cursor_.load(), length_)) / (2.0 * kSampleRate));
+        if (loop) {
+            const double seconds = static_cast<double>(length_ / 2) / kSampleRate;
+            for (double start = std::max(1.0, std::floor(timeline.VisibleStart() / seconds)) * seconds;
+                 start < timeline.VisibleEnd(); start += seconds) {
+                timeline.Clip(*shown_clip_, *peaks_, start, kSampleRate, false, true);
+            }
+        }
     }
     timeline.EndTrack();
     return true;
 }
+
 void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/,
                         size_t sample_count, float /*sample_rate*/) {
     std::unique_lock<std::mutex> lock(clip_mutex_, std::try_to_lock);
     if (lock.owns_lock() && clip_changed_) {
         std::swap(clip_, next_clip_);
         clip_changed_ = false;
-        cursor_ = 0;
     }
-    // Unlinked, it writes nothing but keeps moving through the clip.
     float* output = output_buffer(0);
-    if (!playing) {
-        if (output) {
-            std::fill(output, output + sample_count, 0.0f);
-        }
+    if (!output) {
         return;
     }
     const size_t clip_samples = clip_ ? clip_->interleaved_stereo.size() : 0;
-    size_t start = cursor_;
-    size_t cursor = start;
     size_t written = 0;
-    while (written < sample_count && clip_samples > 0) {
-        if (cursor >= clip_samples) {
-            if (!loop) {
-                break;
-            }
-            cursor = 0;
+    if (transport().block_playing() && clip_samples > 0) {
+        size_t cursor = 2 * static_cast<size_t>(transport().block_frame());
+        if (loop) {
+            cursor %= clip_samples;
         }
-        const size_t n = std::min(sample_count - written, clip_samples - cursor);
-        if (output) {
+        while (written < sample_count && cursor < clip_samples) {
+            const size_t n = std::min(sample_count - written, clip_samples - cursor);
             std::copy_n(clip_->interleaved_stereo.data() + cursor, n, output + written);
+            written += n;
+            cursor = loop ? 0 : cursor + n;
         }
-        written += n;
-        cursor += n;
     }
-    if (output) {
-        std::fill(output + written, output + sample_count, 0.0f);
-    }
-    cursor_.compare_exchange_strong(start, cursor); // a seek made during this block wins
+    std::fill(output + written, output + sample_count, 0.0f);
 }

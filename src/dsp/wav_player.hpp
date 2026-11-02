@@ -11,10 +11,10 @@
 #include <mutex>
 #include <string>
 
+// Plays its clip from the start of the shared transport, over and over when looping.
 class WavPlayer : public Module {
 public:
     bool loop = true;
-    bool playing = true;
 
     // UI thread. set_path() decodes the file; when that fails the player is silent, it
     // returns false and error() says why.
@@ -46,5 +46,4 @@ private:
     bool clip_changed_ = false;
 
     std::shared_ptr<const WavClip> clip_; // audio thread
-    std::atomic<size_t> cursor_{0};       // next sample in clip_; the UI seeks by setting it
 };

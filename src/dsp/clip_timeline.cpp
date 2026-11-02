@@ -7,6 +7,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "dsp/transport.hpp"
 #include "imgui.h"
 #include "ui/message_box.hpp"
 
@@ -31,7 +32,6 @@ void ClipTimeline::get_outputs(int* count, const char* const** str) const {
 
 std::string ClipTimeline::save() const {
     std::string out = "{";
-    module_json::write_int(out, "cursor", static_cast<int>(cursor_));
     for (int t = 0; t < kTracks; ++t) {
         if (!tracks_[t].path.empty()) {
             module_json::write_string(out, track_key(t, "path").c_str(), tracks_[t].path);
@@ -44,9 +44,6 @@ std::string ClipTimeline::save() const {
 }
 
 bool ClipTimeline::load(const std::string& json) {
-    int cursor = 0;
-    module_json::read(json, "cursor", cursor);
-    cursor_ = std::max(cursor, 0);
     for (int t = 0; t < kTracks; ++t) {
         std::string path;
         int start = 0;
@@ -103,23 +100,8 @@ int64_t ClipTimeline::snap(int track, int64_t start, double frames_per_pixel) co
     return snapped;
 }
 
-void ClipTimeline::set_cursor(int64_t frame) {
-    cursor_ = std::max<int64_t>(frame, 0);
-    position_ = cursor_;
-}
-
-// Play starts from the cursor; Stop leaves the cursor where it is.
-void ClipTimeline::play_button() {
-    if (ImGui::SmallButton(playing ? "Stop###play" : "Play###play")) {
-        playing = !playing;
-        position_ = cursor_;
-    }
-    ImGui::SameLine();
-    ImGui::Text("%.2f s", seconds_of(playing ? position_.load() : cursor_));
-}
-
 bool ClipTimeline::render() {
-    play_button();
+    transport_controls();
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
     ImGui::TextDisabled("Place the clips in View > Timeline");
     ImGui::PopTextWrapPos();
@@ -138,26 +120,12 @@ void ClipTimeline::render_window() {
 
 bool ClipTimeline::render_timeline(Timeline& timeline, const char* title) {
     const int64_t mouse = static_cast<int64_t>(timeline.MouseSeconds() * kSampleRate);
-    const auto draw_positions = [&] {
-        timeline.Marker(seconds_of(cursor_));
-        if (playing) {
-            timeline.Playhead(seconds_of(position_.load()));
-        }
-    };
-
-    timeline.BeginTrack("transport");
+    timeline.BeginTrack("title", Timeline::TitleHeight());
     ImGui::TextUnformatted(title);
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Click a lane to place the cursor where Play starts;\n"
-                          "drag a waveform to move it (it snaps to other clips)");
+        ImGui::SetTooltip("Drag a waveform to move it; it snaps to the other clips");
     }
-    play_button();
-    if (timeline.LaneActive()) {
-        set_cursor(mouse);
-    }
-    draw_positions();
     timeline.EndTrack();
-
     for (int t = 0; t < kTracks; ++t) {
         Track& tr = tracks_[t];
         char id[16];
@@ -190,19 +158,17 @@ bool ClipTimeline::render_timeline(Timeline& timeline, const char* title) {
             dragging_ = -1;
         }
         if (dragging_ == t) {
+            timeline.ClaimLane();
             const double frames_per_pixel = timeline.SecondsPerPixel() * kSampleRate;
             const int64_t start = snap(t, std::max<int64_t>(0, mouse - grab_frame_), frames_per_pixel);
             if (start != tr.start) {
                 tr.start = start;
                 publish();
             }
-        } else if (timeline.LaneActive()) {
-            set_cursor(mouse);
         }
         if (tr.clip) {
             timeline.Clip(*tr.clip, *tr.peaks, seconds_of(tr.start), kSampleRate, dragging_ == t);
         }
-        draw_positions();
         timeline.EndTrack();
     }
     return true;
@@ -220,10 +186,10 @@ void ClipTimeline::process(const float* const* /*inputs*/, int /*input_count*/,
             std::fill(output_buffer(t), output_buffer(t) + sample_count, 0.0f);
         }
     }
-    if (!playing) {
+    if (!transport().block_playing()) {
         return;
     }
-    int64_t start = position_;
+    const int64_t start = transport().block_frame();
     const int64_t frames = static_cast<int64_t>(sample_count / 2);
     for (int t = 0; t < kTracks; ++t) {
         const Placed& p = placed_[t];
@@ -239,5 +205,4 @@ void ClipTimeline::process(const float* const* /*inputs*/, int /*input_count*/,
             std::copy(clip + 2 * (begin - p.start), clip + 2 * (end - p.start), out + 2 * (begin - start));
         }
     }
-    position_.compare_exchange_strong(start, start + frames); // a seek made during this block wins
 }

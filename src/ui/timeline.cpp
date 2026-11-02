@@ -1,5 +1,8 @@
 #include "timeline.hpp"
 
+#include "dsp/module.hpp"
+#include "dsp/transport.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -13,9 +16,11 @@ const ImU32 kLaneBackground = IM_COL32(31, 34, 37, 255);
 const ImU32 kRowLine = IM_COL32(61, 65, 68, 255);
 const ImU32 kTickLine = IM_COL32(52, 56, 59, 255);
 const ImU32 kPlayheadColor = IM_COL32(255, 200, 60, 255);
+const ImU32 kClipBackground = IM_COL32(45, 75, 120, 255);
+const ImU32 kClipForeground = IM_COL32(150, 200, 255, 255);
 
 float RulerHeight() {
-    return ImGui::GetTextLineHeight() + 8.0f;
+    return Timeline::TitleHeight();
 }
 
 // Draws into the part of a rect inside the visible tracks, whatever clip rect is pushed.
@@ -33,6 +38,27 @@ private:
 };
 
 } // namespace
+
+void transport_controls(bool small) {
+    Transport& t = transport();
+    const auto button = [small](const char* label) {
+        return small ? ImGui::SmallButton(label) : ImGui::Button(label);
+    };
+    if (button(t.playing() ? "Pause###play" : "Play###play")) {
+        if (t.playing()) {
+            t.pause();
+        } else {
+            t.play();
+        }
+    }
+    ImGui::SameLine();
+    if (button("Stop###stop")) {
+        t.pause();
+        t.seek(0);
+    }
+    ImGui::SameLine();
+    ImGui::Text("%.2f s", static_cast<double>(t.position()) / kSampleRate);
+}
 
 WaveformPeaks::WaveformPeaks(const WavClip& clip) {
     const std::vector<float>& s = clip.interleaved_stereo;
@@ -99,10 +125,14 @@ void Timeline::ExtendTo(double seconds) {
     next_length_ = std::max(next_length_, seconds);
 }
 
-void Timeline::Begin(const char* id, ImVec2 size) {
+void Timeline::Begin(const char* id, double cursor, ImVec2 size) {
+    cursor_ = cursor;
+    seeked_ = false;
     ruler_min_ = ImGui::GetCursorScreenPos();
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
-    ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x, RulerHeight()));
+    ImGui::InvisibleButton("##ruler", ImVec2(std::max(1.0f, ImGui::GetContentRegionAvail().x),
+                                             RulerHeight()));
+    ruler_active_ = ImGui::IsItemActive();
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::BeginChild(id, size, ImGuiChildFlags_None,
                       ImGuiWindowFlags_HorizontalScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -114,6 +144,10 @@ void Timeline::Begin(const char* id, ImVec2 size) {
     lanes_x_ = ImGui::GetWindowPos().x + kHeaderWidth;
     scroll_x_ = ImGui::GetScrollX();
     row_y_ = 0.0f;
+    if (ruler_active_) {
+        seeked_ = true;
+        seek_ = MouseSeconds();
+    }
     HandleWheel();
 
     // Ruler ticks at least 80 px apart.
@@ -126,6 +160,13 @@ void Timeline::Begin(const char* id, ImVec2 size) {
             break;
         }
     }
+}
+
+bool Timeline::Seeked(double* seconds) const {
+    if (seeked_) {
+        *seconds = seek_;
+    }
+    return seeked_;
 }
 
 void Timeline::HandleWheel() {
@@ -153,6 +194,8 @@ void Timeline::End() {
     // Room to scroll a little past the end of everything shown.
     length_ = std::max(60.0, next_length_ + 10.0);
     next_length_ = 0.0;
+    const float rows_bottom = ImGui::GetWindowPos().y - ImGui::GetScrollY() + row_y_;
+    DrawCursor(view_min_.y, std::min(rows_bottom, view_max_.y));
     ImGui::SetCursorPos(ImVec2(kHeaderWidth + static_cast<float>(length_ / seconds_per_pixel_), row_y_));
     ImGui::Dummy(ImVec2(0.0f, 0.0f));
     ImGui::EndChild();
@@ -194,8 +237,20 @@ void Timeline::DrawRuler() const {
         draw->AddLine(ImVec2(x, ruler_min_.y + RulerHeight() * 0.5f), ImVec2(x, max.y), kRowLine);
         draw->AddText(ImVec2(x + 3.0f, ruler_min_.y + 2.0f), text, label);
     }
+    const float x = XAt(cursor_);
+    draw->AddLine(ImVec2(x, ruler_min_.y), ImVec2(x, max.y), kPlayheadColor, 2.0f);
+    draw->AddTriangleFilled(ImVec2(x - 6.0f, max.y - 9.0f), ImVec2(x + 6.0f, max.y - 9.0f),
+                            ImVec2(x, max.y), kPlayheadColor);
     draw->PopClipRect();
     draw->AddLine(ImVec2(ruler_min_.x, max.y - 1.0f), ImVec2(max.x, max.y - 1.0f), kRowLine);
+}
+
+void Timeline::DrawCursor(float top, float bottom) const {
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->PushClipRect(ImVec2(lanes_x_, view_min_.y), view_max_, true);
+    const float x = XAt(cursor_);
+    draw->AddLine(ImVec2(x, top), ImVec2(x, bottom), kPlayheadColor, 2.0f);
+    draw->PopClipRect();
 }
 
 void Timeline::BeginTrack(const char* id, float height) {
@@ -209,6 +264,7 @@ void Timeline::BeginTrack(const char* id, float height) {
     ImGui::InvisibleButton("##lane", ImVec2(std::max(1.0f, lane_max_.x - lane_min_.x), height));
     lane_activated_ = ImGui::IsItemActivated();
     lane_active_ = ImGui::IsItemActive();
+    lane_claimed_ = false;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
     draw->AddRectFilled(lane_min_, lane_max_, kLaneBackground);
@@ -224,16 +280,22 @@ void Timeline::BeginTrack(const char* id, float height) {
 }
 
 void Timeline::EndTrack() {
+    if (lane_active_ && !lane_claimed_) {
+        seeked_ = true;
+        seek_ = MouseSeconds();
+    }
     ImGui::EndGroup();
     ImGui::PopClipRect();
     ImGui::PopID();
 }
 
 void Timeline::Clip(const WavClip& clip, const WaveformPeaks& peaks, double start,
-                    double sample_rate, bool highlight) {
+                    double sample_rate, bool highlight, bool repeat) {
     const double frames = static_cast<double>(clip.interleaved_stereo.size() / 2);
     const double end = start + frames / sample_rate;
-    ExtendTo(end);
+    if (!repeat) {
+        ExtendTo(end);
+    }
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ScopedClip scope(draw, lane_min_, lane_max_, view_min_, view_max_);
     const float x0 = XAt(start);
@@ -241,7 +303,7 @@ void Timeline::Clip(const WavClip& clip, const WaveformPeaks& peaks, double star
     const float top = lane_min_.y;
     const float height = lane_max_.y - lane_min_.y;
     draw->AddRectFilled(ImVec2(x0, top + 2.0f), ImVec2(x1, top + height - 3.0f),
-                        highlight ? IM_COL32(70, 110, 170, 255) : IM_COL32(45, 75, 120, 255), 3.0f);
+                        highlight ? IM_COL32(70, 110, 170, 255) : kClipBackground, 3.0f);
     const float mid = top + height * 0.5f;
     const float half = height * 0.5f - 4.0f;
     const auto frame_at = [&](float x) {
@@ -256,39 +318,42 @@ void Timeline::Clip(const WavClip& clip, const WaveformPeaks& peaks, double star
         const auto [lo, hi] = peaks.range(clip, static_cast<size_t>(std::max<int64_t>(begin, 0)),
                                           static_cast<size_t>(std::max(stop, begin + 1)));
         draw->AddLine(ImVec2(x + 0.5f, mid - hi * half), ImVec2(x + 0.5f, mid - lo * half + 1.0f),
-                      IM_COL32(150, 200, 255, 255));
+                      kClipForeground);
     }
 }
 
-void Timeline::Notes(const std::vector<TimelineNote>& notes, double playhead) {
+void Timeline::Notes(const std::vector<TimelineNote>& notes, double start, double end) {
     if (notes.empty()) {
         return;
     }
+    ExtendTo(end);
     int low = notes.front().pitch;
     int high = low;
     for (const TimelineNote& n : notes) {
         low = std::min(low, n.pitch);
         high = std::max(high, n.pitch);
-        ExtendTo(n.start + n.duration);
     }
     // At least an octave tall, so a few close notes are not stretched over the whole lane.
     const int span = std::max(high - low + 1, 12);
     const int base = low - (span - (high - low + 1)) / 2;
-    constexpr float kPad = 4.0f;
-    const float row = (lane_max_.y - lane_min_.y - 2.0f * kPad) / static_cast<float>(span);
+    const float top = lane_min_.y + 2.0f;
+    const float bottom = lane_max_.y - 3.0f;
+    constexpr float kPad = 3.0f;
+    const float row = (bottom - top - 2.0f * kPad) / static_cast<float>(span);
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ScopedClip scope(draw, lane_min_, lane_max_, view_min_, view_max_);
+    draw->AddRectFilled(ImVec2(XAt(start), top), ImVec2(XAt(end), bottom), kClipBackground, 3.0f);
     for (const TimelineNote& n : notes) {
         const float x0 = XAt(n.start);
         const float x1 = std::max(XAt(n.start + n.duration), x0 + 1.0f);
         if (x1 < view_min_.x || x0 > view_max_.x) {
             continue;
         }
-        const float y = lane_max_.y - kPad - static_cast<float>(n.pitch - base + 1) * row;
-        const bool sounding = playhead >= n.start && playhead < n.start + n.duration;
+        const float y = bottom - kPad - static_cast<float>(n.pitch - base + 1) * row;
+        const bool sounding = cursor_ >= n.start && cursor_ < n.start + n.duration;
         draw->AddRectFilled(ImVec2(x0, y), ImVec2(x1, y + std::max(row - 1.0f, 2.0f)),
-                            sounding ? IM_COL32(150, 225, 240, 255) : IM_COL32(73, 156, 173, 255));
+                            sounding ? IM_COL32(240, 248, 255, 255) : kClipForeground);
     }
 }
 
@@ -304,23 +369,4 @@ void Timeline::Band(const char* label, bool active) {
         draw->AddText(ImVec2(x0 + 6.0f, y),
                       ImGui::GetColorU32(active ? ImGuiCol_Text : ImGuiCol_TextDisabled), label);
     }
-}
-
-void Timeline::Playhead(double seconds) {
-    ExtendTo(seconds);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ScopedClip scope(draw, lane_min_, lane_max_, view_min_, view_max_);
-    const float x = XAt(seconds);
-    draw->AddLine(ImVec2(x, lane_min_.y), ImVec2(x, lane_max_.y), kPlayheadColor, 2.0f);
-}
-
-void Timeline::Marker(double seconds) {
-    ExtendTo(seconds);
-    ImDrawList* draw = ImGui::GetWindowDrawList();
-    const ScopedClip scope(draw, lane_min_, lane_max_, view_min_, view_max_);
-    const float x = XAt(seconds);
-    const ImU32 color = IM_COL32(235, 235, 235, 200);
-    draw->AddLine(ImVec2(x, lane_min_.y), ImVec2(x, lane_max_.y), color);
-    draw->AddTriangleFilled(ImVec2(x - 5.0f, lane_min_.y), ImVec2(x + 5.0f, lane_min_.y),
-                            ImVec2(x, lane_min_.y + 7.0f), color);
 }

@@ -6,6 +6,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <type_traits>
+#include "dsp/transport.hpp"
 #include "imgui.h"
 #include "ui/message_box.hpp"
 #include "inst-piano.h"
@@ -109,6 +111,7 @@ bool Midi::set_path(const std::string& path) {
     // so read them from the events. The first time signature, usually the first track's,
     // applies to every track.
     const uint32_t tpq = std::max<uint32_t>(1, midi_song.m_midi_state.m_ticksPerQuarterNote);
+    start_us_per_tick_ = (60 * 1000000 / 110) / tpq;
     int numerator = 4;
     int denominator = 4;
     bool have_signature = false;
@@ -216,6 +219,10 @@ double Midi::playhead_beat() const {
 
 void Midi::rewind() {
     midi_song.Reset();
+    // Reset() leaves the tempo of the last tempo event played.
+    if (start_us_per_tick_ > 0) {
+        midi_song.m_midi_state.m_microSecondsPerMidiTick = start_us_per_tick_;
+    }
     for (Instrument* inst : instruments_) {
         if (inst) {
             inst->reset();
@@ -227,22 +234,52 @@ void Midi::rewind() {
     finished_ = false;
 }
 
-// Play/Pause keeps the place; Stop goes back to the start. Play after the end starts over.
 void Midi::transport() {
-    const bool running = playing && !finished_;
-    if (ImGui::Button(running ? "Pause###play" : "Play###play")) {
-        if (finished_) {
-            rewind();
-        }
-        playing = !running;
+    transport_controls();
+    if (finished_) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(end)");
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Stop###stop")) {
-        playing = false;
+}
+
+// Rewinds when going back, then runs the sequencer to target with its notes muted.
+void Midi::seek(uint64_t target) {
+    if (target < played_samples_) {
         rewind();
     }
-    ImGui::SameLine();
-    ImGui::Text("%.2f s%s", playhead_seconds(), finished_ ? " (end)" : "");
+    constexpr size_t kSendFuncs = std::extent_v<decltype(MidiSong::pFunc)>;
+    const uint32_t tracks = std::min<uint32_t>(midi_song.GetTrackCount(), kSendFuncs);
+    std::array<MidiSendFunc, kSendFuncs> muted;
+    for (uint32_t t = 0; t < tracks; ++t) {
+        std::swap(midi_song.pFunc[t], muted[t]);
+    }
+    while (played_samples_ < target && !finished_) {
+        step(target - played_samples_);
+    }
+    for (uint32_t t = 0; t < tracks; ++t) {
+        std::swap(midi_song.pFunc[t], muted[t]);
+    }
+    for (Instrument* inst : instruments_) {
+        if (inst) {
+            inst->reset();
+        }
+    }
+}
+
+size_t Midi::step(size_t samples) {
+    const uint32_t tick = midi_song.m_midi_state.m_time;
+    const size_t n = midi_song.RenderMidi(kSampleRate, samples);
+    if (n == NO_EVENTS) {
+        finished_ = true;
+        return 0;
+    }
+    if (midi_song.m_midi_state.m_time != tick) {
+        interval_start_tick_ = tick;
+        interval_samples_ = 0;
+    }
+    interval_samples_ += n;
+    played_samples_ += n;
+    return n;
 }
 
 std::string Midi::save() const {
@@ -328,22 +365,25 @@ void Midi::roll_button(int track) {
 
 bool Midi::render_timeline(Timeline& timeline, const char* title) {
     const int tracks = loaded_tracks();
-    // Every roll has the song's tempo map.
-    const double playhead = piano_rolls_[0].SecondsAtBeat(static_cast<float>(playhead_beat()));
-
-    timeline.BeginTrack("transport");
+    timeline.BeginTrack("title", Timeline::TitleHeight());
     ImGui::TextUnformatted(title);
     if (ImGui::IsItemHovered() && !path_.empty()) {
         ImGui::SetTooltip("%s", path_.c_str());
     }
     if (tracks == 0) {
+        ImGui::SameLine();
         ImGui::TextDisabled("(no song)");
-    } else {
-        transport();
-        timeline.Playhead(playhead);
     }
     timeline.EndTrack();
 
+    // Every roll has the song's tempo map.
+    double song_end = 0.0;
+    for (int t = 0; t < tracks; ++t) {
+        const audio_effect::PianoRollEditor& roll = piano_rolls_[t];
+        for (const audio_effect::PianoRollNote& n : roll.GetNotes()) {
+            song_end = std::max<double>(song_end, roll.SecondsAtBeat(n.startBeat + n.duration));
+        }
+    }
     for (int t = 0; t < tracks; ++t) {
         const audio_effect::PianoRollEditor& roll = piano_rolls_[t];
         char id[16];
@@ -357,8 +397,7 @@ bool Midi::render_timeline(Timeline& timeline, const char* title) {
             timeline_notes_.push_back(
                 {start, roll.SecondsAtBeat(n.startBeat + n.duration) - start, n.pitch});
         }
-        timeline.Notes(timeline_notes_, playhead);
-        timeline.Playhead(playhead);
+        timeline.Notes(timeline_notes_, 0.0, song_end);
         timeline.EndTrack();
     }
     return true;
@@ -380,7 +419,8 @@ void Midi::render_window() {
             transport();
             ImGui::SameLine();
             ImGui::Checkbox("Follow playhead", &follow_playhead_);
-            piano_rolls_[channel].SetPlayhead(static_cast<float>(playhead_beat()));
+            piano_rolls_[channel].SetPlayhead(piano_rolls_[channel].BeatAtSeconds(
+                static_cast<float>(::transport().position()) / kSampleRate));
             piano_rolls_[channel].SetFollowPlayhead(follow_playhead_);
             piano_rolls_[channel].Render("##piano_roll", ImVec2(0.0f, 520.0f));
         }
@@ -389,45 +429,32 @@ void Midi::render_window() {
 }
 
 void Midi::process(const float* const* /*inputs*/, int /*input_count*/,
-                       size_t sample_count, float /*sample_rate*/) {
-
+                   size_t sample_count, float /*sample_rate*/) {
     const uint32_t tracks = std::min<uint32_t>(kTracks, midi_song.GetTrackCount());
-
-    for (int t = 0; t < kTracks; t++)
-    {
-        if (output_buffer(t))
+    for (int t = 0; t < kTracks; t++) {
+        if (output_buffer(t)) {
             std::fill(output_buffer(t), output_buffer(t) + sample_count, 0.0f);
-    }                        
-    if (!playing || finished_) {
+        }
+    }
+    if (!::transport().block_playing()) {
         return;
     }
-
-    size_t size = sample_count/2;
-    uint32_t offset = 0;
-    while(size>0)
-    {
-        const uint32_t tick = midi_song.m_midi_state.m_time;
-        size_t n_samples = midi_song.RenderMidi(kSampleRate, size);
-        if (n_samples==NO_EVENTS) {
-            finished_ = true;
-            return;
-        }
-        if (midi_song.m_midi_state.m_time != tick) {
-            interval_start_tick_ = tick;
-            interval_samples_ = 0;
-        }
-        interval_samples_ += n_samples;
-        played_samples_ += n_samples;
-
-        for (uint32_t t = 0; t < tracks; t++)
-        {
-            float *pOut = output_buffer(t);
-            if (midi_song.GetTrack(t)!=NULL && pOut)
-            {
-                instruments_[t]->render_samples(n_samples, pOut + (2*offset));
+    // In step with the transport unless it moved (or this module missed a block): then seek.
+    const uint64_t target = static_cast<uint64_t>(::transport().block_frame());
+    if (target != played_samples_ && !(finished_ && target > played_samples_)) {
+        seek(target);
+    }
+    size_t offset = 0;
+    size_t size = sample_count / 2;
+    while (size > 0 && !finished_) {
+        const size_t n = step(size);
+        for (uint32_t t = 0; t < tracks; t++) {
+            float* out = output_buffer(t);
+            if (midi_song.GetTrack(t) != NULL && out) {
+                instruments_[t]->render_samples(n, out + 2 * offset);
             }
-        }                    
-        size -= n_samples;                
-        offset += n_samples;
+        }
+        size -= n;
+        offset += n;
     }
 }

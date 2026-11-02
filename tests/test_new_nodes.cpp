@@ -10,6 +10,7 @@
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
+#include "dsp/transport.hpp"
 #include "dsp/clip_timeline.hpp"
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
@@ -110,33 +111,54 @@ TEST(wav_player_plays_its_file_and_silence_when_missing) {
     CHECK_NEAR(energy_of_one_second(), 0.0f, 1e-9f);
 }
 
-TEST(paused_generator_is_silent_and_resumes_where_it_stopped) {
-    WavPlayer paused;
-    WavPlayer reference;
-    CHECK(paused.load("{}"));
-    CHECK(reference.load("{}"));
-    std::vector<float> a(48000, 0.0f);
-    std::vector<float> b(48000, 0.0f);
-    paused.set_output_buffer(0, a.data());
-    reference.set_output_buffer(0, b.data());
-    paused.process(nullptr, 0, a.size(), 48000.0f);
-    reference.process(nullptr, 0, b.size(), 48000.0f);
+// Back at the start, playing, as a fresh transport is.
+static void reset_transport() {
+    transport().seek(0);
+    transport().play();
+    transport().begin_block();
+}
 
-    paused.playing = false;
-    paused.process(nullptr, 0, a.size(), 48000.0f);
-    for (float s : a) {
+// One block of module at the shared transport's position, as GraphProcessor runs it.
+static void run_block(Module& module, size_t samples) {
+    transport().begin_block();
+    module.process(nullptr, 0, samples, 48000.0f);
+    transport().end_block(static_cast<int64_t>(samples / 2));
+}
+
+TEST(paused_transport_is_silent_and_resumes_where_it_stopped) {
+    reset_transport();
+    WavPlayer player;
+    CHECK(player.load("{}"));
+    std::string error;
+    auto clip = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
+    CHECK(clip != nullptr);
+    std::vector<float> out(48000, 0.0f);
+    player.set_output_buffer(0, out.data());
+    run_block(player, out.size());
+    CHECK(std::equal(out.begin(), out.end(), clip->interleaved_stereo.begin()));
+
+    transport().pause();
+    run_block(player, out.size());
+    for (float s : out) {
         CHECK_EQ(s, 0.0f);
     }
+    CHECK_EQ(transport().position(), static_cast<int64_t>(24000));
 
-    paused.playing = true;
-    paused.process(nullptr, 0, a.size(), 48000.0f);
-    reference.process(nullptr, 0, b.size(), 48000.0f);
-    CHECK(a == b);
+    transport().play();
+    run_block(player, out.size());
+    CHECK(std::equal(out.begin(), out.end(), clip->interleaved_stereo.begin() + 48000));
     float energy = 0.0f;
-    for (float s : b) {
+    for (float s : out) {
         energy += s * s;
     }
     CHECK(energy > 1.0e-3f);
+
+    // Past the end it loops: a seek lands that far into the next pass.
+    const int64_t frames = static_cast<int64_t>(clip->interleaved_stereo.size() / 2);
+    transport().seek(frames + 100);
+    run_block(player, out.size());
+    CHECK(std::equal(out.begin(), out.end(), clip->interleaved_stereo.begin() + 200));
+    reset_transport();
 }
 
 TEST(waveform_peaks_match_a_direct_scan) {
@@ -167,14 +189,14 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     std::string error;
     auto clip = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
     CHECK(clip != nullptr);
-    timeline.playing = true;
+    reset_transport();
     // Only pins 2 and 3 are linked: track 2 is empty, track 3 plays on its own pin.
     constexpr size_t kBlock = 4096;
     std::vector<float> track2(kBlock, 1.0f);
     std::vector<float> track3(kBlock, 1.0f);
     timeline.set_output_buffer(1, track2.data());
     timeline.set_output_buffer(2, track3.data());
-    timeline.process(nullptr, 0, kBlock, 48000.0f);
+    run_block(timeline, kBlock);
     for (size_t i = 0; i < kBlock; ++i) {
         CHECK_EQ(track2[i], 0.0f);
     }
@@ -184,6 +206,13 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     for (size_t i = 2000; i < kBlock; ++i) {
         CHECK_EQ(track3[i], clip->interleaved_stereo[i - 2000]);
     }
+
+    transport().seek(1500);
+    run_block(timeline, kBlock);
+    for (size_t i = 0; i < kBlock; ++i) {
+        CHECK_EQ(track3[i], clip->interleaved_stereo[i + 1000]);
+    }
+    reset_transport();
 }
 
 TEST(midi_playhead_follows_rendered_samples) {
@@ -221,38 +250,53 @@ TEST(midi_playhead_follows_rendered_samples) {
     CHECK_NEAR(midi.piano_roll(0).SecondsAtBeat(2.0f), 2 * 1041 * 480 / 1.0e6f, 1e-5f);
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
 
+    reset_transport();
     std::vector<float> out(2 * 12000, 0.0f); // a quarter second: half a beat
+    const auto energy_of_out = [&] {
+        float energy = 0.0f;
+        for (float s : out) {
+            energy += s * s;
+        }
+        return energy;
+    };
     midi.set_output_buffer(0, out.data());
-    midi.process(nullptr, 0, out.size(), 48000.0f);
+    run_block(midi, out.size());
     CHECK_NEAR(midi.playhead_beat(), 0.5, 0.01);
     CHECK_NEAR(midi.playhead_seconds(), 0.25, 1e-9);
-    float energy = 0.0f;
-    for (float s : out) {
-        energy += s * s;
-    }
-    CHECK(energy > 1.0e-3f);
-    midi.process(nullptr, 0, out.size(), 48000.0f);
-    midi.process(nullptr, 0, out.size(), 48000.0f);
+    CHECK(energy_of_out() > 1.0e-3f);
+    run_block(midi, out.size());
+    run_block(midi, out.size());
     CHECK_NEAR(midi.playhead_beat(), 1.5, 0.01);
 
-    midi.playing = false;
-    midi.process(nullptr, 0, out.size(), 48000.0f);
+    transport().pause();
+    run_block(midi, out.size());
     CHECK_NEAR(midi.playhead_beat(), 1.5, 0.01);
-    for (float s : out) {
-        CHECK_EQ(s, 0.0f);
-    }
+    CHECK_EQ(energy_of_out(), 0.0f);
 
-    midi.playing = true;
+    transport().play();
     for (int i = 0; i < 4; ++i) {
-        midi.process(nullptr, 0, out.size(), 48000.0f);
+        run_block(midi, out.size());
     }
     CHECK(midi.finished());
     CHECK_NEAR(midi.playhead_beat(), 2.0, 1e-9);
+
+    // Back from the end: it plays again from where the transport went.
+    transport().seek(0);
+    run_block(midi, out.size());
+    CHECK(!midi.finished());
+    CHECK_NEAR(midi.playhead_beat(), 0.5, 0.01);
+    CHECK(energy_of_out() > 1.0e-3f);
+    // Forward, skipping the end of the first note: the second plays from 1.25 beats.
+    transport().seek(18000);
+    run_block(midi, out.size());
+    CHECK_NEAR(midi.playhead_beat(), 1.25, 0.01);
+    CHECK(energy_of_out() > 1.0e-3f);
 
     midi.rewind();
     CHECK(!midi.finished());
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
     CHECK_NEAR(midi.playhead_seconds(), 0.0, 1e-9);
+    reset_transport();
     std::remove(path);
 }
 

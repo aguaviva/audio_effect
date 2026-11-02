@@ -13,13 +13,12 @@
 #include <string>
 #include <vector>
 
-// Six tracks of WAV clips placed in time, one output pin each. Plays from the cursor. The clips
-// are placed in the app's timeline.
+// Six tracks of WAV clips placed in time, one output pin each, played by the shared transport.
+// The clips are placed in the app's timeline.
 class ClipTimeline : public Module {
 public:
     static constexpr int kTracks = 6;
     static_assert(kTracks <= kMaxOutputs, "every track needs an output pin");
-    bool playing = false;
 
     std::string name() const override { return "timeline"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
@@ -43,15 +42,12 @@ private:
     };
     bool load_track(int track, const std::string& path);
     void publish();
-    void play_button();
     // start, moved so the clip's start or end meets the nearest edge of another clip
     // within a few pixels.
     int64_t snap(int track, int64_t start, double frames_per_pixel) const;
-    void set_cursor(int64_t frame);
 
     // UI thread.
     std::array<Track, kTracks> tracks_;
-    int64_t cursor_ = 0; // frame where playing starts
     int dragging_ = -1;     // track whose clip is being dragged
     int64_t grab_frame_ = 0; // clip frame under the mouse while dragging
 
@@ -65,6 +61,4 @@ private:
     std::array<Placed, kTracks> next_;
     bool changed_ = false;
     std::array<Placed, kTracks> placed_; // audio thread
-
-    std::atomic<int64_t> position_{0}; // frame being played; the UI sets it to seek
 };

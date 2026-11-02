@@ -17,13 +17,12 @@
 #include "midi.h"
 #include "inst-piano.h"
 
-// Plays a MIDI file, each of its first kTracks tracks on its own piano and output pin.
-// Each track has a piano roll window that shows the playhead.
+// Plays a MIDI file, each of its first kTracks tracks on its own piano and output pin, at the
+// shared transport's position. Each track has a piano roll window that shows the playhead.
 class Midi : public Module {
 public:
     static constexpr int kTracks = 10;
     static_assert(kTracks <= kMaxOutputs, "every track needs an output pin");
-    bool playing = true;
 
     // Where playback is, from the samples the sequencer has rendered.
     double playhead_beat() const;
@@ -48,6 +47,9 @@ public:
 
 private:
     void transport();
+    void seek(uint64_t target);
+    // Runs the sequencer for at most samples; returns how many it ran, 0 at the end.
+    size_t step(size_t samples);
     int loaded_tracks(); // MidiSong::GetTrackCount() is not const
     void roll_button(int track);
 
@@ -71,4 +73,5 @@ private:
     uint64_t interval_samples_ = 0;
     uint64_t played_samples_ = 0;
     bool finished_ = false;
+    uint32_t start_us_per_tick_ = 0; // the sequencer's tempo before the song sets one
 };

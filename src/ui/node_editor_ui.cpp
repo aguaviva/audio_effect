@@ -5,6 +5,7 @@
 #include "dsp/audio_input.hpp"
 #include "dsp/audio_output.hpp"
 #include "dsp/mixer.hpp"
+#include "dsp/transport.hpp"
 #include "graph/graph_io.hpp"
 #include "graph/node_registry.hpp"
 #include "graph/pins.hpp"
@@ -115,6 +116,7 @@ bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::st
     }
     std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", path.c_str());
     state.hidden_from_timeline.clear();
+    transport().seek(0);
     for (const auto& node : graph.nodes()) {
         std::string err;
         if (const auto* p = node.as<AudioInput>()) {
@@ -364,9 +366,21 @@ static void draw_timeline(AudioGraph& graph, NodeEditorUiState& state) {
         ImGui::End();
         return;
     }
-    ImGui::TextDisabled("Every generator has a track; show or hide them in View > Timeline Tracks. "
-                        "Wheel zooms, Shift+wheel scrolls.");
-    state.timeline.Begin("##tracks");
+    Transport& clock = transport();
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) &&
+        !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Space, false)) {
+        if (clock.playing()) {
+            clock.pause();
+        } else {
+            clock.play();
+        }
+    }
+    transport_controls();
+    ImGui::SameLine();
+    ImGui::TextDisabled("   Space plays and pauses; press the ruler or a track to move the cursor. "
+                        "Wheel zooms, Shift+wheel scrolls. View > Timeline Tracks shows or hides "
+                        "each source.");
+    state.timeline.Begin("##tracks", static_cast<double>(clock.position()) / kSampleRate);
     for (auto& node : graph.nodes()) {
         if (!is_source(*node.module) || state.hidden_from_timeline.count(node.id)) {
             continue;
@@ -385,6 +399,10 @@ static void draw_timeline(AudioGraph& graph, NodeEditorUiState& state) {
         ImGui::PopID();
     }
     state.timeline.End();
+    double seconds = 0.0;
+    if (state.timeline.Seeked(&seconds)) {
+        clock.seek(static_cast<int64_t>(seconds * kSampleRate));
+    }
     ImGui::End();
 }
 
