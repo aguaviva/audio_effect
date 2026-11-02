@@ -10,6 +10,6 @@
 [submodule "third_party/miniaudio"]
 	path = third_party/miniaudio
 	url = https://github.com/mackron/miniaudio.git
-[submodule "third_party/SimpleMidi"]
-	path = third_party/SimpleMidi
-	url = https://github.com/aguaviva/SimpleMidi.git
+[submodule "third_party/simplemidi"]
+	path = third_party/simplemidi
+	url = https://github.com/aguaviva/simplemidi.git
