@@ -4,6 +4,7 @@
 #include "dsp/denormals.hpp"
 #include "dsp/dry_wet_mix.hpp"
 #include "dsp/eq_three_band.hpp"
+#include "dsp/gen_midi.hpp"
 #include "dsp/guitar_pedals.hpp"
 #include "dsp/mixer.hpp"
 #include "dsp/noise_gate.hpp"
@@ -183,6 +184,67 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     for (size_t i = 2000; i < kBlock; ++i) {
         CHECK_EQ(track3[i], clip->interleaved_stereo[i - 2000]);
     }
+}
+
+TEST(midi_playhead_follows_rendered_samples) {
+    // One track at 120 bpm, 480 ticks a beat: C4 for beat 0, D4 for beat 1.
+    const unsigned char song[] = {
+        'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0,
+        'M', 'T', 'r', 'k', 0, 0, 0, 29,
+        0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20,
+        0x00, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0,
+        0x00, 0x90, 62, 100, 0x83, 0x60, 0x80, 62, 0,
+        0x00, 0xFF, 0x2F, 0x00};
+    const char* path = "tests/_tmp_song.mid";
+    FILE* f = std::fopen(path, "wb");
+    CHECK(f != nullptr);
+    std::fwrite(song, 1, sizeof(song), f);
+    std::fclose(f);
+
+    Midi midi;
+    CHECK(midi.set_path(path));
+    const auto& notes = midi.piano_roll(0).GetNotes();
+    CHECK_EQ(notes.size(), static_cast<size_t>(2));
+    CHECK_EQ(notes[0].pitch, 60);
+    CHECK_NEAR(notes[0].startBeat, 0.0f, 1e-6f);
+    CHECK_NEAR(notes[0].duration, 1.0f, 1e-6f);
+    CHECK_EQ(notes[1].pitch, 62);
+    CHECK_NEAR(notes[1].startBeat, 1.0f, 1e-6f);
+    CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
+
+    std::vector<float> out(2 * 12000, 0.0f); // a quarter second: half a beat
+    midi.set_output_buffer(0, out.data());
+    midi.process(nullptr, 0, out.size(), 48000.0f);
+    CHECK_NEAR(midi.playhead_beat(), 0.5, 0.01);
+    CHECK_NEAR(midi.playhead_seconds(), 0.25, 1e-9);
+    float energy = 0.0f;
+    for (float s : out) {
+        energy += s * s;
+    }
+    CHECK(energy > 1.0e-3f);
+    midi.process(nullptr, 0, out.size(), 48000.0f);
+    midi.process(nullptr, 0, out.size(), 48000.0f);
+    CHECK_NEAR(midi.playhead_beat(), 1.5, 0.01);
+
+    midi.playing = false;
+    midi.process(nullptr, 0, out.size(), 48000.0f);
+    CHECK_NEAR(midi.playhead_beat(), 1.5, 0.01);
+    for (float s : out) {
+        CHECK_EQ(s, 0.0f);
+    }
+
+    midi.playing = true;
+    for (int i = 0; i < 4; ++i) {
+        midi.process(nullptr, 0, out.size(), 48000.0f);
+    }
+    CHECK(midi.finished());
+    CHECK_NEAR(midi.playhead_beat(), 2.0, 1e-9);
+
+    midi.rewind();
+    CHECK(!midi.finished());
+    CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
+    CHECK_NEAR(midi.playhead_seconds(), 0.0, 1e-9);
+    std::remove(path);
 }
 
 TEST(mixer_dsp_averages_sources) {

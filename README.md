@@ -24,6 +24,7 @@ Generators (all but Audio Input) have a play/pause button; pausing keeps their p
 - **WAV Player** — plays its own WAV file (loop optional) with a seekable progress bar; a missing file plays silence
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
+- **Midi Generator** — plays a MIDI file, one piano and output pin per track (up to 10); each track's piano roll shows the notes and a playhead that follows playback (optionally scrolling with it). Pause keeps the place, Stop goes back to the start
 - **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node), one output pin per track; drag a waveform to move it in time (it snaps to the start or end of other clips), click the ruler to place the cursor, and Play starts from the cursor
 
 ### Effects

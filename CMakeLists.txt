@@ -36,6 +36,7 @@ set(AUDIO_EFFECT_SOURCES
   src/ui/node_editor_ui.cpp
   src/ui/file_picker.cpp
   src/ui/message_box.cpp
+  src/ui/piano_roll.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
   src/dsp/dynamic_low_pass_filter.cpp
@@ -163,9 +164,11 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/wav_generator.cpp
     src/ui/file_picker.cpp
     src/ui/message_box.cpp
+    src/ui/piano_roll.cpp
     src/dsp/audio_input.cpp
     src/dsp/audio_output.cpp
     src/dsp/chord_generator.cpp
+    src/dsp/gen_midi.cpp
     src/dsp/white_noise.cpp
     src/dsp/timeline.cpp
     src/dsp/dry_wet_mix.cpp
@@ -179,6 +182,9 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     third_party/imgui/imgui_tables.cpp
     third_party/imgui/imgui_widgets.cpp
     third_party/miniaudio/miniaudio.c
+    third_party/simplemidi/midi.cpp
+    third_party/simplemidi/inst-piano.cpp
+    third_party/simplemidi/misc.cpp
   )
   add_executable(graph_tests ${TEST_SOURCES})
   target_compile_definitions(graph_tests PRIVATE MA_NO_MP3 MA_NO_FLAC)
