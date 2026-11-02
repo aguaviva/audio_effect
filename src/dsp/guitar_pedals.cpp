@@ -7,8 +7,17 @@
 
 namespace guitar_pedals {
 
-void DrivePedal::process(float* samples, size_t sample_count, DriveModel model,
-                        float drive, float tone, float sample_rate) {
+void DrivePedal::process(const float* const* inputs, int input_count,
+                         size_t sample_count, float sample_rate) {
+    float* samples = output_buffer(0);
+    if (!samples) {
+        return;
+    }
+    copy_input(inputs, input_count, 0, samples, sample_count);
+    const DriveModel mdl = static_cast<DriveModel>(std::clamp(model, 0, 2));
+    // Pre-gain is 1 + amount so amount 0 is a clean-ish unity stage. A raw gain of 0
+    // made the tube-screamer normalization divide 0 by 0 and silenced RAT / Big Muff.
+    const float drive = 1.0f + std::max(0.0f, amount);
     float cutoff = 1800.0f + tone * 10000.0f;
     float alpha = 1.0f - std::exp(-2.0f * static_cast<float>(M_PI) * cutoff / sample_rate);
     constexpr float bias = 0.06f;
@@ -18,10 +27,10 @@ void DrivePedal::process(float* samples, size_t sample_count, DriveModel model,
     float fuzz_normalization = std::tanh(1.8f);
 
     for (size_t i = 0; i < sample_count; i += 2) {
-        float output_l = shape(samples[i], model, drive, bias, bias_offset,
-                               positive_scale, negative_scale, fuzz_normalization);
-        float output_r = shape(samples[i + 1], model, drive, bias, bias_offset,
-                               positive_scale, negative_scale, fuzz_normalization);
+        float output_l = shape(samples[i], mdl, drive, bias, bias_offset, positive_scale,
+                               negative_scale, fuzz_normalization);
+        float output_r = shape(samples[i + 1], mdl, drive, bias, bias_offset, positive_scale,
+                               negative_scale, fuzz_normalization);
         tone_state_l_ += alpha * (output_l - tone_state_l_);
         tone_state_r_ += alpha * (output_r - tone_state_r_);
         samples[i] = tone_state_l_;
@@ -29,14 +38,8 @@ void DrivePedal::process(float* samples, size_t sample_count, DriveModel model,
     }
 }
 
-void DrivePedal::reset() {
-    tone_state_l_ = 0.0f;
-    tone_state_r_ = 0.0f;
-}
-
-float DrivePedal::shape(float input, DriveModel model, float drive, float bias,
-                        float bias_offset, float positive_scale, float negative_scale,
-                        float fuzz_normalization) {
+float DrivePedal::shape(float input, DriveModel model, float drive, float bias, float bias_offset,
+                        float positive_scale, float negative_scale, float fuzz_normalization) {
     switch (model) {
     case DriveModel::tube_screamer: {
         float shaped = std::tanh(drive * input + bias) - bias_offset;
@@ -53,48 +56,41 @@ float DrivePedal::shape(float input, DriveModel model, float drive, float bias,
     return input;
 }
 
-void DrivePedal::render(std::atomic<bool>& enabled, std::atomic<int>& model,
-                        std::atomic<float>& drive, std::atomic<float>& tone,
-                        int& selected_preset, bool& controls_changed) {
-    bool active = enabled.load(std::memory_order_relaxed);
-    if (ImGui::Checkbox("Drive Pedal##enable", &active)) {
-        enabled.store(active, std::memory_order_relaxed);
-        controls_changed = true;
-    }
-    ImGui::Indent();
-    ImGui::BeginDisabled(!active);
+bool DrivePedal::render() {
+    bool changed = false;
 
-    static const char* model_names[] = {
-        "Custom", "Tube Screamer-style Overdrive", "RAT-style Distortion", "Big Muff Pi-style Fuzz"
-    };
-    int selected_model = selected_preset;
-    if (ImGui::Combo("Drive Pedal Model", &selected_model, model_names, IM_ARRAYSIZE(model_names))) {
-        selected_preset = selected_model;
-        if (selected_model > 0) {
-            model.store(selected_model - 1, std::memory_order_relaxed);
-            enabled.store(true, std::memory_order_relaxed);
-        } else {
-            enabled.store(false, std::memory_order_relaxed);
-        }
-        controls_changed = true;
+    static const char* model_names[] = {"Tube Screamer", "RAT", "Big Muff"};
+    ImGui::TextUnformatted("Model");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("##drive_model", &model, model_names, IM_ARRAYSIZE(model_names))) {
+        model = std::clamp(model, 0, 2);
+        changed = true;
     }
 
-    float drive_value = drive.load(std::memory_order_relaxed);
-    if (ImGui::SliderFloat("Pedal Drive", &drive_value, 1.0f, 8.0f, "%.2f")) {
-        drive.store(drive_value, std::memory_order_relaxed);
-        selected_preset = 0;
-        controls_changed = true;
-    }
-    float tone_value = tone.load(std::memory_order_relaxed);
-    if (ImGui::SliderFloat("Pedal Tone", &tone_value, 0.0f, 1.0f, "%.2f")) {
-        tone.store(tone_value, std::memory_order_relaxed);
-        selected_preset = 0;
-        controls_changed = true;
-    }
+    ImGui::TextUnformatted("Drive");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##drive_amt", &amount, 0.0f, 10.0f, "%.2f");
+    ImGui::TextUnformatted("Tone");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##drive_tone", &tone, 0.0f, 1.0f, "%.2f");
 
-    ImGui::EndDisabled();
-    ImGui::Unindent();
-    ImGui::Separator();
+    return changed;
+}
+
+std::string DrivePedal::save() const {
+    std::string out = "{";
+    module_json::write_int(out, "model", model);
+    module_json::write_float(out, "amount", amount);
+    module_json::write_float(out, "tone", tone);
+    out += '}';
+    return out;
+}
+
+bool DrivePedal::load(const std::string& json) {
+    module_json::read(json, "model", model);
+    module_json::read(json, "amount", amount);
+    module_json::read(json, "tone", tone);
+    return true;
 }
 
 } // namespace guitar_pedals

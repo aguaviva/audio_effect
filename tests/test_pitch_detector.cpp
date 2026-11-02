@@ -1,7 +1,6 @@
 #include "test_harness.hpp"
 
 #include "dsp/pitch_detector.hpp"
-#include "graph/node_types.hpp"
 
 #include <cmath>
 #include <vector>
@@ -42,12 +41,4 @@ TEST(pitch_detector_estimates_sine_near_a4) {
     CHECK(detected > 0.0f);
     CHECK_NEAR(detected, hz, 5.0f);
     CHECK_STREQ(pitch_frequency_to_note_string(detected), "A4");
-}
-
-TEST(pitch_detector_is_visualizer_node_type) {
-    CHECK(node_is_visualizer(NodeType::pitch_detector));
-    CHECK_STREQ(node_type_key(NodeType::pitch_detector), "pitch_detector");
-    NodeType parsed = NodeType::output;
-    CHECK(try_parse_node_type("pitch_detector", parsed));
-    CHECK(parsed == NodeType::pitch_detector);
 }

@@ -1,17 +1,17 @@
 #include "audio_devices.hpp"
 
-#include "miniaudio.h"
+#include "pipeline.hpp"
 
 #include <cstring>
 
 namespace {
 
+// Uses the pipeline's context: on the web, tearing down a context removes miniaudio's
+// click-to-unlock audio listener.
 std::vector<AudioDevice> list_devices(ma_device_type type) {
     std::vector<AudioDevice> devices;
     devices.push_back({"default", "default"});
-
-    ma_context context;
-    if (ma_context_init(nullptr, 0, nullptr, &context) != MA_SUCCESS) {
+    if (!g_pipeline.context_ready) {
         return devices;
     }
 
@@ -19,9 +19,8 @@ std::vector<AudioDevice> list_devices(ma_device_type type) {
     ma_uint32 playback_count = 0;
     ma_device_info* capture_infos = nullptr;
     ma_uint32 capture_count = 0;
-    if (ma_context_get_devices(&context, &playback_infos, &playback_count, &capture_infos,
-                              &capture_count) != MA_SUCCESS) {
-        ma_context_uninit(&context);
+    if (ma_context_get_devices(&g_pipeline.context, &playback_infos, &playback_count,
+                               &capture_infos, &capture_count) != MA_SUCCESS) {
         return devices;
     }
 
@@ -40,8 +39,6 @@ std::vector<AudioDevice> list_devices(ma_device_type type) {
         }
         devices.push_back({name, name});
     }
-
-    ma_context_uninit(&context);
     return devices;
 }
 

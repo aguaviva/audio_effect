@@ -1,26 +1,24 @@
 #pragma once
 
-#include <atomic>
+#include "module.hpp"
+
 #include <cstddef>
+#include <string>
 #include <vector>
 
-class EchoEffect {
+class EchoEffect : public Module {
 public:
-    // max_delay_samples: delay-line capacity in samples per channel; allocate at least
-    // sample_rate * the longest delay time you intend to use.
-    explicit EchoEffect(size_t max_delay_samples);
+    float delay_ms = 320.0f;
+    float feedback = 0.35f;
+    float mix = 0.25f;
+    int selected_preset = 0; // 0 = Custom
 
-    // samples: normalized interleaved stereo values, modified in place.
-    // sample_count: number of float values, not stereo frames.
-    // delay_ms: time before the repeat; feedback controls how many repeats follow.
-    // mix: 0 is dry/original only, 1 is delayed signal only.
-    // sample_rate: audio samples per second.
-    void process(float* samples, size_t sample_count, float delay_ms,
-                 float feedback, float mix, float sample_rate);
-    void reset();
-    static void render(std::atomic<bool>& enabled, std::atomic<float>& delay_ms,
-                       std::atomic<float>& feedback, std::atomic<float>& mix,
-                       int& selected_preset, bool& controls_changed);
+    std::string name() const override { return "echo"; }
+    std::string save() const override;
+    bool load(const std::string& json) override;
+    bool render() override;
+    void process(const float* const* inputs, int input_count, size_t sample_count,
+                 float sample_rate) override;
 
 private:
     std::vector<float> delay_left_;

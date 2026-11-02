@@ -4,9 +4,15 @@
 
 #include "imgui.h"
 
-void DynamicLowPassFilter::process(float* samples, size_t num_samples, float cutoff, float sample_rate) {
+void DynamicLowPassFilter::process(const float* const* inputs, int input_count,
+                                   size_t num_samples, float sample_rate) {
+    float* samples = output_buffer(0);
+    if (!samples) {
+        return;
+    }
+    copy_input(inputs, input_count, 0, samples, num_samples);
     float dt = 1.0f / sample_rate;
-    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff);
+    float rc = 1.0f / (2.0f * static_cast<float>(M_PI) * cutoff_hz);
     float alpha = dt / (rc + dt);
 
     for (size_t i = 0; i < num_samples; i += 2) {
@@ -17,41 +23,46 @@ void DynamicLowPassFilter::process(float* samples, size_t num_samples, float cut
     }
 }
 
-void DynamicLowPassFilter::reset() {
-    prev_l_ = 0.0f;
-    prev_r_ = 0.0f;
-}
-
-void DynamicLowPassFilter::render(std::atomic<bool>& enabled,
-                                  std::atomic<float>& cutoff_hz,
-                                  int& selected_preset, bool& controls_changed) {
-    bool active = enabled.load(std::memory_order_relaxed);
-    if (ImGui::Checkbox("Low-Pass Filter##enable", &active)) {
-        enabled.store(active, std::memory_order_relaxed);
-        controls_changed = true;
-    }
-    ImGui::Indent();
-    ImGui::BeginDisabled(!active);
+bool DynamicLowPassFilter::render() {
+    bool changed = false;
 
     static const char* preset_names[] = {
         "Custom", "Open (12 kHz)", "Bright (10 kHz)", "Guitar Bright (8 kHz)",
         "Vintage (6.5 kHz)", "RAT Tone (5.5 kHz)", "Fuzz Tone (5 kHz)"
     };
-    if (ImGui::Combo("Low-Pass Preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names)) && selected_preset != 0) {
-        static const float cutoffs[] = {0.0f, 12000.0f, 10000.0f, 8000.0f, 6500.0f, 5500.0f, 5000.0f};
-        cutoff_hz.store(cutoffs[selected_preset], std::memory_order_relaxed);
-        enabled.store(true, std::memory_order_relaxed);
-        controls_changed = true;
+    static const float preset_cutoffs[] = {
+        0.0f, 12000.0f, 10000.0f, 8000.0f, 6500.0f, 5500.0f, 5000.0f
+    };
+
+    ImGui::TextUnformatted("Preset");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::Combo("##lpf_preset", &selected_preset, preset_names, IM_ARRAYSIZE(preset_names))) {
+        if (selected_preset > 0 && selected_preset < IM_ARRAYSIZE(preset_cutoffs)) {
+            cutoff_hz = preset_cutoffs[selected_preset];
+        }
+        changed = true;
     }
 
-    float cutoff = cutoff_hz.load(std::memory_order_relaxed);
-    if (ImGui::SliderFloat("Cutoff (Hz)##lowpass", &cutoff, 100.0f, 18000.0f, "%.0f Hz")) {
-        cutoff_hz.store(cutoff, std::memory_order_relaxed);
+    ImGui::TextUnformatted("Cutoff Hz");
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::SliderFloat("##lpf_cutoff", &cutoff_hz, 100.0f, 18000.0f, "%.0f")) {
         selected_preset = 0;
-        controls_changed = true;
+        changed = true;
     }
 
-    ImGui::EndDisabled();
-    ImGui::Unindent();
-    ImGui::Separator();
+    return changed;
+}
+
+std::string DynamicLowPassFilter::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "cutoff_hz", cutoff_hz);
+    module_json::write_int(out, "selected_preset", selected_preset);
+    out += '}';
+    return out;
+}
+
+bool DynamicLowPassFilter::load(const std::string& json) {
+    module_json::read(json, "cutoff_hz", cutoff_hz);
+    module_json::read(json, "selected_preset", selected_preset);
+    return true;
 }

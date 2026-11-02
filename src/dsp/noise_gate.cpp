@@ -3,13 +3,15 @@
 #include <algorithm>
 #include <cmath>
 
-void NoiseGate::reset() {
-    envelope_ = 0.0f;
-    gain_ = 0.0f;
-}
+#include "imgui.h"
 
-void NoiseGate::process(float* interleaved, size_t sample_count, float threshold_db,
-                        float attack_ms, float release_ms, float sample_rate) {
+void NoiseGate::process(const float* const* inputs, int input_count,
+                        size_t sample_count, float sample_rate) {
+    float* interleaved = output_buffer(0);
+    if (!interleaved) {
+        return;
+    }
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
@@ -36,4 +38,34 @@ void NoiseGate::process(float* interleaved, size_t sample_count, float threshold
         interleaved[i] *= gain_;
         interleaved[i + 1] *= gain_;
     }
+}
+
+bool NoiseGate::render() {
+    bool changed = false;
+    ImGui::TextUnformatted("Thresh dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##gate_th", &threshold_db, -80.0f, -10.0f, "%.1f");
+    ImGui::TextUnformatted("Attack ms");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##gate_atk", &attack_ms, 1.0f, 50.0f, "%.1f");
+    ImGui::TextUnformatted("Release ms");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##gate_rel", &release_ms, 10.0f, 400.0f, "%.0f");
+    return changed;
+}
+
+std::string NoiseGate::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "threshold_db", threshold_db);
+    module_json::write_float(out, "attack_ms", attack_ms);
+    module_json::write_float(out, "release_ms", release_ms);
+    out += '}';
+    return out;
+}
+
+bool NoiseGate::load(const std::string& json) {
+    module_json::read(json, "threshold_db", threshold_db);
+    module_json::read(json, "attack_ms", attack_ms);
+    module_json::read(json, "release_ms", release_ms);
+    return true;
 }

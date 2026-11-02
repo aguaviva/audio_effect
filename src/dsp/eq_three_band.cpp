@@ -3,17 +3,10 @@
 #include <algorithm>
 #include <cmath>
 
+#include "imgui.h"
+
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
-}
-
-void EqThreeBand::reset() {
-    low_l_.clear();
-    mid_l_.clear();
-    high_l_.clear();
-    low_r_.clear();
-    mid_r_.clear();
-    high_r_.clear();
 }
 
 void EqThreeBand::low_shelf(Biquad& s, float freq, float gain_db, float sample_rate) {
@@ -88,14 +81,19 @@ void EqThreeBand::design(float sample_rate, float low_gain_db, float mid_gain_db
     high_r_.a1 = high_l_.a1; high_r_.a2 = high_l_.a2;
 }
 
-void EqThreeBand::process(float* interleaved, size_t sample_count, float low_gain_db,
-                          float mid_gain_db, float high_gain_db, float sample_rate) {
+void EqThreeBand::process(const float* const* inputs, int input_count,
+                          size_t sample_count, float sample_rate) {
+    float* interleaved = output_buffer(0);
+    if (!interleaved) {
+        return;
+    }
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
-    low_gain_db = std::clamp(low_gain_db, -18.0f, 18.0f);
-    mid_gain_db = std::clamp(mid_gain_db, -18.0f, 18.0f);
-    high_gain_db = std::clamp(high_gain_db, -18.0f, 18.0f);
+    float low_gain_db = std::clamp(low_db, -18.0f, 18.0f);
+    float mid_gain_db = std::clamp(mid_db, -18.0f, 18.0f);
+    float high_gain_db = std::clamp(high_db, -18.0f, 18.0f);
     if (sample_rate != last_sr_ || low_gain_db != last_low_ || mid_gain_db != last_mid_ ||
         high_gain_db != last_high_) {
         design(sample_rate, low_gain_db, mid_gain_db, high_gain_db);
@@ -112,4 +110,34 @@ void EqThreeBand::process(float* interleaved, size_t sample_count, float low_gai
         interleaved[i] = l;
         interleaved[i + 1] = r;
     }
+}
+
+bool EqThreeBand::render() {
+    bool changed = false;
+    ImGui::TextUnformatted("Low dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_low", &low_db, -18.0f, 18.0f, "%.1f");
+    ImGui::TextUnformatted("Mid dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_mid", &mid_db, -18.0f, 18.0f, "%.1f");
+    ImGui::TextUnformatted("High dB");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##eq_high", &high_db, -18.0f, 18.0f, "%.1f");
+    return changed;
+}
+
+std::string EqThreeBand::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "low_db", low_db);
+    module_json::write_float(out, "mid_db", mid_db);
+    module_json::write_float(out, "high_db", high_db);
+    out += '}';
+    return out;
+}
+
+bool EqThreeBand::load(const std::string& json) {
+    module_json::read(json, "low_db", low_db);
+    module_json::read(json, "mid_db", mid_db);
+    module_json::read(json, "high_db", high_db);
+    return true;
 }

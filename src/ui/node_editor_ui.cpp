@@ -2,10 +2,15 @@
 
 #include "audio/audio_devices.hpp"
 #include "audio/pipeline.hpp"
-#include "dsp/chord_catalog.hpp"
+#include "dsp/audio_input.hpp"
+#include "dsp/audio_output.hpp"
+#include "dsp/mixer.hpp"
 #include "graph/graph_io.hpp"
-#include "graph/visualizer_bus.hpp"
+#include "graph/node_registry.hpp"
+#include "graph/pins.hpp"
 #include "paths.hpp"
+#include "ui/file_picker.hpp"
+#include "ui/message_box.hpp"
 
 #include "imgui.h"
 #include "imfilebrowser.h"
@@ -16,6 +21,7 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,15 +31,6 @@ namespace {
 // ImNodes sizes a node to its widest row. Every body row (params + "out") must
 // share this width so the right-aligned "out" sits against the output pin.
 constexpr float kNodeWidth = 140.0f;
-
-// Right-align "out" on a fixed-width row (Dummy + SameLine). Use ImGui text so it
-// stays on the imnodes node foreground channel (raw DrawList can land under chrome).
-void draw_output_label(float node_width) {
-    const float label_w = ImGui::CalcTextSize("out").x;
-    ImGui::Dummy(ImVec2(std::max(0.0f, node_width - label_w), ImGui::GetTextLineHeight()));
-    ImGui::SameLine(0.0f, 0.0f);
-    ImGui::TextUnformatted("out");
-}
 
 ImGui::FileBrowser& graph_open_browser() {
     static ImGui::FileBrowser browser(ImGuiFileBrowserFlags_CloseOnEsc |
@@ -63,93 +60,25 @@ ImGui::FileBrowser& graph_save_browser() {
     return browser;
 }
 
-ImGui::FileBrowser& wav_open_browser() {
-    static ImGui::FileBrowser browser(ImGuiFileBrowserFlags_CloseOnEsc |
-                                      ImGuiFileBrowserFlags_ConfirmOnEnter |
-                                      ImGuiFileBrowserFlags_EditPathString);
-    static bool configured = false;
-    if (!configured) {
-        browser.SetTitle("Load WAV");
-        browser.SetTypeFilters({".wav", ".WAV"});
-        configured = true;
-    }
-    return browser;
-}
-
-// Target node id for the WAV file picker (-1 = none / legacy toolbar unused).
-int& wav_picker_node_id() {
-    static int id = -1;
-    return id;
-}
-
 void copy_path_to_buf(char* buf, size_t n, const std::filesystem::path& path) {
     std::snprintf(buf, n, "%s", path.string().c_str());
 }
 
-void open_browser_near_path(ImGui::FileBrowser& browser, const char* path_hint,
-                            bool enter_filename = false) {
-    namespace fs = std::filesystem;
-    std::error_code ec;
-    const fs::path hint = path_hint ? fs::path(path_hint) : fs::path{};
-    if (!hint.empty()) {
-        if (fs::is_directory(hint, ec)) {
-            browser.SetDirectory(hint);
-        } else if (hint.has_parent_path() && fs::is_directory(hint.parent_path(), ec)) {
-            browser.SetDirectory(hint.parent_path());
-        }
-        if (enter_filename && hint.has_filename() && !fs::is_directory(hint, ec)) {
-            browser.SetInputName(hint.filename().string());
-        }
-    }
-    browser.Open();
+// A short bar beside an output pin: its peak on a -60..0 dB scale, red once it clips.
+void draw_level_meter(float peak) {
+    const float height = ImGui::GetTextLineHeight();
+    const ImVec2 size(24.0f, 6.0f);
+    ImGui::Dummy(ImVec2(size.x, height));
+    const ImVec2 item = ImGui::GetItemRectMin();
+    const ImVec2 min(item.x, item.y + 0.5f * (height - size.y));
+    const float fill = std::clamp(1.0f + std::log10(std::max(peak, 1e-6f)) / 3.0f, 0.0f, 1.0f);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    draw->AddRectFilled(min, ImVec2(min.x + size.x, min.y + size.y), IM_COL32(25, 25, 25, 255));
+    draw->AddRectFilled(min, ImVec2(min.x + size.x * fill, min.y + size.y),
+                        peak >= 1.0f ? IM_COL32(220, 60, 50, 255) : IM_COL32(80, 200, 90, 255));
 }
 
 } // namespace
-
-static float linear_to_db(float linear) {
-    const float clamped = std::max(linear, 1.0e-6f);
-    return 20.0f * std::log10(clamped);
-}
-
-static void draw_vu_widget(int node_id) {
-    float peak = 0.0f;
-    float rms = 0.0f;
-    g_visualizer_bus.read_vu(node_id, peak, rms);
-    const float peak_db = linear_to_db(peak);
-    const float rms_db = linear_to_db(rms);
-    ImGui::Text("Peak %.1f dB", peak_db);
-    ImGui::ProgressBar(std::clamp(peak, 0.0f, 1.0f), ImVec2(kNodeWidth, 0.0f), "");
-    ImGui::Text("RMS  %.1f dB", rms_db);
-    ImGui::ProgressBar(std::clamp(rms * 1.5f, 0.0f, 1.0f), ImVec2(kNodeWidth, 0.0f), "");
-}
-
-static void draw_scope_widget(int node_id) {
-    float samples[kVisualizerScopePoints]{};
-    g_visualizer_bus.read_scope(node_id, samples, kVisualizerScopePoints);
-    ImGui::PlotLines("##scope", samples, kVisualizerScopePoints, 0, nullptr, -1.0f, 1.0f,
-                     ImVec2(kNodeWidth, 48.0f));
-}
-
-static void draw_spectrum_widget(int node_id) {
-    float bins[kVisualizerSpectrumBins]{};
-    g_visualizer_bus.read_spectrum(node_id, bins, kVisualizerSpectrumBins);
-    ImGui::PlotHistogram("##spectrum", bins, kVisualizerSpectrumBins, 0, nullptr, 0.0f, 1.0f,
-                         ImVec2(kNodeWidth, 48.0f));
-}
-
-static void draw_pitch_widget(int node_id) {
-    float frequency_hz = 0.0f;
-    g_visualizer_bus.read_pitch(node_id, frequency_hz);
-    char note[16];
-    pitch_frequency_to_note(frequency_hz, note, sizeof(note));
-    if (frequency_hz > 0.0f) {
-        ImGui::Text("Freq  %.1f Hz", frequency_hz);
-        ImGui::Text("Note  %s", note);
-    } else {
-        ImGui::TextUnformatted("Freq  --");
-        ImGui::TextUnformatted("Note  --");
-    }
-}
 
 void node_editor_init() {
     ImNodes::CreateContext();
@@ -167,6 +96,31 @@ void node_editor_shutdown() {
 
 void node_editor_publish(AudioGraph& graph) {
     graph.publish(graph.compile());
+}
+
+bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::string& path) {
+    std::string error;
+    if (!graph_io::load_from_file(graph, path, error)) {
+        show_error("Could not load " + path + ":\n" + error);
+        return false;
+    }
+    std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", path.c_str());
+    for (const auto& node : graph.nodes()) {
+        std::string err;
+        if (const auto* p = node.as<AudioInput>()) {
+            g_pipeline.set_capture_device(p->device.c_str(), err);
+        }
+        if (const auto* p = node.as<AudioOutput>()) {
+            g_pipeline.set_playback_device(p->device.c_str(), err);
+        }
+    }
+    state.positions_need_apply = true;
+    node_editor_publish(graph);
+    state.status_message = "Loaded " + path;
+    if (!g_pipeline.last_device_error.empty()) {
+        state.status_message += " | " + g_pipeline.last_device_error;
+    }
+    return true;
 }
 
 static bool draw_device_combo(const char* label, std::string& device,
@@ -196,274 +150,108 @@ static bool draw_device_combo(const char* label, std::string& device,
     return false;
 }
 
-// Label above control so ImGui's trailing label can't widen the node past kNodeWidth.
-static void param_slider(const char* label, float* value, float v_min, float v_max, const char* fmt) {
-    ImGui::TextUnformatted(label);
-    ImGui::SetNextItemWidth(kNodeWidth);
-    ImGui::PushID(label);
-    ImGui::SliderFloat("##v", value, v_min, v_max, fmt);
-    ImGui::PopID();
-}
-
-static void param_combo(const char* label, int* current, const char* const items[], int items_count) {
-    ImGui::TextUnformatted(label);
-    ImGui::SetNextItemWidth(kNodeWidth);
-    ImGui::PushID(label);
-    ImGui::Combo("##v", current, items, items_count);
-    ImGui::PopID();
+static void draw_device_error(const char* stream_prefix) {
+    const std::string& error = g_pipeline.last_device_error;
+    if (error.rfind(stream_prefix, 0) != 0) {
+        return;
+    }
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
+    ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.4f, 1.0f), "%s", error.c_str());
+    ImGui::PopTextWrapPos();
 }
 
 static void draw_node_params(GraphNode& node, AudioGraph& graph) {
-    NodeState& st = node.state();
-    switch (node.type()) {
-    case NodeType::wav_player:
-        if (auto* p = st.as<node_params::WavPlayer>()) {
-            // Show filename only; full path stays in p->path / tooltip / picker.
-            const char* slash = std::strrchr(p->path.c_str(), '/');
-            const char* leaf = slash ? slash + 1 : p->path.c_str();
-            ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth - 28.0f);
-            ImGui::TextUnformatted(leaf[0] ? leaf : "(no file)");
-            ImGui::PopTextWrapPos();
-            if (ImGui::IsItemHovered() && !p->path.empty()) {
-                ImGui::SetTooltip("%s", p->path.c_str());
-            }
-            ImGui::SameLine();
-            if (ImGui::SmallButton("...")) {
-                wav_picker_node_id() = node.id();
-                open_browser_near_path(wav_open_browser(), p->path.c_str());
-            }
-            ImGui::Checkbox("Loop", &p->loop);
-        }
-        break;
-    case NodeType::audio_input:
-        if (auto* p = st.as<node_params::AudioInput>()) {
-            static std::vector<AudioDevice> devices = list_capture_devices();
-            static std::vector<const char*> labels;
-            ImGui::TextUnformatted("Device");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##cap_dev", p->device, devices, labels)) {
-                std::string err;
-                g_pipeline.set_capture_device(p->device.c_str(), err);
-            }
-            if (g_pipeline.offline_mode) {
-                ImGui::TextDisabled("offline");
+    if (auto* m = node.as<AudioInput>()) {
+        static std::vector<AudioDevice> devices = list_capture_devices();
+        static std::vector<const char*> labels;
+        ImGui::TextUnformatted("Device");
+        ImGui::SetNextItemWidth(kNodeWidth);
+        if (draw_device_combo("##cap_dev", m->device, devices, labels)) {
+            std::string err;
+            if (!g_pipeline.set_capture_device(m->device.c_str(), err)) {
+                m->device = g_pipeline.capture_device();
             }
         }
-        break;
-    case NodeType::chord_generator:
-        if (auto* p = st.as<node_params::Chord>()) {
-            ImGui::TextUnformatted("Chord");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            ImGui::Combo("##chord", &p->index, chord_combo_items(), kChordCount);
-            p->index = std::clamp(p->index, 0, kChordCount - 1);
+        draw_device_error("Capture");
+        if (g_pipeline.offline_mode) {
+            ImGui::TextDisabled("offline");
         }
-        break;
-    case NodeType::white_noise:
-        if (auto* p = st.as<node_params::WhiteNoise>()) {
-            param_slider("Level", &p->level, 0.0f, 1.0f, "%.2f");
-        }
-        break;
-    case NodeType::echo:
-        if (auto* p = st.as<node_params::Echo>()) {
-            param_slider("Delay ms", &p->delay_ms, 10.0f, 1000.0f, "%.0f");
-            param_slider("Feedback", &p->feedback, 0.0f, 0.95f, "%.2f");
-            param_slider("Mix", &p->mix, 0.0f, 1.0f, "%.2f");
-        }
-        break;
-    case NodeType::preamp:
-        if (auto* p = st.as<node_params::Preamp>()) {
-            param_slider("Gain dB", &p->gain_db, -12.0f, 24.0f, "%.1f");
-        }
-        break;
-    case NodeType::high_pass:
-        if (auto* p = st.as<node_params::CutoffFilter>()) {
-            param_slider("Cutoff Hz", &p->cutoff_hz, 20.0f, 500.0f, "%.0f");
-        }
-        break;
-    case NodeType::drive_pedal:
-        if (auto* p = st.as<node_params::Drive>()) {
-            static const char* models[] = {"Tube Screamer", "RAT", "Big Muff"};
-            param_combo("Model", &p->model, models, IM_ARRAYSIZE(models));
-            param_slider("Drive", &p->amount, 0.0f, 10.0f, "%.2f");
-            param_slider("Tone", &p->tone, 0.0f, 1.0f, "%.2f");
-        }
-        break;
-    case NodeType::low_pass:
-        if (auto* p = st.as<node_params::CutoffFilter>()) {
-            param_slider("Cutoff Hz", &p->cutoff_hz, 200.0f, 16000.0f, "%.0f");
-        }
-        break;
-    case NodeType::compressor:
-        if (auto* p = st.as<node_params::Compressor>()) {
-            param_slider("Thresh dB", &p->threshold_db, -40.0f, 0.0f, "%.1f");
-            param_slider("Ratio", &p->ratio, 1.0f, 20.0f, "%.1f");
-            param_slider("Attack ms", &p->attack_ms, 1.0f, 100.0f, "%.1f");
-            param_slider("Release ms", &p->release_ms, 10.0f, 500.0f, "%.0f");
-            param_slider("Drive", &p->drive, 0.5f, 5.0f, "%.2f");
-            param_slider("Makeup dB", &p->makeup_db, -12.0f, 24.0f, "%.1f");
-        }
-        break;
-    case NodeType::noise_gate:
-        if (auto* p = st.as<node_params::NoiseGate>()) {
-            param_slider("Thresh dB", &p->threshold_db, -80.0f, -10.0f, "%.1f");
-            param_slider("Attack ms", &p->attack_ms, 1.0f, 50.0f, "%.1f");
-            param_slider("Release ms", &p->release_ms, 10.0f, 400.0f, "%.0f");
-        }
-        break;
-    case NodeType::eq_three_band:
-        if (auto* p = st.as<node_params::EqThreeBand>()) {
-            param_slider("Low dB", &p->low_db, -18.0f, 18.0f, "%.1f");
-            param_slider("Mid dB", &p->mid_db, -18.0f, 18.0f, "%.1f");
-            param_slider("High dB", &p->high_db, -18.0f, 18.0f, "%.1f");
-        }
-        break;
-    case NodeType::reverb:
-        if (auto* p = st.as<node_params::Reverb>()) {
-            param_slider("Room", &p->room, 0.0f, 1.0f, "%.2f");
-            param_slider("Damping", &p->damping, 0.0f, 1.0f, "%.2f");
-            param_slider("Mix", &p->mix, 0.0f, 1.0f, "%.2f");
-        }
-        break;
-    case NodeType::dry_wet_mix:
-        if (auto* p = st.as<node_params::DryWet>()) {
-            param_slider("Wet", &p->mix, 0.0f, 1.0f, "%.2f");
-        }
-        ImGui::TextDisabled("dry / wet");
-        break;
-    case NodeType::wav_recorder:
-        if (auto* p = st.as<node_params::WavRecorder>()) {
-            ImGui::Checkbox("Arm Record", &p->armed);
-        }
-        ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + kNodeWidth);
-        ImGui::TextUnformatted(graph.record_path().c_str());
-        ImGui::PopTextWrapPos();
-        break;
-    case NodeType::vu_meter:
-        if (auto* p = st.as<node_params::VuMeter>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
-            param_slider("Decay", &p->decay, 0.5f, 0.99f, "%.2f");
-        }
-        draw_vu_widget(node.id());
-        break;
-    case NodeType::oscilloscope:
-        if (auto* p = st.as<node_params::DisplayGain>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
-        }
-        draw_scope_widget(node.id());
-        break;
-    case NodeType::spectrum:
-        if (auto* p = st.as<node_params::DisplayGain>()) {
-            param_slider("Gain", &p->display_gain, 0.25f, 4.0f, "%.2f");
-        }
-        draw_spectrum_widget(node.id());
-        break;
-    case NodeType::pitch_detector:
-        draw_pitch_widget(node.id());
-        break;
-    case NodeType::mixer:
-        ImGui::TextDisabled("avg mix");
-        break;
-    case NodeType::output:
-        if (auto* p = st.as<node_params::AudioOutput>()) {
-            static std::vector<AudioDevice> devices = list_playback_devices();
-            static std::vector<const char*> labels;
-            ImGui::TextUnformatted("Device");
-            ImGui::SetNextItemWidth(kNodeWidth);
-            if (draw_device_combo("##play_dev", p->device, devices, labels)) {
-                std::string err;
-                g_pipeline.set_playback_device(p->device.c_str(), err);
-            }
-            if (g_pipeline.offline_mode) {
-                ImGui::TextDisabled("offline");
+    } else if (auto* m = node.as<AudioOutput>()) {
+        static std::vector<AudioDevice> devices = list_playback_devices();
+        static std::vector<const char*> labels;
+        ImGui::TextUnformatted("Device");
+        ImGui::SetNextItemWidth(kNodeWidth);
+        if (draw_device_combo("##play_dev", m->device, devices, labels)) {
+            std::string err;
+            if (!g_pipeline.set_playback_device(m->device.c_str(), err)) {
+                m->device = g_pipeline.playback_device();
             }
         }
-        break;
-    default:
-        break;
+        draw_device_error("Playback");
+        if (g_pipeline.offline_mode) {
+            ImGui::TextDisabled("offline");
+        }
+    } else if (auto* m = node.as<Mixer>()) {
+        m->ui_slots = graph.input_pin_count(node.id);
     }
+    node.module->render();
 }
 
 static void apply_node_positions(AudioGraph& graph) {
     for (const auto& node : graph.nodes()) {
-        ImNodes::SetNodeGridSpacePos(node.id(), ImVec2(node.x(), node.y()));
+        ImNodes::SetNodeGridSpacePos(node.id, ImVec2(node.x, node.y));
     }
 }
 
 static void sync_node_positions(AudioGraph& graph) {
     for (auto& node : graph.nodes()) {
-        ImVec2 pos = ImNodes::GetNodeGridSpacePos(node.id());
-        node.set_position(pos.x, pos.y);
+        ImVec2 pos = ImNodes::GetNodeGridSpacePos(node.id);
+        node.x = pos.x;
+        node.y = pos.y;
     }
 }
 
-static void draw_toolbar(AudioGraph& graph, NodeEditorUiState& state) {
-    ImGui::TextUnformatted("Audio Graph");
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(220.0f);
-    ImGui::InputText("##graph_path", state.graph_path, sizeof(state.graph_path));
-    ImGui::SameLine();
-    if (ImGui::Button("Save Graph")) {
-        open_browser_near_path(graph_save_browser(), state.graph_path, true);
+static void draw_menu_bar(AudioGraph& graph, NodeEditorUiState& state) {
+    if (!ImGui::BeginMenuBar()) {
+        return;
     }
-    ImGui::SameLine();
-    if (ImGui::Button("Load Graph")) {
-        open_browser_near_path(graph_open_browser(), state.graph_path);
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Reset Default")) {
-        graph.reset_to_default_chain();
-        std::string save_error;
-        if (graph_io::save_to_file(graph, kDefaultPatchPath, save_error)) {
-            std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", kDefaultPatchPath);
-            state.status_message =
-                std::string("Reset to default graph (saved ") + kDefaultPatchPath + ")";
-        } else {
-            state.status_message = "Reset to default graph";
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Load Graph...")) {
+            open_browser_near_path(graph_open_browser(), state.graph_path);
         }
-        state.positions_need_apply = true;
-        node_editor_publish(graph);
+        if (ImGui::MenuItem("Save Graph...")) {
+            open_browser_near_path(graph_save_browser(), state.graph_path, true);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Default")) {
+            node_editor_load(graph, state, kDefaultPatchPath);
+        }
+        ImGui::EndMenu();
     }
-
-    ImGui::Checkbox("Diagnostics", &state.show_diagnostics);
-
-    if (!state.status_message.empty()) {
-        ImGui::TextWrapped("%s", state.status_message.c_str());
+    if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Diagnostics", nullptr, &state.show_diagnostics);
+        ImGui::MenuItem("Profiler", nullptr, &state.show_profiler);
+        ImGui::EndMenu();
     }
-    ImGui::TextDisabled(
-        "Right-click canvas to add nodes. Wire freely (fan-in sums, fan-out duplicates). "
-        "Ctrl+drag pin to detach. Title-bar Byp toggles bypass. "
-        "Mixer mute checkbox silences a slot. Delete removes selection.");
+    if (ImGui::BeginMenu("Help")) {
+        ImGui::TextUnformatted("Right-click the canvas to add nodes.\n"
+                               "One link per input (combine with a Mixer); outputs can fan out.\n"
+                               "Ctrl+drag a pin to detach its link.\n"
+                               "Title-bar Byp toggles bypass.\n"
+                               "Mixer mute checkbox silences a slot.\n"
+                               "Delete removes the selection.");
+        ImGui::EndMenu();
+    }
+    ImGui::EndMenuBar();
 }
 
 static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
     auto& open_graph = graph_open_browser();
     open_graph.Display();
     if (open_graph.HasSelected()) {
-        copy_path_to_buf(state.graph_path, sizeof(state.graph_path), open_graph.GetSelected());
+        const std::string selected = open_graph.GetSelected().string();
         open_graph.ClearSelected();
-        std::string error;
-        if (graph_io::load_from_file(graph, state.graph_path, error)) {
-            state.positions_need_apply = true;
-            // Apply first Audio Input device if present; WAV paths live on WavPlayer nodes.
-            for (const auto& n : graph.nodes()) {
-                if (n.type() == NodeType::audio_input) {
-                    if (const auto* p = n.state().as<node_params::AudioInput>()) {
-                        std::string err;
-                        g_pipeline.set_capture_device(p->device.c_str(), err);
-                    }
-                }
-                if (n.type() == NodeType::output) {
-                    if (const auto* p = n.state().as<node_params::AudioOutput>()) {
-                        std::string err;
-                        g_pipeline.set_playback_device(p->device.c_str(), err);
-                    }
-                }
-            }
-            node_editor_publish(graph);
-            state.status_message = std::string("Loaded ") + state.graph_path;
-        } else {
-            state.status_message = error;
-        }
+        node_editor_load(graph, state, selected);
     }
 
     auto& save_graph = graph_save_browser();
@@ -476,26 +264,7 @@ static void process_file_browsers(AudioGraph& graph, NodeEditorUiState& state) {
         if (graph_io::save_to_file(graph, state.graph_path, error)) {
             state.status_message = std::string("Saved ") + state.graph_path;
         } else {
-            state.status_message = error;
-        }
-    }
-
-    auto& open_wav = wav_open_browser();
-    open_wav.Display();
-    if (open_wav.HasSelected()) {
-        const std::string selected = open_wav.GetSelected().string();
-        open_wav.ClearSelected();
-        const int target = wav_picker_node_id();
-        wav_picker_node_id() = -1;
-        if (auto* node = graph.find_node(target)) {
-            if (auto* p = node->state().as<node_params::WavPlayer>()) {
-                p->path = selected;
-                graph.set_wav_path(selected);
-                state.status_message = std::string("WAV Player → ") + selected;
-                node_editor_publish(graph);
-            }
-        } else {
-            state.status_message = "No WAV Player selected for file";
+            show_error(std::string("Could not save ") + state.graph_path + ":\n" + error);
         }
     }
 }
@@ -509,12 +278,42 @@ static void draw_diagnostics(NodeEditorUiState& state) {
         static_cast<float>(g_pipeline.cap_to_filter.size()),
         static_cast<float>(g_pipeline.filter_to_play.size())
     };
-    ImGui::Text("XRUNs: %llu | dropped captures: %llu | %s",
+    ImGui::Text("XRUNs: %llu | dropped captures: %llu",
                 static_cast<unsigned long long>(g_pipeline.xrun_count.load()),
-                static_cast<unsigned long long>(g_pipeline.dropped_capture_reads.load()),
-                g_pipeline.wav_status.c_str());
+                static_cast<unsigned long long>(g_pipeline.dropped_capture_reads.load()));
     ImGui::PlotHistogram("##queues", depths, 3, 0, "Free | Cap->Filt | Filt->Play",
                          0.0f, static_cast<float>(QUEUE_CAPACITY), ImVec2(0, 80.0f));
+}
+
+static void draw_profiler(const AudioGraph& graph, NodeEditorUiState& state) {
+    if (!state.show_profiler) {
+        return;
+    }
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings;
+    if (ImGui::Begin("Profiler", &state.show_profiler, flags) &&
+        ImGui::BeginTable("profile", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
+        ImGui::TableSetupColumn("Module");
+        ImGui::TableSetupColumn("Time per block");
+        ImGui::TableHeadersRow();
+        float total = 0.0f;
+        for (const auto& node : graph.nodes()) {
+            const float us = node.module->process_us();
+            total += us;
+            ImGui::TableNextColumn();
+            ImGui::Text("%s #%d", node_label(*node.module), node.id);
+            ImGui::TableNextColumn();
+            ImGui::Text("%8.1f us", us);
+        }
+        ImGui::TableNextColumn();
+        ImGui::Separator();
+        ImGui::TextUnformatted("Total");
+        ImGui::TableNextColumn();
+        ImGui::Separator();
+        ImGui::Text("%8.1f us", total);
+        ImGui::EndTable();
+    }
+    ImGui::End();
 }
 
 static void context_menu_add_nodes(AudioGraph& graph, NodeEditorUiState& state,
@@ -525,61 +324,27 @@ static void context_menu_add_nodes(AudioGraph& graph, NodeEditorUiState& state,
 
     if (ImGui::BeginPopup("node_add_menu")) {
         ImVec2 screen = ImGui::GetMousePosOnOpeningCurrentPopup();
-        // Approximate editor-space spawn near cursor; imnodes will place via SetNodeScreenSpacePos.
-        const struct Entry {
-            const char* label;
-            NodeType type;
-        } sources[] = {
-            {"Audio Input (Live)", NodeType::audio_input},
-            {"WAV Player", NodeType::wav_player},
-            {"Chord Generator", NodeType::chord_generator},
-            {"White Noise", NodeType::white_noise},
-        };
-        const Entry effects[] = {
-            {"Echo", NodeType::echo},
-            {"Preamp", NodeType::preamp},
-            {"High-Pass Filter", NodeType::high_pass},
-            {"Drive Pedal", NodeType::drive_pedal},
-            {"Low-Pass Filter", NodeType::low_pass},
-            {"Valve Compressor", NodeType::compressor},
-            {"Noise Gate", NodeType::noise_gate},
-            {"3-Band EQ", NodeType::eq_three_band},
-            {"Reverb", NodeType::reverb},
-            {"Mixer", NodeType::mixer},
-            {"Dry/Wet Mix", NodeType::dry_wet_mix},
-        };
-        const Entry visualizers[] = {
-            {"VU Meter", NodeType::vu_meter},
-            {"Oscilloscope", NodeType::oscilloscope},
-            {"Spectrum", NodeType::spectrum},
-            {"Pitch Detector", NodeType::pitch_detector},
-        };
-        const Entry sinks[] = {
-            {"WAV Recorder", NodeType::wav_recorder},
-            {"Output", NodeType::output},
-        };
-
-        auto add_entries = [&](const char* group, const Entry* entries, int count) {
-            ImGui::TextDisabled("%s", group);
-            for (int i = 0; i < count; ++i) {
-                if (ImGui::MenuItem(entries[i].label)) {
-                    int id = graph.add_node(entries[i].type, 0.0f, 0.0f);
-                    ImNodes::SetNodeScreenSpacePos(id, screen);
-                    ImVec2 grid = ImNodes::GetNodeGridSpacePos(id);
-                    if (auto* node = graph.find_node(id)) {
-                        node->set_position(grid.x, grid.y);
-                    }
-                    node_editor_publish(graph);
-                    state.status_message = std::string("Added ") + entries[i].label;
+        const char* category = nullptr;
+        for (const auto& kind : node_kinds()) {
+            if (!category || std::strcmp(category, kind.category) != 0) {
+                if (category) {
+                    ImGui::Separator();
                 }
+                category = kind.category;
+                ImGui::TextDisabled("%s", category);
             }
-            ImGui::Separator();
-        };
-
-        add_entries("Sources", sources, IM_ARRAYSIZE(sources));
-        add_entries("Effects", effects, IM_ARRAYSIZE(effects));
-        add_entries("Visualizers", visualizers, IM_ARRAYSIZE(visualizers));
-        add_entries("Sinks", sinks, IM_ARRAYSIZE(sinks));
+            if (ImGui::MenuItem(kind.label)) {
+                const int id = graph.add_node(kind.make()->name(), 0.0f, 0.0f);
+                ImNodes::SetNodeScreenSpacePos(id, screen);
+                const ImVec2 grid = ImNodes::GetNodeGridSpacePos(id);
+                if (auto* node = graph.find_node(id)) {
+                    node->x = grid.x;
+                    node->y = grid.y;
+                }
+                node_editor_publish(graph);
+                state.status_message = std::string("Added ") + kind.label;
+            }
+        }
         ImGui::EndPopup();
     }
 }
@@ -589,11 +354,14 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoMove |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus;
 
     ImGui::Begin("Audio Node Graph", nullptr, flags);
-    draw_toolbar(graph, state);
+    draw_menu_bar(graph, state);
+    if (!state.status_message.empty()) {
+        ImGui::TextWrapped("%s", state.status_message.c_str());
+    }
     draw_diagnostics(state);
     ImGui::Separator();
 
@@ -605,17 +373,17 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     }
 
     for (auto& node : graph.nodes()) {
-        ImNodes::BeginNode(node.id());
+        ImNodes::BeginNode(node.id);
 
-        const char* title = node_type_label(node.type());
+        const char* title = node_label(*node.module);
 
         ImNodes::BeginNodeTitleBar();
         // Measure the real title-row width (Text + optional Byp) instead of estimating.
         ImGui::BeginGroup();
         ImGui::TextUnformatted(title);
-        if (node_supports_bypass(node.type())) {
-            ImGui::PushID(node.id());
-            bool& bypassed = node.state().bypassed;
+        if (node.module->bypassable()) {
+            ImGui::PushID(node.id);
+            bool& bypassed = node.bypassed;
             ImGui::SameLine();
             const bool bypass_style_pushed = bypassed;
             if (bypass_style_pushed) {
@@ -635,85 +403,73 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             }
             ImGui::PopID();
         } else {
-            node.state().bypassed = false;
+            node.bypassed = false;
         }
         ImGui::EndGroup();
-        const float title_row_w = ImGui::GetItemRectSize().x;
         ImNodes::EndNodeTitleBar();
 
-        // Pin tracks the widest row; Dummy + params + out share this width.
-        float node_width = std::max(kNodeWidth, title_row_w);
+        ImGui::PushID(node.id);
+        if (ImGui::BeginTable("node_layout", 3, ImGuiTableFlags_SizingFixedFit, ImVec2(200.0f, 0.0f)))
         {
-            const ImVec2 dims = ImNodes::GetNodeDimensions(node.id());
-            if (dims.x > 1.0f) {
-                node_width =
-                    std::max(node_width, dims.x - 2.0f * ImNodes::GetStyle().NodePadding.x);
-            }
-        }
-        ImGui::Dummy(ImVec2(node_width, 0.0f));
+            // Setup column widths: column 0 and 2 wrap the pins, column 1 takes the rest (-1.0f)
+            ImGui::TableSetupColumn("In", ImGuiTableColumnFlags_WidthFixed);
+            ImGui::TableSetupColumn("Center", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Out", ImGuiTableColumnFlags_WidthFixed);
 
-        if (node_has_input_pin(node.type())) {
-            int slot_count = 1;
-            if (node_is_mixer(node.type())) {
-                slot_count = graph.mixer_pin_count(node.id());
-            } else if (node_is_dry_wet(node.type())) {
-                slot_count = 2;
-            }
-            for (int slot = 0; slot < slot_count; ++slot) {
-                ImNodes::BeginInputAttribute(input_pin_id(node.id(), slot));
-                if (node_is_mixer(node.type())) {
-                    ImGui::PushID(node.id() * 32 + slot);
+            ImGui::TableNextRow();
+
+            // --- Column 0: Input Pin ---
+            ImGui::TableSetColumnIndex(0);
+            {
+                int inputs=0;
+                const char* const* name;
+                node.module->get_inputs(&inputs, &name);
+                inputs = std::min(inputs, graph.input_pin_count(node.id));
+
+                for (int slot = 0; slot < inputs; ++slot) {
+                    ImNodes::BeginInputAttribute(input_pin_id(node.id, slot));
+                    ImGui::PushID(node.id * 32 + slot);
                     ImGui::AlignTextToFramePadding();
-                    ImGui::Text("in %d", slot + 1);
-                    ImGui::SameLine(0.0f, 6.0f);
-                    bool& muted = node.state().input_muted[static_cast<size_t>(slot)];
-                    ImGui::Checkbox("##mute", &muted);
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip(muted ? "Muted (click to unmute)" : "Mute this input");
-                    }
-                    ImGui::SameLine(0.0f, 4.0f);
-                    ImGui::SetNextItemWidth(72.0f);
-                    float& gain = node.state().input_gain[static_cast<size_t>(slot)];
-                    ImGui::SliderFloat("##gain", &gain, 0.0f, 2.0f, "%.1fx");
-                    if (ImGui::IsItemHovered()) {
-                        ImGui::SetTooltip("Channel gain (0 to 2x)");
-                    }
+                    ImGui::TextUnformatted(name[slot]);
                     ImGui::PopID();
-                } else if (node_is_dry_wet(node.type())) {
-                    ImGui::TextUnformatted(slot == 0 ? "dry" : "wet");
-                } else {
-                    ImGui::TextUnformatted("in");
+                    ImNodes::EndInputAttribute();
                 }
-                ImNodes::EndInputAttribute();
             }
-        }
 
-        ImGui::PushID(node.id());
-        draw_node_params(node, graph);
-        if (node_is_mixer(node.type())) {
-            ImGui::TextDisabled("%d in", graph.mixer_connected_count(node.id()));
+            // --- Column 1: Slider (with your -1.0f width requirement) ---
+            ImGui::TableSetColumnIndex(1);        
+            ImGui::PushID(node.id);
+            {
+                std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+                draw_node_params(node, graph);
+            }
+            ImGui::PopID();
+
+            // --- Column 2: Output Pin ---
+            ImGui::TableSetColumnIndex(2); 
+            {       
+                int outputs;
+                const char* const* name;
+                node.module->get_outputs(&outputs, &name);
+                for (int slot = 0; slot < outputs; ++slot) {
+                    ImNodes::BeginOutputAttribute(output_pin_id(node.id, slot));
+                    draw_level_meter(node.module->output_level(slot));
+                    ImGui::SameLine();
+                    ImGui::TextUnformatted(name[slot]);
+                    ImNodes::EndOutputAttribute();
+                }
+            }
+
+            ImGui::EndTable();        
         }
         ImGui::PopID();
-
-        if (node_has_output_pin(node.type())) {
-            ImNodes::BeginOutputAttribute(output_pin_id(node.id()));
-            // Prefer last frame's true content width so "out" tracks the pin if
-            // anything still stretched the node (title bar, plots, etc.).
-            float out_w = node_width;
-            const ImVec2 dims = ImNodes::GetNodeDimensions(node.id());
-            if (dims.x > 1.0f) {
-                out_w = std::max(out_w, dims.x - 2.0f * ImNodes::GetStyle().NodePadding.x);
-            }
-            draw_output_label(out_w);
-            ImNodes::EndOutputAttribute();
-        }
 
         ImNodes::EndNode();
     }
 
     for (const auto& link : graph.links()) {
-        ImNodes::Link(link.id(), output_pin_id(link.from_node()),
-                      input_pin_id(link.to_node(), link.to_slot()));
+        ImNodes::Link(link.id, output_pin_id(link.from_node, link.from_slot),
+                      input_pin_id(link.to_node, link.to_slot));
     }
 
     ImNodes::MiniMap(0.15f, ImNodesMiniMapLocation_BottomRight);
@@ -730,15 +486,14 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         if (!is_output_pin(start_attr) && is_output_pin(end_attr)) {
             std::swap(start_attr, end_attr);
         }
-        const int from = node_id_from_pin(start_attr);
-        const int to = node_id_from_pin(end_attr);
-        const int to_slot = is_output_pin(end_attr) ? 0 : input_slot_from_pin(end_attr);
+        std::string why = "Connect an output pin to an input pin.";
         if (is_output_pin(start_attr) && !is_output_pin(end_attr) &&
-            graph.add_link(from, to, to_slot)) {
+            graph.add_link(node_id_from_pin(start_attr), output_slot_from_pin(start_attr),
+                           node_id_from_pin(end_attr), input_slot_from_pin(end_attr), &why)) {
             node_editor_publish(graph);
             state.status_message = "Linked nodes";
         } else {
-            state.status_message = "Link rejected (cycle, bad pins, or duplicate)";
+            show_error(why);
         }
     }
 
@@ -748,19 +503,24 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         node_editor_publish(graph);
     }
 
+    // Delete inside a text field or while dragging a slider edits that widget, not the graph.
+    const bool delete_pressed = ImGui::IsKeyPressed(ImGuiKey_Delete) &&
+                                !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive();
     const int selected_links = ImNodes::NumSelectedLinks();
-    if (selected_links > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+    if (selected_links > 0 && delete_pressed) {
         static std::vector<int> link_ids;
         link_ids.resize(static_cast<size_t>(selected_links));
         ImNodes::GetSelectedLinks(link_ids.data());
         for (int id : link_ids) {
             graph.remove_link(id);
         }
+        // Ids are reused after deletion, so a stale selection would carry over to new links.
+        ImNodes::ClearLinkSelection();
         node_editor_publish(graph);
     }
 
     const int selected_nodes = ImNodes::NumSelectedNodes();
-    if (selected_nodes > 0 && ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+    if (selected_nodes > 0 && delete_pressed) {
         static std::vector<int> node_ids;
         node_ids.resize(static_cast<size_t>(selected_nodes));
         ImNodes::GetSelectedNodes(node_ids.data());
@@ -779,6 +539,12 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
 
     ImGui::End();
 
-    // Modal file browsers sit above the fullscreen editor window.
+    // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
+    for (auto& node : graph.nodes()) {
+        std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+        node.module->render_window();
+    }
+    draw_profiler(graph, state);
+    draw_message_box();
 }

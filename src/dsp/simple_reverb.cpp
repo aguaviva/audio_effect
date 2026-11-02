@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 
+#include "imgui.h"
+
 namespace {
 constexpr int kCombMs[4] = {31, 37, 43, 47};
 constexpr int kAllpassMs[2] = {5, 7};
@@ -28,29 +30,6 @@ float SimpleReverb::Allpass::process(float input) {
     buffer[index] = input + buffered * 0.5f;
     index = (index + 1) % buffer.size();
     return output;
-}
-
-SimpleReverb::SimpleReverb() = default;
-
-void SimpleReverb::reset() {
-    for (auto& c : combs_l_) {
-        std::fill(c.buffer.begin(), c.buffer.end(), 0.0f);
-        c.index = 0;
-        c.filter = 0.0f;
-    }
-    for (auto& c : combs_r_) {
-        std::fill(c.buffer.begin(), c.buffer.end(), 0.0f);
-        c.index = 0;
-        c.filter = 0.0f;
-    }
-    for (auto& a : allpass_l_) {
-        std::fill(a.buffer.begin(), a.buffer.end(), 0.0f);
-        a.index = 0;
-    }
-    for (auto& a : allpass_r_) {
-        std::fill(a.buffer.begin(), a.buffer.end(), 0.0f);
-        a.index = 0;
-    }
 }
 
 void SimpleReverb::ensure_buffers(float sample_rate) {
@@ -79,17 +58,22 @@ void SimpleReverb::ensure_buffers(float sample_rate) {
     }
 }
 
-void SimpleReverb::process(float* interleaved, size_t sample_count, float room_size,
-                           float damping, float mix, float sample_rate) {
+void SimpleReverb::process(const float* const* inputs, int input_count,
+                           size_t sample_count, float sample_rate) {
+    float* interleaved = output_buffer(0);
+    if (!interleaved) {
+        return;
+    }
+    copy_input(inputs, input_count, 0, interleaved, sample_count);
     if (interleaved == nullptr || sample_count < 2 || sample_rate <= 0.0f) {
         return;
     }
     ensure_buffers(sample_rate);
-    room_size = std::clamp(room_size, 0.0f, 1.0f);
-    damping = std::clamp(damping, 0.0f, 1.0f);
-    mix = std::clamp(mix, 0.0f, 1.0f);
+    float room_size = std::clamp(room, 0.0f, 1.0f);
+    float damp_amt = std::clamp(damping, 0.0f, 1.0f);
+    float wet = std::clamp(mix, 0.0f, 1.0f);
     const float feedback = 0.28f + room_size * 0.70f;
-    const float damp = 0.15f + damping * 0.75f;
+    const float damp = 0.15f + damp_amt * 0.75f;
 
     for (size_t i = 0; i + 1 < sample_count; i += 2) {
         const float dry_l = interleaved[i];
@@ -108,7 +92,37 @@ void SimpleReverb::process(float* interleaved, size_t sample_count, float room_s
         for (auto& ap : allpass_r_) {
             wet_r = ap.process(wet_r);
         }
-        interleaved[i] = dry_l * (1.0f - mix) + wet_l * mix;
-        interleaved[i + 1] = dry_r * (1.0f - mix) + wet_r * mix;
+        interleaved[i] = dry_l * (1.0f - wet) + wet_l * wet;
+        interleaved[i + 1] = dry_r * (1.0f - wet) + wet_r * wet;
     }
+}
+
+bool SimpleReverb::render() {
+    bool changed = false;
+    ImGui::TextUnformatted("Room");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##rev_room", &room, 0.0f, 1.0f, "%.2f");
+    ImGui::TextUnformatted("Damping");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##rev_damp", &damping, 0.0f, 1.0f, "%.2f");
+    ImGui::TextUnformatted("Mix");
+    ImGui::SetNextItemWidth(-1.0f);
+    changed |= ImGui::SliderFloat("##rev_mix", &mix, 0.0f, 1.0f, "%.2f");
+    return changed;
+}
+
+std::string SimpleReverb::save() const {
+    std::string out = "{";
+    module_json::write_float(out, "room", room);
+    module_json::write_float(out, "damping", damping);
+    module_json::write_float(out, "mix", mix);
+    out += '}';
+    return out;
+}
+
+bool SimpleReverb::load(const std::string& json) {
+    module_json::read(json, "room", room);
+    module_json::read(json, "damping", damping);
+    module_json::read(json, "mix", mix);
+    return true;
 }

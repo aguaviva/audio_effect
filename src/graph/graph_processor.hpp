@@ -1,84 +1,32 @@
 #pragma once
 
 #include "audio_graph.hpp"
+#include "dsp/module.hpp"
 
-#include "dsp/audio_input_sources.hpp"
-#include "dsp/dynamic_high_pass_filter.hpp"
-#include "dsp/dynamic_low_pass_filter.hpp"
-#include "dsp/echo_effect.hpp"
-#include "dsp/eq_three_band.hpp"
-#include "dsp/guitar_pedals.hpp"
-#include "dsp/noise_gate.hpp"
-#include "dsp/preamp.hpp"
-#include "dsp/simple_reverb.hpp"
-#include "dsp/valve_compressor.hpp"
-#include "dsp/wav_generator.hpp"
-#include "dsp/wav_recorder.hpp"
-#include "visualizer_bus.hpp"
-
-#include <cassert>
-#include <cstdint>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
-class GraphProcessor {
+// Runs a compiled graph. Knows Module only — no concrete DSP types.
+// Each node's Module is the same instance the UI edits; this class owns the link buffers.
+class GraphProcessor : public GraphHost {
 public:
     explicit GraphProcessor(float sample_rate);
 
-    void set_block_size(size_t block_size);
-    size_t block_size() const { return block_size_; }
-
-    // Optional fallback clip when a WavPlayer has no path / failed load.
-    void set_loaded_wav(std::shared_ptr<const WavClip> clip);
-    void set_record_path(const std::string& path);
-
     bool process(const CompiledGraph& graph,
-                 const int32_t* live_pcm,
+                 const float* live_input,
                  float* out_float,
                  size_t block_size);
 
+    // GraphHost
+    const float* live_input() const override { return live_input_; }
+
 private:
-    struct NodeRuntime {
-        NodeType type = NodeType::preamp;
-        EchoEffect echo;
-        Preamp preamp;
-        DynamicHighPassFilter high_pass;
-        DynamicLowPassFilter low_pass;
-        guitar_pedals::DrivePedal drive;
-        ValveCompressor compressor;
-        NoiseGate gate;
-        EqThreeBand eq;
-        SimpleReverb reverb;
-        WavFileInput wav;
-        ChordGeneratorInput chord;
-        WavRecorder recorder;
-        std::shared_ptr<const WavClip> wav_clip;
-        std::string wav_path;
-        uint32_t noise_rng = 0x12345678u;
-        std::vector<float> buffer;
-
-        explicit NodeRuntime(size_t max_delay_samples)
-            : echo(max_delay_samples) {}
-    };
-
-    std::shared_ptr<const WavClip> clip_for_path(const std::string& path);
-
-    void ensure_state(const CompiledGraph& graph);
-    void mix_inputs(const CompiledGraph::Node& node,
-                    const std::unordered_map<int, std::vector<float>*>& buffers,
-                    float* destination) const;
-    void run_effect_or_io(NodeRuntime& state,
-                          const CompiledGraph::Node& node,
-                          const int32_t* live_pcm,
-                          float* block);
+    float* buffer(size_t index) { return buffers_.data() + index * block_size_; }
 
     float sample_rate_;
     size_t block_size_ = 0;
-    std::vector<int32_t> source_scratch_;
-    std::shared_ptr<const WavClip> wav_clip_;
-    std::unordered_map<std::string, std::shared_ptr<const WavClip>> wav_cache_;
-    std::string record_path_;
-    std::unordered_map<int, std::unique_ptr<NodeRuntime>> states_;
+    const float* live_input_ = nullptr;
+    // One block per link, plus one that sinks write for the device.
+    std::vector<float> buffers_;
 };
