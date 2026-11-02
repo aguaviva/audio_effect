@@ -10,7 +10,7 @@
 #include "dsp/noise_gate.hpp"
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
-#include "dsp/timeline.hpp"
+#include "dsp/clip_timeline.hpp"
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
@@ -161,7 +161,7 @@ TEST(waveform_peaks_match_a_direct_scan) {
 }
 
 TEST(timeline_plays_a_clip_from_where_it_is_placed) {
-    Timeline timeline;
+    ClipTimeline timeline;
     CHECK(timeline.load(std::string("{\"track3_path\":\"") + kDefaultWavPath +
                         "\",\"track3_start\":1000}"));
     std::string error;

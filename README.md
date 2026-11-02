@@ -25,7 +25,9 @@ Generators (all but Audio Input) have a play/pause button; pausing keeps their p
 - **Chord Generator** — synthetic voicings for all 12 roots × 12 qualities (144 chords)
 - **White Noise**
 - **Midi Generator** — plays a MIDI file, one piano and output pin per track (up to 10); each track's piano roll shows the notes and a playhead that follows playback (optionally scrolling with it). Pause keeps the place, Stop goes back to the start. Tracks are listed by name; a roll opens scrolled to its notes, with bar numbers and seconds (following the song's tempo map) on its ruler. Dragging a selected note moves or resizes the whole selection; Ctrl+C / X / V / D copy, cut, paste at the mouse, and duplicate (the clipboard is shared between tracks)
-- **Timeline** — six tracks of WAV clips in a zoomable timeline window (**Show timeline** on the node), one output pin per track; drag a waveform to move it in time (it snaps to the start or end of other clips), click the ruler to place the cursor, and Play starts from the cursor
+- **Clip Timeline** — six tracks of WAV clips, one output pin per track, placed in the timeline window: drag a waveform to move it in time (it snaps to the start or end of other clips), click a lane to place the cursor, and Play starts from the cursor
+
+**View > Timeline** opens a zoomable timeline with a track for every source: waveforms for the WAV Player (click to seek) and the Clip Timeline, the notes of each Midi Generator track (its name opens the piano roll), and a band for the others. Each shows where it is playing. **View > Timeline Tracks** shows or hides each source's tracks.
 
 ### Effects
 

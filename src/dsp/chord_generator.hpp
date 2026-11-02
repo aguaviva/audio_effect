@@ -16,6 +16,7 @@ public:
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
+    bool render_timeline(Timeline& timeline, const char* title) override;
     void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 

@@ -37,6 +37,7 @@ set(AUDIO_EFFECT_SOURCES
   src/ui/file_picker.cpp
   src/ui/message_box.cpp
   src/ui/piano_roll.cpp
+  src/ui/timeline.cpp
   src/dsp/preamp.cpp
   src/dsp/dynamic_high_pass_filter.cpp
   src/dsp/dynamic_low_pass_filter.cpp
@@ -55,7 +56,7 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/chord_generator.cpp
   src/dsp/gen_midi.cpp
   src/dsp/white_noise.cpp
-  src/dsp/timeline.cpp
+  src/dsp/clip_timeline.cpp
   src/dsp/dry_wet_mix.cpp
   src/dsp/vu_meter.cpp
   src/dsp/oscilloscope.cpp
@@ -165,12 +166,13 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/ui/file_picker.cpp
     src/ui/message_box.cpp
     src/ui/piano_roll.cpp
+    src/ui/timeline.cpp
     src/dsp/audio_input.cpp
     src/dsp/audio_output.cpp
     src/dsp/chord_generator.cpp
     src/dsp/gen_midi.cpp
     src/dsp/white_noise.cpp
-    src/dsp/timeline.cpp
+    src/dsp/clip_timeline.cpp
     src/dsp/dry_wet_mix.cpp
     src/dsp/vu_meter.cpp
     src/dsp/oscilloscope.cpp

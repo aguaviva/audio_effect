@@ -2,8 +2,10 @@
 
 #include "graph/audio_graph.hpp"
 #include "paths.hpp"
+#include "ui/timeline.hpp"
 
 #include <cstdio>
+#include <set>
 #include <string>
 
 struct NodeEditorUiState {
@@ -12,6 +14,9 @@ struct NodeEditorUiState {
     bool positions_need_apply = true;
     bool show_diagnostics = false;
     bool show_profiler = false;
+    bool show_timeline = false;
+    std::set<int> hidden_from_timeline; // node ids
+    Timeline timeline;
 
     NodeEditorUiState() {
         std::snprintf(graph_path, sizeof(graph_path), "%s", kDefaultPatchPath);

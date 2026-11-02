@@ -1,8 +1,10 @@
 #include "white_noise.hpp"
 
 #include <algorithm>
+#include <cstdio>
 
 #include "imgui.h"
+#include "ui/timeline.hpp"
 
 std::string WhiteNoise::save() const {
     std::string out = "{";
@@ -24,6 +26,19 @@ bool WhiteNoise::render() {
     ImGui::TextUnformatted("Level");
     ImGui::SetNextItemWidth(-1.0f);
     return ImGui::SliderFloat("##wn_level", &level, 0.0f, 1.0f, "%.2f");
+}
+
+bool WhiteNoise::render_timeline(Timeline& timeline, const char* title) {
+    timeline.BeginTrack("noise");
+    ImGui::TextUnformatted(title);
+    if (ImGui::SmallButton(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
+    char label[32];
+    std::snprintf(label, sizeof(label), "Noise, level %.2f", level);
+    timeline.Band(label, playing);
+    timeline.EndTrack();
+    return true;
 }
 void WhiteNoise::process(const float* const* /*inputs*/, int /*input_count*/,
                          size_t sample_count, float /*sample_rate*/) {

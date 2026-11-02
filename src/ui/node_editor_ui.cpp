@@ -78,6 +78,15 @@ void draw_level_meter(float peak) {
                         peak >= 1.0f ? IM_COL32(220, 60, 50, 255) : IM_COL32(80, 200, 90, 255));
 }
 
+// Generators and live inputs: each gets tracks in the timeline.
+bool is_source(const Module& module) {
+    return module.input_count() == 0 && module.output_count() > 0;
+}
+
+std::string source_title(const GraphNode& node) {
+    return std::string(node_label(*node.module)) + " #" + std::to_string(node.id);
+}
+
 } // namespace
 
 void node_editor_init() {
@@ -105,6 +114,7 @@ bool node_editor_load(AudioGraph& graph, NodeEditorUiState& state, const std::st
         return false;
     }
     std::snprintf(state.graph_path, sizeof(state.graph_path), "%s", path.c_str());
+    state.hidden_from_timeline.clear();
     for (const auto& node : graph.nodes()) {
         std::string err;
         if (const auto* p = node.as<AudioInput>()) {
@@ -231,6 +241,31 @@ static void draw_menu_bar(AudioGraph& graph, NodeEditorUiState& state) {
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Diagnostics", nullptr, &state.show_diagnostics);
         ImGui::MenuItem("Profiler", nullptr, &state.show_profiler);
+        ImGui::Separator();
+        ImGui::MenuItem("Timeline", nullptr, &state.show_timeline);
+        bool any_source = false;
+        for (const auto& node : graph.nodes()) {
+            any_source |= is_source(*node.module);
+        }
+        if (ImGui::BeginMenu("Timeline Tracks", any_source)) {
+            // Ticking several tracks should not need reopening the menu each time.
+            ImGui::PushItemFlag(ImGuiItemFlags_AutoClosePopups, false);
+            for (const auto& node : graph.nodes()) {
+                if (!is_source(*node.module)) {
+                    continue;
+                }
+                bool shown = state.hidden_from_timeline.count(node.id) == 0;
+                if (ImGui::MenuItem(source_title(node).c_str(), nullptr, &shown)) {
+                    if (shown) {
+                        state.hidden_from_timeline.erase(node.id);
+                    } else {
+                        state.hidden_from_timeline.insert(node.id);
+                    }
+                }
+            }
+            ImGui::PopItemFlag();
+            ImGui::EndMenu();
+        }
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Help")) {
@@ -313,6 +348,43 @@ static void draw_profiler(const AudioGraph& graph, NodeEditorUiState& state) {
         ImGui::Text("%8.1f us", total);
         ImGui::EndTable();
     }
+    ImGui::End();
+}
+
+static void draw_timeline(AudioGraph& graph, NodeEditorUiState& state) {
+    if (!state.show_timeline) {
+        return;
+    }
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + 40.0f, viewport->WorkPos.y + 260.0f),
+                            ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(1100.0f, 420.0f), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowBgAlpha(1.0f);
+    if (!ImGui::Begin("Timeline", &state.show_timeline, ImGuiWindowFlags_NoSavedSettings)) {
+        ImGui::End();
+        return;
+    }
+    ImGui::TextDisabled("Every generator has a track; show or hide them in View > Timeline Tracks. "
+                        "Wheel zooms, Shift+wheel scrolls.");
+    state.timeline.Begin("##tracks");
+    for (auto& node : graph.nodes()) {
+        if (!is_source(*node.module) || state.hidden_from_timeline.count(node.id)) {
+            continue;
+        }
+        const std::string title = source_title(node);
+        ImGui::PushID(node.id);
+        {
+            std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+            if (!node.module->render_timeline(state.timeline, title.c_str())) {
+                state.timeline.BeginTrack("track");
+                ImGui::TextUnformatted(title.c_str());
+                state.timeline.Band("live", true);
+                state.timeline.EndTrack();
+            }
+        }
+        ImGui::PopID();
+    }
+    state.timeline.End();
     ImGui::End();
 }
 
@@ -526,6 +598,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         ImNodes::GetSelectedNodes(node_ids.data());
         for (int id : node_ids) {
             graph.remove_node(id);
+            state.hidden_from_timeline.erase(id);
         }
         ImNodes::ClearNodeSelection();
         ImNodes::ClearLinkSelection();
@@ -545,6 +618,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
         std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
         node.module->render_window();
     }
+    draw_timeline(graph, state);
     draw_profiler(graph, state);
     draw_message_box();
 }

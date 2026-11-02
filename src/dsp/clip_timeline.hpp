@@ -3,6 +3,7 @@
 #include "module.hpp"
 #include "wav_generator.hpp"
 #include "ui/file_picker.hpp"
+#include "ui/timeline.hpp"
 
 #include <array>
 #include <atomic>
@@ -10,22 +11,11 @@
 #include <memory>
 #include <mutex>
 #include <string>
-#include <utility>
 #include <vector>
 
-// Min/max envelope of a clip (both channels together) at 64, 128, 256... frames per bucket,
-// so drawing a waveform reads only a few values per pixel at any zoom.
-struct WaveformPeaks {
-    static constexpr size_t kBaseFrames = 64;
-    std::vector<std::vector<std::pair<float, float>>> levels;
-
-    explicit WaveformPeaks(const WavClip& clip);
-    // Min and max over frames [begin, end), widened to whole buckets.
-    std::pair<float, float> range(const WavClip& clip, size_t begin, size_t end) const;
-};
-
-// Six tracks of WAV clips placed in time, one output pin each. Plays from the cursor.
-class Timeline : public Module {
+// Six tracks of WAV clips placed in time, one output pin each. Plays from the cursor. The clips
+// are placed in the app's timeline.
+class ClipTimeline : public Module {
 public:
     static constexpr int kTracks = 6;
     static_assert(kTracks <= kMaxOutputs, "every track needs an output pin");
@@ -38,6 +28,7 @@ public:
     bool load(const std::string& json) override;
     bool render() override;
     void render_window() override;
+    bool render_timeline(Timeline& timeline, const char* title) override;
     void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 
@@ -55,13 +46,12 @@ private:
     void play_button();
     // start, moved so the clip's start or end meets the nearest edge of another clip
     // within a few pixels.
-    int64_t snap(int track, int64_t start) const;
+    int64_t snap(int track, int64_t start, double frames_per_pixel) const;
+    void set_cursor(int64_t frame);
 
     // UI thread.
     std::array<Track, kTracks> tracks_;
     int64_t cursor_ = 0; // frame where playing starts
-    bool window_open_ = false;
-    float frames_per_pixel_ = 2400.0f;
     int dragging_ = -1;     // track whose clip is being dragged
     int64_t grab_frame_ = 0; // clip frame under the mouse while dragging
 

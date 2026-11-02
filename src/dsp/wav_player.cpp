@@ -10,6 +10,8 @@ bool WavPlayer::set_path(const std::string& path) {
     path_ = path;
     auto clip = WavGenerator::load(path, kSampleRate, error_);
     length_ = clip ? clip->interleaved_stereo.size() : 0;
+    shown_clip_ = clip;
+    peaks_ = clip ? std::make_unique<WaveformPeaks>(*clip) : nullptr;
     {
         std::lock_guard<std::mutex> lock(clip_mutex_);
         std::swap(next_clip_, clip);
@@ -81,6 +83,31 @@ bool WavPlayer::render() {
 
     changed |= ImGui::Checkbox("Loop", &loop);
     return changed;
+}
+
+bool WavPlayer::render_timeline(Timeline& timeline, const char* title) {
+    timeline.BeginTrack("clip");
+    ImGui::TextUnformatted(title);
+    if (ImGui::SmallButton(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
+    ImGui::SameLine();
+    const char* slash = std::strrchr(path_.c_str(), '/');
+    const char* leaf = slash ? slash + 1 : path_.c_str();
+    ImGui::TextDisabled("%s%s", leaf[0] ? leaf : "(no file)", loop ? " (loop)" : "");
+    if (ImGui::IsItemHovered() && !path_.empty()) {
+        ImGui::SetTooltip("%s", path_.c_str());
+    }
+    if (shown_clip_ && length_ > 0) {
+        if (timeline.LaneActive()) {
+            const size_t frame = static_cast<size_t>(timeline.MouseSeconds() * kSampleRate);
+            cursor_ = std::min(2 * frame, length_ - 2);
+        }
+        timeline.Clip(*shown_clip_, *peaks_, 0.0, kSampleRate);
+        timeline.Playhead(static_cast<double>(std::min(cursor_.load(), length_)) / (2.0 * kSampleRate));
+    }
+    timeline.EndTrack();
+    return true;
 }
 void WavPlayer::process(const float* const* /*inputs*/, int /*input_count*/,
                         size_t sample_count, float /*sample_rate*/) {

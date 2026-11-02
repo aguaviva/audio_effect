@@ -4,6 +4,7 @@
 #include "wav_generator.hpp"
 #include "ui/file_picker.hpp"
 #include "ui/piano_roll.hpp"
+#include "ui/timeline.hpp"
 
 #include <array>
 #include <atomic>
@@ -41,11 +42,14 @@ public:
     bool load(const std::string& json) override;
     bool render() override;
     void render_window() override;
+    bool render_timeline(Timeline& timeline, const char* title) override;
     void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 
 private:
     void transport();
+    int loaded_tracks(); // MidiSong::GetTrackCount() is not const
+    void roll_button(int track);
 
     FilePicker picker_{"Load Midi", ".mid"};
     std::string path_;
@@ -58,6 +62,7 @@ private:
     std::array<bool, kTracks> piano_roll_open_{};
     std::array<std::string, kTracks> track_names_;
     bool follow_playhead_ = true;
+    std::vector<TimelineNote> timeline_notes_; // scratch for render_timeline()
 
     // Playback position, advanced by process(). The sequencer jumps its tick to the next event
     // when it starts rendering the gap before it, so the playhead is the tick that gap starts

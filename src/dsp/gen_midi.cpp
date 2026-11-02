@@ -291,31 +291,77 @@ bool Midi::render() {
         ImGui::PopTextWrapPos();
     }
     transport();
-    const int tracks = std::min<int>(kTracks, static_cast<int>(midi_song.GetTrackCount()));
-    // One button per track, lit while its piano roll is open; the node is too narrow for more.
-    for (int t = 0; t < tracks; ++t) {
-        ImGui::PushID(t);
-        const std::string& name = track_names_[t];
-        char label[96];
-        std::snprintf(label, sizeof(label), "%d %s###roll", t + 1,
-                      name.empty() ? "Track" : name.c_str());
-        const bool open = piano_roll_open_[t];
-        if (open) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-        }
-        if (ImGui::SmallButton(label)) {
-            piano_roll_open_[t] = !open;
-        }
-        if (open) {
-            ImGui::PopStyleColor();
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Track %d%s%s\nClick to %s its piano roll", t + 1,
-                              name.empty() ? "" : ": ", name.c_str(), open ? "hide" : "show");
-        }
-        ImGui::PopID();
+    // One button per track; the node is too narrow for more.
+    for (int t = 0; t < loaded_tracks(); ++t) {
+        roll_button(t);
     }
     return changed;
+}
+
+int Midi::loaded_tracks() {
+    return std::min<int>(kTracks, static_cast<int>(midi_song.GetTrackCount()));
+}
+
+// Lit while the track's piano roll is open.
+void Midi::roll_button(int track) {
+    ImGui::PushID(track);
+    const std::string& name = track_names_[track];
+    char label[96];
+    std::snprintf(label, sizeof(label), "%d %s###roll", track + 1,
+                  name.empty() ? "Track" : name.c_str());
+    const bool open = piano_roll_open_[track];
+    if (open) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+    }
+    if (ImGui::SmallButton(label)) {
+        piano_roll_open_[track] = !open;
+    }
+    if (open) {
+        ImGui::PopStyleColor();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Track %d%s%s\nClick to %s its piano roll", track + 1,
+                          name.empty() ? "" : ": ", name.c_str(), open ? "hide" : "show");
+    }
+    ImGui::PopID();
+}
+
+bool Midi::render_timeline(Timeline& timeline, const char* title) {
+    const int tracks = loaded_tracks();
+    // Every roll has the song's tempo map.
+    const double playhead = piano_rolls_[0].SecondsAtBeat(static_cast<float>(playhead_beat()));
+
+    timeline.BeginTrack("transport");
+    ImGui::TextUnformatted(title);
+    if (ImGui::IsItemHovered() && !path_.empty()) {
+        ImGui::SetTooltip("%s", path_.c_str());
+    }
+    if (tracks == 0) {
+        ImGui::TextDisabled("(no song)");
+    } else {
+        transport();
+        timeline.Playhead(playhead);
+    }
+    timeline.EndTrack();
+
+    for (int t = 0; t < tracks; ++t) {
+        const audio_effect::PianoRollEditor& roll = piano_rolls_[t];
+        char id[16];
+        std::snprintf(id, sizeof(id), "track%d", t);
+        timeline.BeginTrack(id);
+        roll_button(t);
+        ImGui::TextDisabled("%zu notes", roll.GetNotes().size());
+        timeline_notes_.clear();
+        for (const audio_effect::PianoRollNote& n : roll.GetNotes()) {
+            const double start = roll.SecondsAtBeat(n.startBeat);
+            timeline_notes_.push_back(
+                {start, roll.SecondsAtBeat(n.startBeat + n.duration) - start, n.pitch});
+        }
+        timeline.Notes(timeline_notes_, playhead);
+        timeline.Playhead(playhead);
+        timeline.EndTrack();
+    }
+    return true;
 }
 
 void Midi::render_window() {

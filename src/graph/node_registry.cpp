@@ -17,7 +17,7 @@
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
 #include "dsp/spectrum.hpp"
-#include "dsp/timeline.hpp"
+#include "dsp/clip_timeline.hpp"
 #include "dsp/valve_compressor.hpp"
 #include "dsp/vu_meter.hpp"
 #include "dsp/wav_player.hpp"
@@ -53,7 +53,7 @@ const std::vector<NodeKind>& node_kinds() {
         {"Chord Generator", "Sources", make<ChordGenerator>},
         {"Midi Generator", "Sources", make<Midi>},
         {"White Noise", "Sources", make<WhiteNoise>},
-        {"Timeline", "Sources", make<Timeline>},
+        {"Clip Timeline", "Sources", make<ClipTimeline>},
         {"Echo", "Effects", make<EchoEffect>},
         {"Preamp", "Effects", make<Preamp>},
         {"High-Pass Filter", "Effects", make<DynamicHighPassFilter>},

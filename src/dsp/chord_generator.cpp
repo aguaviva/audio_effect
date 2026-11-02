@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "imgui.h"
+#include "ui/timeline.hpp"
 
 std::string ChordGenerator::save() const {
     std::string out = "{";
@@ -32,6 +33,18 @@ bool ChordGenerator::render() {
     }
     index = std::clamp(index, 0, kChordCount - 1);
     return false;
+}
+
+bool ChordGenerator::render_timeline(Timeline& timeline, const char* title) {
+    timeline.BeginTrack("chord");
+    ImGui::TextUnformatted(title);
+    if (ImGui::SmallButton(playing ? "Pause###play" : "Play###play")) {
+        playing = !playing;
+    }
+    const std::string chord = chord_display_name(std::clamp(index, 0, kChordCount - 1));
+    timeline.Band(chord.c_str(), playing);
+    timeline.EndTrack();
+    return true;
 }
 void ChordGenerator::process(const float* const* /*inputs*/, int /*input_count*/,
                              size_t sample_count, float sample_rate) {

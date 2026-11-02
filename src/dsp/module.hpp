@@ -11,6 +11,8 @@
 #include <mutex>
 #include <string>
 
+class Timeline;
+
 // The rate the audio engine runs every module at.
 constexpr uint32_t kSampleRate = 48000;
 
@@ -45,6 +47,9 @@ public:
     virtual bool render() = 0;
     // Windows of the module's own, drawn outside the node editor once per frame.
     virtual void render_window() {}
+    // Adds a source's tracks to the app's timeline; title names the node. Returns false when it
+    // has none of its own, and the timeline shows it as one plain track.
+    virtual bool render_timeline(Timeline& /*timeline*/, const char* /*title*/) { return false; }
 
     // inputs[pin] is the buffer of the link wired into that pin, or nullptr when the pin is
     // unconnected. Writes sample_count samples to every output pin that has a buffer.

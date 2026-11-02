@@ -4,6 +4,7 @@
 #include "paths.hpp"
 #include "wav_generator.hpp"
 #include "ui/file_picker.hpp"
+#include "ui/timeline.hpp"
 
 #include <atomic>
 #include <memory>
@@ -26,6 +27,7 @@ public:
     std::string save() const override;
     bool load(const std::string& json) override;
     bool render() override;
+    bool render_timeline(Timeline& timeline, const char* title) override;
     void process(const float* const* inputs, int input_count, size_t sample_count,
                  float sample_rate) override;
 
@@ -34,6 +36,8 @@ private:
     std::string path_ = kDefaultWavPath;
     std::string error_;
     size_t length_ = 0; // samples in the clip set_path() loaded
+    std::shared_ptr<const WavClip> shown_clip_; // the same clip, for the timeline
+    std::unique_ptr<WaveformPeaks> peaks_;
 
     // Handoff: set_path() fills next_clip_; process() swaps it with clip_, so the replaced
     // clip is freed by the next set_path() on the UI thread, never on the audio thread.
