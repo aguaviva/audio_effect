@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <utility>
 
 namespace audio_effect {
@@ -20,6 +21,14 @@ bool IsBlackKey(int pitch) {
     return semitone == 1 || semitone == 3 || semitone == 6 ||
            semitone == 8 || semitone == 10;
 }
+
+std::vector<PianoRollNote>& Clipboard() {
+    static std::vector<PianoRollNote> notes; // startBeat relative to the earliest note
+    return notes;
+}
+
+const ImU32 kRulerBackground = IM_COL32(40, 43, 47, 255);
+const ImU32 kPlayheadColor = IM_COL32(255, 200, 60, 255);
 
 } // namespace
 
@@ -48,6 +57,12 @@ void PianoRollEditor::DeleteNote(int noteId) {
     }
 }
 
+void PianoRollEditor::SelectAll() {
+    for (PianoRollNote& note : notes_) {
+        note.selected = true;
+    }
+}
+
 void PianoRollEditor::ClearSelection() {
     for (PianoRollNote& note : notes_) {
         note.selected = false;
@@ -61,7 +76,91 @@ void PianoRollEditor::DeleteSelectedNotes() {
     drag_id_ = -1;
 }
 
+void PianoRollEditor::CopySelection() {
+    std::vector<PianoRollNote> copied;
+    float first = 0.0f;
+    for (const PianoRollNote& note : notes_) {
+        if (note.selected) {
+            first = copied.empty() ? note.startBeat : std::min(first, note.startBeat);
+            copied.push_back(note);
+        }
+    }
+    if (copied.empty()) {
+        return;
+    }
+    for (PianoRollNote& note : copied) {
+        note.startBeat -= first;
+    }
+    Clipboard() = std::move(copied);
+}
+
+void PianoRollEditor::CutSelection() {
+    CopySelection();
+    DeleteSelectedNotes();
+}
+
+void PianoRollEditor::Paste(float beat) {
+    if (!Clipboard().empty()) {
+        AddSelected(Clipboard(), std::max(0.0f, beat));
+    }
+}
+
+void PianoRollEditor::DuplicateSelection() {
+    std::vector<PianoRollNote> selected;
+    float first = 0.0f;
+    float end = 0.0f;
+    for (const PianoRollNote& note : notes_) {
+        if (note.selected) {
+            first = selected.empty() ? note.startBeat : std::min(first, note.startBeat);
+            end = std::max(end, note.startBeat + note.duration);
+            selected.push_back(note);
+        }
+    }
+    if (!selected.empty()) {
+        AddSelected(selected, std::ceil((end - first) / grid_step_ - 1e-4f) * grid_step_);
+    }
+}
+
+void PianoRollEditor::AddSelected(const std::vector<PianoRollNote>& notes, float beats) {
+    ClearSelection();
+    for (const PianoRollNote& note : notes) {
+        AddNote(note.pitch, note.startBeat + beats, note.duration, note.velocity);
+        notes_.back().selected = true;
+    }
+}
+
 void PianoRollEditor::SetTempo(float bpm) { bpm_ = std::clamp(bpm, 1.0f, 999.0f); }
+
+float PianoRollEditor::SecondsAtBeat(float beat) const {
+    float seconds = 0.0f;
+    float from = 0.0f;
+    float seconds_per_beat = 60.0f / bpm_;
+    for (const TempoChange& change : tempo_map_) {
+        if (change.beat >= beat) {
+            break;
+        }
+        seconds += (change.beat - from) * seconds_per_beat;
+        from = change.beat;
+        seconds_per_beat = change.seconds_per_beat;
+    }
+    return seconds + (beat - from) * seconds_per_beat;
+}
+
+float PianoRollEditor::BeatAtSeconds(float seconds) const {
+    float at = 0.0f; // seconds at beat `from`
+    float from = 0.0f;
+    float seconds_per_beat = 60.0f / bpm_;
+    for (const TempoChange& change : tempo_map_) {
+        const float at_change = at + (change.beat - from) * seconds_per_beat;
+        if (at_change >= seconds) {
+            break;
+        }
+        at = at_change;
+        from = change.beat;
+        seconds_per_beat = change.seconds_per_beat;
+    }
+    return from + (seconds - at) / seconds_per_beat;
+}
 
 void PianoRollEditor::SetTimeSignature(int numerator, int denominator) {
     beats_per_bar_ = std::clamp(numerator, 1, 32) * 4.0f /
@@ -91,31 +190,54 @@ void PianoRollEditor::Render(const char* id, ImVec2 size) {
     const ImVec2 available = ImGui::GetContentRegionAvail();
     const float height = size.y > 0.0f ? size.y : std::max(120.0f, available.y);
     const float key_width = std::clamp(size.x > 0.0f ? size.x * 0.14f : 58.0f, 48.0f, 96.0f);
+    const float ruler_height = 2.0f * (ImGui::GetTextLineHeight() + 2.0f);
     ImGuiWindowFlags child_flags = ImGuiWindowFlags_NoScrollWithMouse |
                                    ImGuiWindowFlags_NoScrollbar;
+    // The ruler and the surfaces under it are stacked items that must touch.
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0.0f, 0.0f));
 
     ImGui::BeginChild("##piano_keys", ImVec2(key_width, height), ImGuiChildFlags_Borders,
                       child_flags);
+    ImDrawList* key_draw = ImGui::GetWindowDrawList();
+    const ImVec2 key_top = ImGui::GetCursorScreenPos();
+    const float key_width_inner = ImGui::GetContentRegionAvail().x;
+    ImGui::Dummy(ImVec2(key_width_inner, ruler_height));
     const ImVec2 key_origin = ImGui::GetCursorScreenPos();
-    const ImVec2 key_size = ImGui::GetContentRegionAvail();
+    const ImVec2 key_size(key_width_inner,
+                          std::max(1.0f, ImGui::GetContentRegionAvail().y));
     ImGui::InvisibleButton("##key_surface", key_size);
     const bool key_hovered = ImGui::IsItemHovered();
     HandleKeyboard(key_origin, key_hovered);
-    DrawKeys(ImGui::GetWindowDrawList(), key_origin, key_size);
+    key_draw->PushClipRect(key_origin, ImVec2(key_origin.x + key_size.x, key_origin.y + key_size.y), true);
+    DrawKeys(key_draw, key_origin, key_size);
+    key_draw->PopClipRect();
+    key_draw->AddRectFilled(key_top, ImVec2(key_top.x + key_width_inner, key_origin.y), kRulerBackground);
     ImGui::EndChild();
 
     ImGui::SameLine(0.0f, 0.0f);
     ImGui::BeginChild("##piano_grid", ImVec2(0.0f, height), ImGuiChildFlags_Borders,
                       child_flags);
+    ImDrawList* draw = ImGui::GetWindowDrawList();
+    const ImVec2 ruler_origin = ImGui::GetCursorScreenPos();
+    const ImVec2 ruler_size(std::max(1.0f, ImGui::GetContentRegionAvail().x), ruler_height);
+    ImGui::InvisibleButton("##ruler_surface", ruler_size);
+    const bool ruler_hovered = ImGui::IsItemHovered();
     const ImVec2 origin = ImGui::GetCursorScreenPos();
-    const ImVec2 canvas_size = ImGui::GetContentRegionAvail();
+    const ImVec2 canvas_size(ruler_size.x, std::max(1.0f, ImGui::GetContentRegionAvail().y));
     ImGui::InvisibleButton("##grid_surface", canvas_size);
     const bool canvas_hovered = ImGui::IsItemHovered();
-    HandleNavigation(origin, canvas_size, key_hovered || canvas_hovered);
+    if (frame_pending_) {
+        FrameNow(canvas_size.y);
+    }
+    HandleNavigation(origin, canvas_size, key_hovered || canvas_hovered || ruler_hovered);
     HandleEditing(origin, canvas_size, canvas_hovered);
     FollowPlayhead(canvas_size.x);
-    DrawGrid(ImGui::GetWindowDrawList(), origin, canvas_size);
+    draw->PushClipRect(origin, ImVec2(origin.x + canvas_size.x, origin.y + canvas_size.y), true);
+    DrawGrid(draw, origin, canvas_size);
+    draw->PopClipRect();
+    DrawRuler(draw, ruler_origin, ruler_size);
     ImGui::EndChild();
+    ImGui::PopStyleVar();
 
     if (id && id[0]) {
         ImGui::PopID();
@@ -144,10 +266,23 @@ float PianoRollEditor::Snap(float beat) const {
     return std::max(0.0f, std::round(beat / grid_step_) * grid_step_);
 }
 
-PianoRollNote* PianoRollEditor::FindNote(int id) {
-    const auto found = std::find_if(notes_.begin(), notes_.end(),
-                                    [id](const PianoRollNote& note) { return note.id == id; });
-    return found == notes_.end() ? nullptr : &*found;
+void PianoRollEditor::FrameNow(float height) {
+    frame_pending_ = false;
+    scroll_x_ = 0.0f;
+    int lowest = high_pitch_;
+    int highest = low_pitch_;
+    for (const PianoRollNote& note : notes_) {
+        lowest = std::min(lowest, std::max(note.pitch, low_pitch_));
+        highest = std::max(highest, std::min(note.pitch, high_pitch_));
+    }
+    if (lowest > highest) {
+        return;
+    }
+    const float top = (high_pitch_ - highest) * row_height_;
+    const float bottom = (high_pitch_ - lowest + 1) * row_height_;
+    const float target = bottom - top <= height ? (top + bottom - height) * 0.5f : top - row_height_;
+    scroll_y_ = std::clamp(target, 0.0f,
+                           std::max(0.0f, (high_pitch_ - low_pitch_ + 1) * row_height_ - height));
 }
 
 PianoRollNote* PianoRollEditor::HitNote(float x, float y, const ImVec2& origin) {
@@ -232,9 +367,25 @@ void PianoRollEditor::FollowPlayhead(float width) {
 
 void PianoRollEditor::HandleEditing(const ImVec2& origin, const ImVec2& size, bool hovered) {
     const ImGuiIO& io = ImGui::GetIO();
-    if (hovered && !ImGui::GetIO().WantTextInput &&
-        (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace))) {
-        DeleteSelectedNotes();
+    if (hovered && !io.WantTextInput) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+            DeleteSelectedNotes();
+        }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) {
+            SelectAll();
+        }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C)) {
+            CopySelection();
+        }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_X)) {
+            CutSelection();
+        }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) {
+            Paste(Snap(BeatAt(io.MousePos.x, origin)));
+        }
+        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) {
+            DuplicateSelection();
+        }
     }
 
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -264,6 +415,13 @@ void PianoRollEditor::HandleEditing(const ImVec2& origin, const ImVec2& size, bo
                 grab_pitch_ = note->pitch - PitchAt(mouse_y, origin);
                 drag_start_mouse_ = io.MousePos;
                 dragged_ = false;
+                drag_anchor_ = *note;
+                drag_origin_.clear();
+                for (size_t i = 0; i < notes_.size(); ++i) {
+                    if (notes_[i].selected) {
+                        drag_origin_.emplace_back(i, notes_[i]);
+                    }
+                }
             }
         } else if (mouse_y >= origin.y && mouse_y < origin.y + size.y) {
             marquee_ = true;
@@ -281,18 +439,41 @@ void PianoRollEditor::HandleEditing(const ImVec2& origin, const ImVec2& size, bo
         }
     }
 
+    // Every selected note moves (or resizes) by as much as the grabbed one, keeping the whole
+    // selection at beat 0 or later and inside the pitch range.
     if (drag_id_ >= 0 && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        PianoRollNote* note = FindNote(drag_id_);
-        if (note) {
-            if (DistanceSquared(io.MousePos, drag_start_mouse_) > 16.0f) {
-                dragged_ = true;
+        if (DistanceSquared(io.MousePos, drag_start_mouse_) > 16.0f) {
+            dragged_ = true;
+        }
+        if (resize_drag_) {
+            const float duration =
+                std::max(grid_step_, Snap(BeatAt(io.MousePos.x, origin) - drag_anchor_.startBeat));
+            const float delta = duration - drag_anchor_.duration;
+            for (const auto& [index, was] : drag_origin_) {
+                if (index < notes_.size()) {
+                    notes_[index].duration = std::max(grid_step_, was.duration + delta);
+                }
             }
-            if (resize_drag_) {
-                note->duration = std::max(grid_step_, Snap(BeatAt(io.MousePos.x, origin) - note->startBeat));
-            } else {
-                note->startBeat = Snap(BeatAt(io.MousePos.x, origin) - grab_beat_);
-                note->pitch = std::clamp(PitchAt(io.MousePos.y, origin) + grab_pitch_,
-                                         low_pitch_, high_pitch_);
+        } else {
+            float delta = Snap(BeatAt(io.MousePos.x, origin) - grab_beat_) - drag_anchor_.startBeat;
+            int pitch_delta = PitchAt(io.MousePos.y, origin) + grab_pitch_ - drag_anchor_.pitch;
+            float earliest = drag_anchor_.startBeat;
+            int lowest = drag_anchor_.pitch;
+            int highest = drag_anchor_.pitch;
+            for (const auto& [index, was] : drag_origin_) {
+                earliest = std::min(earliest, was.startBeat);
+                lowest = std::min(lowest, was.pitch);
+                highest = std::max(highest, was.pitch);
+            }
+            delta = std::max(delta, -earliest);
+            const int min_delta = low_pitch_ - lowest;
+            const int max_delta = high_pitch_ - highest;
+            pitch_delta = min_delta <= max_delta ? std::clamp(pitch_delta, min_delta, max_delta) : 0;
+            for (const auto& [index, was] : drag_origin_) {
+                if (index < notes_.size()) {
+                    notes_[index].startBeat = was.startBeat + delta;
+                    notes_[index].pitch = was.pitch + pitch_delta;
+                }
             }
         }
     }
@@ -322,6 +503,7 @@ void PianoRollEditor::HandleEditing(const ImVec2& origin, const ImVec2& size, bo
             marquee_ = false;
         }
         drag_id_ = -1;
+        drag_origin_.clear();
         dragged_ = false;
     }
 }
@@ -375,12 +557,6 @@ void PianoRollEditor::DrawGrid(ImDrawList* draw, const ImVec2& origin, const ImV
         const bool bar = std::fmod(static_cast<float>(beat), beats_per_bar_) < 0.001f;
         draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + size.y),
                       bar ? bar_line : beat_line, bar ? 1.5f : 1.0f);
-        if (bar) {
-            char label[16];
-            std::snprintf(label, sizeof(label), "%d", static_cast<int>(beat / beats_per_bar_) + 1);
-            draw->AddText(ImVec2(x + 3.0f, origin.y + 2.0f),
-                          ImGui::GetColorU32(ImGuiCol_TextDisabled), label);
-        }
     }
 
     for (const PianoRollNote& note : notes_) {
@@ -412,13 +588,67 @@ void PianoRollEditor::DrawGrid(ImDrawList* draw, const ImVec2& origin, const ImV
 
     if (playhead_beat_ >= 0.0f) {
         const float x = origin.x + playhead_beat_ * pixels_per_beat_ - scroll_x_;
-        if (x >= origin.x - 6.0f && x <= origin.x + size.x + 6.0f) {
-            const ImU32 color = IM_COL32(255, 200, 60, 255);
-            draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + size.y), color, 2.0f);
-            draw->AddTriangleFilled(ImVec2(x - 6.0f, origin.y), ImVec2(x + 6.0f, origin.y),
-                                    ImVec2(x, origin.y + 9.0f), color);
+        draw->AddLine(ImVec2(x, origin.y), ImVec2(x, origin.y + size.y), kPlayheadColor, 2.0f);
+    }
+}
+
+// Bar numbers on the top half, time on the bottom half, ticks at least 64 px apart.
+void PianoRollEditor::DrawRuler(ImDrawList* draw, const ImVec2& origin, const ImVec2& size) const {
+    const ImVec2 end(origin.x + size.x, origin.y + size.y);
+    const float mid = origin.y + size.y * 0.5f;
+    const ImU32 text = ImGui::GetColorU32(ImGuiCol_Text);
+    const ImU32 dim = ImGui::GetColorU32(ImGuiCol_TextDisabled);
+    const ImU32 tick = IM_COL32(104, 110, 113, 255);
+    draw->PushClipRect(origin, end, true);
+    draw->AddRectFilled(origin, end, kRulerBackground);
+
+    const int first_bar = static_cast<int>(scroll_x_ / pixels_per_beat_ / beats_per_bar_);
+    for (int bar = std::max(first_bar, 0);; ++bar) {
+        const float x = origin.x + bar * beats_per_bar_ * pixels_per_beat_ - scroll_x_;
+        if (x > end.x || bar * beats_per_bar_ >= MaxBeat()) {
+            break;
+        }
+        char label[16];
+        std::snprintf(label, sizeof(label), "%d", bar + 1);
+        draw->AddLine(ImVec2(x, origin.y), ImVec2(x, mid), tick);
+        draw->AddText(ImVec2(x + 3.0f, origin.y + 1.0f), text, label);
+    }
+
+    const float first_seconds = SecondsAtBeat(scroll_x_ / pixels_per_beat_);
+    const float last_seconds = SecondsAtBeat((scroll_x_ + size.x) / pixels_per_beat_);
+    const float pixels_per_second = size.x / std::max(1e-3f, last_seconds - first_seconds);
+    static const float kSteps[] = {0.1f, 0.2f, 0.5f, 1.0f, 2.0f, 5.0f, 10.0f,
+                                   15.0f, 30.0f, 60.0f, 120.0f, 300.0f, 600.0f};
+    float step = kSteps[std::size(kSteps) - 1];
+    for (float s : kSteps) {
+        if (s * pixels_per_second >= 64.0f) {
+            step = s;
+            break;
         }
     }
+    for (int i = static_cast<int>(first_seconds / step); i * step <= last_seconds; ++i) {
+        const float seconds = i * step;
+        const float x = origin.x + BeatAtSeconds(seconds) * pixels_per_beat_ - scroll_x_;
+        char label[16];
+        if (step < 1.0f) {
+            std::snprintf(label, sizeof(label), "%.1f s", seconds);
+        } else {
+            const int whole = static_cast<int>(std::lround(seconds));
+            std::snprintf(label, sizeof(label), "%d:%02d", whole / 60, whole % 60);
+        }
+        draw->AddLine(ImVec2(x, mid), ImVec2(x, end.y), tick);
+        draw->AddText(ImVec2(x + 3.0f, mid + 1.0f), dim, label);
+    }
+    draw->AddLine(ImVec2(origin.x, mid), ImVec2(end.x, mid), IM_COL32(61, 65, 68, 255));
+    draw->AddLine(ImVec2(origin.x, end.y - 1.0f), ImVec2(end.x, end.y - 1.0f), tick);
+
+    if (playhead_beat_ >= 0.0f) {
+        const float x = origin.x + playhead_beat_ * pixels_per_beat_ - scroll_x_;
+        draw->AddLine(ImVec2(x, origin.y), ImVec2(x, end.y), kPlayheadColor, 2.0f);
+        draw->AddTriangleFilled(ImVec2(x - 6.0f, end.y - 9.0f), ImVec2(x + 6.0f, end.y - 9.0f),
+                                ImVec2(x, end.y), kPlayheadColor);
+    }
+    draw->PopClipRect();
 }
 
 } // namespace audio_effect

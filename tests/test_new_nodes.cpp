@@ -187,13 +187,16 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
 }
 
 TEST(midi_playhead_follows_rendered_samples) {
-    // One track at 120 bpm, 480 ticks a beat: C4 for beat 0, D4 for beat 1.
+    // One track named "Lead" in 3/4 at 120 bpm, 480 ticks a beat: C4 for beat 0, D4 for
+    // beat 1, partly in running status.
     const unsigned char song[] = {
         'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, 0x01, 0xE0,
-        'M', 'T', 'r', 'k', 0, 0, 0, 29,
+        'M', 'T', 'r', 'k', 0, 0, 0, 43,
+        0x00, 0xFF, 0x03, 0x04, 'L', 'e', 'a', 'd',
+        0x00, 0xFF, 0x58, 0x04, 0x03, 0x02, 0x18, 0x08,
         0x00, 0xFF, 0x51, 0x03, 0x07, 0xA1, 0x20,
-        0x00, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0,
-        0x00, 0x90, 62, 100, 0x83, 0x60, 0x80, 62, 0,
+        0x00, 0x90, 60, 100, 0x83, 0x60, 60, 0,
+        0x00, 62, 100, 0x83, 0x60, 0x80, 62, 0,
         0x00, 0xFF, 0x2F, 0x00};
     const char* path = "tests/_tmp_song.mid";
     FILE* f = std::fopen(path, "wb");
@@ -210,6 +213,12 @@ TEST(midi_playhead_follows_rendered_samples) {
     CHECK_NEAR(notes[0].duration, 1.0f, 1e-6f);
     CHECK_EQ(notes[1].pitch, 62);
     CHECK_NEAR(notes[1].startBeat, 1.0f, 1e-6f);
+    CHECK_NEAR(notes[1].duration, 1.0f, 1e-6f);
+    CHECK(midi.track_name(0) == "Lead");
+    CHECK_NEAR(midi.piano_roll(0).GetBeatsPerBar(), 3.0f, 1e-6f);
+    CHECK_NEAR(midi.piano_roll(5).GetBeatsPerBar(), 3.0f, 1e-6f);
+    // 500000 us a beat plays as 1041 us a tick.
+    CHECK_NEAR(midi.piano_roll(0).SecondsAtBeat(2.0f), 2 * 1041 * 480 / 1.0e6f, 1e-5f);
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
 
     std::vector<float> out(2 * 12000, 0.0f); // a quarter second: half a beat
@@ -245,6 +254,54 @@ TEST(midi_playhead_follows_rendered_samples) {
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
     CHECK_NEAR(midi.playhead_seconds(), 0.0, 1e-9);
     std::remove(path);
+}
+
+TEST(piano_roll_copy_paste_and_duplicate_selection) {
+    audio_effect::PianoRollEditor roll;
+    roll.AddNote(60, 2.0f, 1.0f);
+    roll.AddNote(64, 2.5f, 0.75f);
+    auto selected = [&] {
+        std::vector<std::pair<int, float>> out;
+        for (const auto& note : roll.GetNotes()) {
+            if (note.selected) {
+                out.emplace_back(note.pitch, note.startBeat);
+            }
+        }
+        return out;
+    };
+    using Notes = std::vector<std::pair<int, float>>;
+
+    // The selection spans 1.25 beats, already on the quarter-beat grid.
+    roll.SelectAll();
+    roll.DuplicateSelection();
+    CHECK_EQ(roll.GetNotes().size(), static_cast<size_t>(4));
+    CHECK(selected() == (Notes{{60, 3.25f}, {64, 3.75f}}));
+
+    roll.CopySelection();
+    roll.Paste(10.0f);
+    CHECK_EQ(roll.GetNotes().size(), static_cast<size_t>(6));
+    CHECK(selected() == (Notes{{60, 10.0f}, {64, 10.5f}}));
+
+    roll.CutSelection();
+    CHECK_EQ(roll.GetNotes().size(), static_cast<size_t>(4));
+    CHECK(selected().empty());
+    roll.Paste(0.0f);
+    CHECK(selected() == (Notes{{60, 0.0f}, {64, 0.5f}}));
+
+    // The clipboard is shared, so notes paste into another roll.
+    audio_effect::PianoRollEditor other;
+    other.Paste(1.0f);
+    CHECK_EQ(other.GetNotes().size(), static_cast<size_t>(2));
+}
+
+TEST(piano_roll_seconds_follow_the_tempo_map) {
+    audio_effect::PianoRollEditor roll;
+    CHECK_NEAR(roll.SecondsAtBeat(4.0f), 2.0f, 1e-6f); // SetTempo's 120 bpm
+    roll.SetTempoMap({{0.0f, 0.5f}, {4.0f, 0.25f}});
+    CHECK_NEAR(roll.SecondsAtBeat(4.0f), 2.0f, 1e-6f);
+    CHECK_NEAR(roll.SecondsAtBeat(6.0f), 2.5f, 1e-6f);
+    CHECK_NEAR(roll.BeatAtSeconds(1.0f), 2.0f, 1e-6f);
+    CHECK_NEAR(roll.BeatAtSeconds(2.5f), 6.0f, 1e-6f);
 }
 
 TEST(mixer_dsp_averages_sources) {

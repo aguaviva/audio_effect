@@ -10,6 +10,74 @@
 #include "ui/message_box.hpp"
 #include "inst-piano.h"
 
+namespace {
+
+// Calls meta(tick, type, data, length) for each meta event in a track chunk's events.
+template <typename F>
+void for_each_meta(const uint8_t* p, const uint8_t* end, F meta) {
+    auto read_var = [&](uint32_t& out) {
+        out = 0;
+        for (int i = 0; i < 4 && p < end; ++i) {
+            const uint8_t byte = *p++;
+            out = (out << 7) | (byte & 0x7f);
+            if (!(byte & 0x80)) {
+                return true;
+            }
+        }
+        return false;
+    };
+    uint32_t tick = 0;
+    uint8_t running = 0;
+    while (p < end) {
+        uint32_t delta = 0;
+        if (!read_var(delta) || p >= end) {
+            return;
+        }
+        tick += delta;
+        const uint8_t status = *p;
+        if (status == 0xFF || status == 0xF0 || status == 0xF7) {
+            ++p;
+            uint8_t type = 0;
+            if (status == 0xFF) {
+                if (p >= end) {
+                    return;
+                }
+                type = *p++;
+            }
+            uint32_t length = 0;
+            if (!read_var(length) || length > static_cast<size_t>(end - p)) {
+                return;
+            }
+            if (status == 0xFF) {
+                meta(tick, type, p, length);
+            }
+            p += length;
+            continue;
+        }
+        if (status & 0x80) {
+            running = status;
+            ++p;
+        } else if (!running) {
+            return;
+        }
+        const int type = running >> 4;
+        p += (type == 0xC || type == 0xD) ? 1 : 2;
+    }
+}
+
+std::string printable(const uint8_t* data, uint32_t length) {
+    std::string out;
+    for (uint32_t i = 0; i < length; ++i) {
+        if (data[i] >= 0x20 && data[i] != 0x7f) {
+            out += static_cast<char>(data[i]);
+        }
+    }
+    const size_t first = out.find_first_not_of(' ');
+    return first == std::string::npos ? std::string() : out.substr(first, out.find_last_not_of(' ') - first + 1);
+}
+
+} // namespace
+
 void Midi::get_outputs(int* count, const char* const** str) const {
     static const char* names[] = {"track 1", "track 2", "track 3", "track 4", "track 5", "track 6", "track 7", "track 8", "track 9", "track 10"};
     static_assert(std::size(names) == kTracks, "one name per track");
@@ -37,12 +105,59 @@ bool Midi::set_path(const std::string& path) {
         midi_song.pFunc[t] = [inst](uint8_t* pdata, size_t size) { inst->send_midi(pdata, size); };
     }
 
+    // The sequencer keeps neither track names nor a song-wide time signature and tempo map,
+    // so read them from the events. The first time signature, usually the first track's,
+    // applies to every track.
+    const uint32_t tpq = std::max<uint32_t>(1, midi_song.m_midi_state.m_ticksPerQuarterNote);
+    int numerator = 4;
+    int denominator = 4;
+    bool have_signature = false;
+    std::vector<std::pair<uint32_t, uint32_t>> tempos; // tick, microseconds per quarter note
+    for (uint32_t t = 0; t < midi_song.GetTrackCount(); t++) {
+        const MidiTrack* mt = midi_song.GetTrack(t);
+        std::string name;
+        for_each_meta(mt->m_pTrackIni, mt->m_pTrackFin,
+                      [&](uint32_t tick, uint8_t type, const uint8_t* data, uint32_t length) {
+            if (type == 0x03 && name.empty()) {
+                name = printable(data, length);
+            } else if (type == 0x58 && length >= 2 && !have_signature) {
+                numerator = data[0];
+                denominator = 1 << std::min<int>(data[1], 5);
+                have_signature = true;
+            } else if (type == 0x51 && length >= 3) {
+                tempos.emplace_back(tick, (data[0] << 16) | (data[1] << 8) | data[2]);
+            }
+        });
+        if (t < static_cast<uint32_t>(kTracks)) {
+            track_names_[t] = name;
+        }
+    }
+    std::stable_sort(tempos.begin(), tempos.end(),
+                     [](const auto& a, const auto& b) { return a.first < b.first; });
+    // Beats last as long as the sequencer plays them: it rounds tempo down to whole
+    // microseconds per tick, and plays at 110 bpm until a file sets a tempo.
+    auto seconds_per_beat = [tpq](uint32_t us_per_quarter) {
+        return static_cast<float>(std::max<uint32_t>(1, us_per_quarter / tpq) * tpq / 1.0e6);
+    };
+    std::vector<audio_effect::TempoChange> tempo_map;
+    if (tempos.empty() || tempos.front().first > 0) {
+        tempo_map.push_back({0.0f, seconds_per_beat(60000000 / 110)});
+    }
+    for (const auto& [tick, us_per_quarter] : tempos) {
+        tempo_map.push_back({static_cast<float>(tick) / tpq, seconds_per_beat(us_per_quarter)});
+    }
+
     // Notes for the piano rolls: a note-on opens a note, the next note-off of that key and
     // channel (or note-on with velocity 0) closes it.
-    const float ticks_per_beat =
-        static_cast<float>(std::max<uint32_t>(1, midi_song.m_midi_state.m_ticksPerQuarterNote));
+    const float ticks_per_beat = static_cast<float>(tpq);
     for (int t = 0; t < kTracks; t++) {
         piano_rolls_[t].ClearNotes();
+        piano_rolls_[t].SetTimeSignature(numerator, denominator);
+        piano_rolls_[t].SetTempoMap(tempo_map);
+        if (t >= static_cast<int>(tracks)) {
+            track_names_[t].clear();
+            piano_roll_open_[t] = false;
+        }
     }
     for (uint32_t t = 0; t < tracks; t++) {
         MidiTrack* mt = midi_song.GetTrack(t);
@@ -82,6 +197,7 @@ bool Midi::set_path(const std::string& path) {
                 }
             }
         }
+        roll.FrameNotes();
     }
     rewind();
     return true;
@@ -175,12 +291,27 @@ bool Midi::render() {
         ImGui::PopTextWrapPos();
     }
     transport();
-    for (int channel = 0; channel < kTracks; ++channel) {
-        ImGui::PushID(channel);
-        ImGui::Text("Channel %d", channel + 1);
-        ImGui::SameLine();
-        if (ImGui::SmallButton(piano_roll_open_[channel] ? "Hide Piano Roll" : "Open Piano Roll")) {
-            piano_roll_open_[channel] = !piano_roll_open_[channel];
+    const int tracks = std::min<int>(kTracks, static_cast<int>(midi_song.GetTrackCount()));
+    // One button per track, lit while its piano roll is open; the node is too narrow for more.
+    for (int t = 0; t < tracks; ++t) {
+        ImGui::PushID(t);
+        const std::string& name = track_names_[t];
+        char label[96];
+        std::snprintf(label, sizeof(label), "%d %s###roll", t + 1,
+                      name.empty() ? "Track" : name.c_str());
+        const bool open = piano_roll_open_[t];
+        if (open) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        if (ImGui::SmallButton(label)) {
+            piano_roll_open_[t] = !open;
+        }
+        if (open) {
+            ImGui::PopStyleColor();
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Track %d%s%s\nClick to %s its piano roll", t + 1,
+                              name.empty() ? "" : ": ", name.c_str(), open ? "hide" : "show");
         }
         ImGui::PopID();
     }
@@ -193,18 +324,12 @@ void Midi::render_window() {
             continue;
         }
 
-        char title[96];
-        std::snprintf(title, sizeof(title), "Piano Roll - Channel %d###midi_piano_%p_%d",
-                      channel + 1, static_cast<void*>(this), channel);
+        const std::string& name = track_names_[channel];
+        char title[192];
+        std::snprintf(title, sizeof(title), "Piano Roll - Track %d%s%s###midi_piano_%p_%d",
+                      channel + 1, name.empty() ? "" : ": ", name.c_str(),
+                      static_cast<void*>(this), channel);
         ImGui::SetNextWindowSize(ImVec2(1000.0f, 600.0f), ImGuiCond_FirstUseEver);
-        if (channel < static_cast<int>(midi_song.GetTrackCount())) {
-            MidiTrack* track = midi_song.GetTrack(static_cast<uint32_t>(channel));
-            if (track) {
-                piano_rolls_[channel].SetTimeSignature(
-                    static_cast<int>(track->m_timesignatureNum),
-                    static_cast<int>(track->m_timesignatureDen));
-            }
-        }
         if (ImGui::Begin(title, &piano_roll_open_[channel])) {
             transport();
             ImGui::SameLine();

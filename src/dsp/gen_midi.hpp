@@ -31,6 +31,7 @@ public:
     // Back to the start of the song, silencing held notes.
     void rewind();
     const audio_effect::PianoRollEditor& piano_roll(int track) const { return piano_rolls_[track]; }
+    const std::string& track_name(int track) const { return track_names_[track]; }
 
     std::string name() const override { return "midi"; }
     void get_inputs(int *count, const char* const** str) const override { *count=0; *str=nullptr; }
@@ -55,6 +56,7 @@ private:
     std::array<Instrument *, kTracks> instruments_{};
     std::array<audio_effect::PianoRollEditor, kTracks> piano_rolls_;
     std::array<bool, kTracks> piano_roll_open_{};
+    std::array<std::string, kTracks> track_names_;
     bool follow_playhead_ = true;
 
     // Playback position, advanced by process(). The sequencer jumps its tick to the next event
