@@ -23,7 +23,6 @@
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
 #include "dsp/gen_midi.hpp"
-#include "nodes/clip_timeline.hpp"
 #include "nodes/multi_wav_generator.hpp"
 
 namespace {
@@ -55,7 +54,6 @@ const std::vector<NodeKind>& node_kinds() {
         {"Midi Generator", "Sources", make<Midi>},
         {"White Noise", "Sources", make<WhiteNoise>},
         {"Multi WAV", "Sources", make<MultiWavGenerator>},
-        {"Clip Timeline", "Sources", make<ClipTimeline>},
         {"Echo", "Effects", make<EchoEffect>},
         {"Preamp", "Effects", make<Preamp>},
         {"High-Pass Filter", "Effects", make<DynamicHighPassFilter>},

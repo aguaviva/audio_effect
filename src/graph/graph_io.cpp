@@ -1,6 +1,7 @@
 #include "graph_io.hpp"
 
 #include "dsp/module_json.hpp"
+#include "legacy_patch.hpp"
 #include "model/tempo_grid.hpp"
 #include "node_registry.hpp"
 #include "pins.hpp"
@@ -59,6 +60,10 @@ bool parse_node(const std::string& json, GraphNode& node, std::string& error) {
     }
     if (node.id <= 0) {
         error = "Node missing id";
+        return false;
+    }
+    if (!legacy_patch::migrate_node(type, params)) {
+        error = "Invalid params on node " + std::to_string(node.id);
         return false;
     }
     node.module = make_module(type);

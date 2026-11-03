@@ -19,7 +19,6 @@
 #include "model/clip_snap.hpp"
 #include "model/tempo_grid.hpp"
 #include "model/waveform_peaks.hpp"
-#include "nodes/clip_timeline.hpp"
 #include "nodes/multi_wav_generator.hpp"
 #include "graph/audio_graph.hpp"
 #include "graph/graph_processor.hpp"
@@ -49,6 +48,7 @@ TEST(registry_resolves_module_names_and_pins) {
         CHECK(module->name() == name);
     }
     CHECK(make_module("not_a_module") == nullptr);
+    CHECK(make_module("timeline") == nullptr); // Clip Timeline patches load as Multi WAV
     CHECK_EQ(make_module("white_noise")->input_count(), 0);
     CHECK_EQ(make_module("dry_wet_mix")->input_count(), 2);
     CHECK_EQ(make_module("output")->output_count(), 0);
@@ -59,7 +59,7 @@ TEST(registry_resolves_module_names_and_pins) {
     CHECK(!make_module("mixer")->bypassable());
     CHECK(!make_module("dry_wet_mix")->bypassable());
     CHECK(make_module("preamp")->bypassable());
-    for (const char* name : {"white_noise", "wav_player", "chord_generator", "audio_input", "timeline",
+    for (const char* name : {"white_noise", "wav_player", "chord_generator", "audio_input",
                              "multi_wav"}) {
         CHECK(!make_module(name)->bypassable());
     }
@@ -237,9 +237,9 @@ TEST(waveform_peaks_match_a_direct_scan) {
 }
 
 TEST(timeline_plays_a_clip_from_where_it_is_placed) {
-    ClipTimeline timeline;
-    CHECK(timeline.load(std::string("{\"track3_path\":\"") + kDefaultWavPath +
-                        "\",\"track3_start\":1000}"));
+    MultiWavGenerator timeline;
+    CHECK(timeline.load(std::string("{\"channels\":6,\"channel3_clips\":[{\"path\":\"") +
+                        kDefaultWavPath + "\",\"start\":1000}]}"));
     std::string error;
     auto clip = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
     CHECK(clip != nullptr);
@@ -290,8 +290,8 @@ TEST(timeline_track_holds_trimmed_clips_from_several_files) {
     auto a = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
     auto b = WavGenerator::load("assets/audio/rhythm.wav", kSampleRate, error);
     CHECK(a != nullptr && b != nullptr);
-    ClipTimeline timeline;
-    CHECK(timeline.load("{}"));
+    MultiWavGenerator timeline;
+    CHECK(timeline.load("{\"channels\":6}"));
     ClipArrangement& tracks = timeline.arrangement();
     CHECK_EQ(add_file(timeline, 0, kDefaultWavPath, 0), 0);
     CHECK_EQ(add_file(timeline, 0, "assets/audio/rhythm.wav", 3000), 1);
@@ -348,10 +348,10 @@ TEST(timeline_track_holds_trimmed_clips_from_several_files) {
         CHECK_EQ(track5[2 * f], 0.0f);
     }
 
-    // Saved and loaded, trims and all; the old one-clip keys are not written.
+    // Saved and loaded, trims and all.
     const std::string saved = timeline.save();
-    CHECK(saved.find("track1_path") == std::string::npos);
-    ClipTimeline loaded;
+    CHECK(saved.find("\"channel1_clips\"") != std::string::npos);
+    MultiWavGenerator loaded;
     CHECK(loaded.load(saved));
     const ClipArrangement& again = loaded.arrangement();
     CHECK_EQ(again.clips(0).size(), static_cast<size_t>(2));
@@ -362,8 +362,8 @@ TEST(timeline_track_holds_trimmed_clips_from_several_files) {
     CHECK_EQ(again.clips(4)[0].frames(), static_cast<int64_t>(1500));
 
     // A missing file keeps its clip, so saving again does not drop it.
-    ClipTimeline missing;
-    CHECK(missing.load(R"({"track2_clips":[{"path":"assets/audio/gone.wav","start":7,"offset":3,"length":9}]})"));
+    MultiWavGenerator missing;
+    CHECK(missing.load(R"({"channel2_clips":[{"path":"assets/audio/gone.wav","start":7,"offset":3,"length":9}]})"));
     CHECK_EQ(missing.arrangement().clips(1).size(), static_cast<size_t>(1));
     CHECK_EQ(missing.arrangement().clips(1)[0].frames(), static_cast<int64_t>(0));
     CHECK(!missing.arrangement().error(1).empty());

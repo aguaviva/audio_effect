@@ -4,9 +4,11 @@
 #include "dsp/preamp.hpp"
 #include "dsp/wav_player.hpp"
 #include "graph/graph_io.hpp"
+#include "nodes/multi_wav_generator.hpp"
 #include "model/tempo_grid.hpp"
 #include "paths.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -253,4 +255,74 @@ TEST(graph_io_saves_the_song_grid) {
         {"id":1,"type":"nope","x":0,"y":0}],"links":[]})", error));
     CHECK_EQ(song_grid().numerator(), 3);
     song_grid() = TempoGrid{};
+}
+
+TEST(graph_io_converts_clip_timelines_to_multi_wav) {
+    // A patch saved with the Clip Timeline: track 1 holds a trimmed clip and a whole file,
+    // track 3 uses the one-file keys from before tracks held several clips, and three of its
+    // pins are linked.
+    const std::string wav = kDefaultWavPath;
+    const std::string text = R"({"version":2,"nodes":[
+        {"id":7,"type":"timeline","x":120.5,"y":64,"params":{"bypassed":true,"cursor":0,
+            "track1_clips":[{"path":")" + wav + R"(","start":100,"offset":50,"length":400},
+                            {"path":"assets/audio/rhythm.wav","start":9000,"offset":0}],
+            "track3_path":")" + wav + R"(","track3_start":2500,
+            "track6_clips":[{"path":"assets/audio/gone.wav","start":7,"offset":3,"length":9}]}},
+        {"id":2,"type":"mixer","x":400,"y":0,"params":{}},
+        {"id":3,"type":"output","x":600,"y":0,"params":{}}],
+        "links":[{"id":1,"from":7,"from_slot":0,"to":2,"to_slot":0},
+                 {"id":2,"from":7,"from_slot":2,"to":2,"to_slot":1},
+                 {"id":3,"from":7,"from_slot":5,"to":2,"to_slot":2},
+                 {"id":4,"from":2,"from_slot":0,"to":3,"to_slot":0}]})";
+    AudioGraph g;
+    std::string error;
+    CHECK(graph_io::deserialize(g, text, error));
+    const GraphNode* node = g.find_node(7);
+    CHECK(node != nullptr);
+    CHECK(node->module->name() == "multi_wav");
+    CHECK_NEAR(node->x, 120.5f, 1e-6f);
+    CHECK_NEAR(node->y, 64.0f, 1e-6f);
+    CHECK(node->bypassed);
+    auto* wavs = node->as<MultiWavGenerator>();
+    CHECK(wavs != nullptr);
+    CHECK_EQ(wavs->channel_count(), 6);
+    CHECK_EQ(wavs->output_count(), 6);
+
+    const ClipArrangement& clips = wavs->arrangement();
+    CHECK_EQ(clips.clips(0).size(), static_cast<size_t>(2));
+    CHECK(clips.clips(0)[0].path == wav);
+    CHECK_EQ(clips.clips(0)[0].start, static_cast<int64_t>(100));
+    CHECK_EQ(clips.clips(0)[0].offset, static_cast<int64_t>(50));
+    CHECK_EQ(clips.clips(0)[0].frames(), static_cast<int64_t>(400));
+    CHECK_EQ(clips.clips(0)[1].start, static_cast<int64_t>(9000));
+    CHECK_EQ(clips.clips(0)[1].length, static_cast<int64_t>(-1));
+    CHECK(clips.clips(1).empty());
+    CHECK_EQ(clips.clips(2).size(), static_cast<size_t>(1));
+    CHECK_EQ(clips.clips(2)[0].start, static_cast<int64_t>(2500));
+    CHECK_EQ(clips.clips(2)[0].offset, static_cast<int64_t>(0));
+    // A missing file keeps its clip.
+    CHECK_EQ(clips.clips(5).size(), static_cast<size_t>(1));
+    CHECK_EQ(clips.clips(5)[0].length, static_cast<int64_t>(9));
+
+    // Every link from its pins survives, on the same pins.
+    CHECK_EQ(g.links().size(), static_cast<size_t>(4));
+    for (int slot : {0, 2, 5}) {
+        CHECK(std::any_of(g.links().begin(), g.links().end(), [&](const GraphLink& l) {
+            return l.from_node == 7 && l.from_slot == slot;
+        }));
+    }
+
+    // Saved as a Multi WAV, which loads the same.
+    const std::string saved = graph_io::serialize(g);
+    CHECK(saved.find("\"timeline\"") == std::string::npos);
+    CHECK(saved.find("\"multi_wav\"") != std::string::npos);
+    CHECK(saved.find("track1_clips") == std::string::npos);
+    AudioGraph again;
+    CHECK(graph_io::deserialize(again, saved, error));
+    const auto* reloaded = again.find_node(7)->as<MultiWavGenerator>();
+    CHECK(reloaded != nullptr);
+    CHECK_EQ(reloaded->channel_count(), 6);
+    CHECK_EQ(reloaded->arrangement().clips(0)[0].offset, static_cast<int64_t>(50));
+    CHECK_EQ(reloaded->arrangement().clips(2)[0].start, static_cast<int64_t>(2500));
+    CHECK_EQ(again.links().size(), static_cast<size_t>(4));
 }

@@ -17,19 +17,12 @@ const char* const kChannelPins[] = {"ch 1",  "ch 2",  "ch 3",  "ch 4",  "ch 5", 
                                     "ch 13", "ch 14", "ch 15", "ch 16"};
 static_assert(std::size(kChannelPins) == MultiWavGenerator::kMaxChannels, "one name per pin");
 
+constexpr const char* kPrefix = "channel"; // "channelN_clips" in the JSON
+
 } // namespace
 
 MultiWavGenerator::MultiWavGenerator()
-    : MultiWavGenerator(kDefaultChannels, false, "channel", "Channel", kChannelPins) {}
-
-MultiWavGenerator::MultiWavGenerator(int channels, bool fixed, const char* prefix,
-                                     const char* lane_name, const char* const* pin_names)
-    : fixed_(fixed),
-      prefix_(prefix),
-      lane_name_(lane_name),
-      pin_names_(pin_names),
-      arrangement_(std::clamp(channels, 1, kMaxChannels)),
-      outputs_(arrangement_.channel_count()) {
+    : arrangement_(kDefaultChannels), outputs_(arrangement_.channel_count()) {
     sync();
 }
 
@@ -40,13 +33,10 @@ void MultiWavGenerator::get_inputs(int* count, const char* const** str) const {
 
 void MultiWavGenerator::get_outputs(int* count, const char* const** str) const {
     *count = outputs_.load(std::memory_order_relaxed);
-    *str = pin_names_;
+    *str = kChannelPins;
 }
 
 void MultiWavGenerator::set_channel_count(int channels) {
-    if (fixed_) {
-        return;
-    }
     arrangement_.set_channel_count(std::clamp(channels, 1, kMaxChannels));
     outputs_.store(arrangement_.channel_count(), std::memory_order_relaxed);
     sync();
@@ -72,21 +62,17 @@ void MultiWavGenerator::sync() {
 
 std::string MultiWavGenerator::save() const {
     std::string out = "{";
-    if (!fixed_) {
-        module_json::write_int(out, "channels", arrangement_.channel_count());
-    }
-    arrangement_.save_members(out, prefix_);
+    module_json::write_int(out, "channels", arrangement_.channel_count());
+    arrangement_.save_members(out, kPrefix);
     out += '}';
     return out;
 }
 
 bool MultiWavGenerator::load(const std::string& json) {
-    if (!fixed_) {
-        int channels = arrangement_.channel_count();
-        module_json::read(json, "channels", channels);
-        set_channel_count(channels);
-    }
-    arrangement_.load_members(json, prefix_, library_);
+    int channels = arrangement_.channel_count();
+    module_json::read(json, "channels", channels);
+    set_channel_count(channels);
+    arrangement_.load_members(json, kPrefix, library_);
     sync();
     return true;
 }
@@ -94,20 +80,18 @@ bool MultiWavGenerator::load(const std::string& json) {
 bool MultiWavGenerator::render() {
     bool changed = false;
     transport_controls(true);
-    if (!fixed_) {
-        int channels = arrangement_.channel_count();
-        ImGui::AlignTextToFramePadding();
-        ImGui::TextUnformatted("Channels");
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x));
-        if (ImGui::InputInt("##channels", &channels)) {
-            set_channel_count(channels);
-            changed = true;
-        }
-        if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("One output pin and timeline lane per channel. Removing channels "
-                              "drops their clips and links.");
-        }
+    int channels = arrangement_.channel_count();
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted("Channels");
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x));
+    if (ImGui::InputInt("##channels", &channels)) {
+        set_channel_count(channels);
+        changed = true;
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("One output pin and timeline lane per channel. Removing channels "
+                          "drops their clips and links.");
     }
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x);
     ImGui::TextDisabled("Right-click a lane in View > Timeline to load a WAV");
@@ -130,7 +114,7 @@ bool MultiWavGenerator::render_timeline(Timeline& timeline, const char* title) {
                        "paste.\nCtrl+C / X / V / D copy, cut, paste at the mouse and duplicate; "
                        "Delete removes.",
                        note);
-    editor_.draw(timeline, arrangement_, lane_name_);
+    editor_.draw(timeline, arrangement_, "Channel");
     sync();
     return true;
 }

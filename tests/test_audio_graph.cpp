@@ -77,16 +77,16 @@ TEST(audio_graph_compile_gives_every_link_its_own_buffer) {
 TEST(audio_graph_links_leave_from_output_slots) {
     AudioGraph g;
     g.clear();
-    const int timeline = g.add_node("timeline", 0, 0);
+    const int timeline = g.add_node("multi_wav", 0, 0);
     const int out = g.add_node("output", 0, 0);
     const int fx = g.add_node("preamp", 0, 0);
-    CHECK(g.add_link(timeline, 4, out, 0));
-    CHECK(!g.add_link(timeline, 6, fx, 0)); // no seventh track
+    CHECK(g.add_link(timeline, 3, out, 0));
+    CHECK(!g.add_link(timeline, 4, fx, 0)); // four channels to start with
     auto compiled = g.compile();
     const auto& node = *std::find_if(compiled->order.begin(), compiled->order.end(),
                                      [&](const CompiledGraph::Node& n) { return n.id == timeline; });
     CHECK_EQ(static_cast<int>(node.outputs.size()), 1);
-    CHECK_EQ(node.outputs[0].from_slot, 4);
+    CHECK_EQ(node.outputs[0].from_slot, 3);
 }
 
 TEST(audio_graph_mixer_auto_pins) {

@@ -18,7 +18,7 @@ This project models a small set of pedal-style effects; it is not an amplifier o
 
 ### Sources / generators
 
-The WAV Player, Midi Generator, Multi WAV and Clip Timeline share one transport: Play/Pause and Stop on any of them (or in the timeline) start, pause or rewind them all together, and they stay in step. The Chord Generator and White Noise have a play/pause button of their own.
+The WAV Player, Midi Generator and Multi WAV share one transport: Play/Pause and Stop on any of them (or in the timeline) start, pause or rewind them all together, and they stay in step. The Chord Generator and White Noise have a play/pause button of their own.
 
 - **Audio Input** — live capture
 - **WAV Player** — plays its own WAV file from the start of the transport (loop optional), with a progress bar that seeks; a missing file plays silence
@@ -26,9 +26,8 @@ The WAV Player, Midi Generator, Multi WAV and Clip Timeline share one transport:
 - **White Noise**
 - **Midi Generator** — plays a MIDI file, one piano and output pin per track (up to 10); each track's piano roll shows the notes and a playhead that follows playback (optionally scrolling with it). Tracks are listed by name; a roll opens scrolled to its notes, with bar numbers and seconds (following the song's tempo map) on its ruler. Dragging a selected note moves or resizes the whole selection; Ctrl+C / X / V / D copy, cut, paste at the mouse, and duplicate (the clipboard is shared between tracks)
 - **Multi WAV** — WAV clips on channels, one output pin and one timeline lane per channel (4 to start with, up to 16; **Channels** on the node adds or removes them, and links from removed pins are dropped). A channel holds any number of clips, from any files, mixed where they overlap. In the timeline, right-click a lane to **Load WAV…** at that point (snapped to the grid) or paste; drag a clip to move it and its left or right edge to trim it, without changing the file; Ctrl+C / X / V / D copy, cut, paste at the mouse and duplicate, and Delete removes, as in the piano roll. The clipboard is shared by every lane and node
-- **Clip Timeline** — the first version of Multi WAV, kept so patches that use it load: six fixed channels called tracks, edited the same way
 
-**View > Timeline** opens a zoomable timeline with a track for every source: waveforms for the WAV Player (repeated while it loops) and the Clip Timeline, the notes of each Midi Generator track (its name opens the piano roll), and a band for the others. One cursor across all the tracks shows the transport as the audio device hears it: it follows the samples the playback device has taken, not the sources' render position, which runs a few blocks ahead in the output queue (so it also stops while the device stalls). The piano roll playheads, the WAV Player's progress bar and the time readouts use the same position. Press the ruler or any track to move it there, and Space plays and pauses. **View > Timeline Tracks** shows or hides each source's tracks.
+**View > Timeline** opens a zoomable timeline with a track for every source: waveforms for the WAV Player (repeated while it loops) and each Multi WAV channel, the notes of each Midi Generator track (its name opens the piano roll), and a band for the others. One cursor across all the tracks shows the transport as the audio device hears it: it follows the samples the playback device has taken, not the sources' render position, which runs a few blocks ahead in the output queue (so it also stops while the device stalls). The piano roll playheads, the WAV Player's progress bar and the time readouts use the same position. Press the ruler or any track to move it there, and Space plays and pauses. **View > Timeline Tracks** shows or hides each source's tracks.
 
 The song grid is one time signature and tempo map for the project, 4/4 at 120 bpm to start with. The timeline's toolbar shows and edits it, with the snap division (1, 1/2, 1/3, 1/4, 1/6 or 1/8 of a beat). The ruler counts bars and beats on it; WAV clips snap to it when they are loaded, moved, trimmed and pasted (to another clip's edge instead when that is nearer, within a few pixels), and piano roll notes snap to its division. Loading a MIDI file sets the grid's time signature and tempo map from the file. Editing the tempo moves the grid only: the MIDI file still plays at its own tempo.
 
@@ -89,7 +88,9 @@ You can delete links/nodes, add stages from the context menu, and rewire arbitra
 - `links[]`: `id`, `from`, `from_slot` (output pin, 0 when missing), `to`, `to_slot`
 - `grid` (optional): the song grid, `{"numerator":3,"denominator":4,"division":4,"tempo":[{"beat":0,"bpm":120}]}`. A patch without one gets the default grid, or the grid of a MIDI file it loads; a saved grid wins over the MIDI file's.
 
-WAV clips are saved per channel, `"channelN_clips":[{"path":…,"start":…,"offset":…,"length":…}]` for Multi WAV (with `"channels"`) and `"trackN_clips"` for Clip Timeline, in frames at 48 kHz; `length` is left out for a clip that plays to the end of its file. Clip Timeline patches from before a track held several clips (`trackN_path`, `trackN_start`) load as one whole file per track.
+A Multi WAV saves `"channels"` and its clips per channel, `"channelN_clips":[{"path":…,"start":…,"offset":…,"length":…}]`, in frames at 48 kHz; `length` is left out for a clip that plays to the end of its file.
+
+Patches with the Clip Timeline node it replaced (`"type":"timeline"`) still load: each one becomes a Multi WAV with six channels, keeping its id, position, bypass, clips (`trackN_clips`, or `trackN_path` / `trackN_start` from before a track held several clips) and the links from its pins. Saving writes it as a Multi WAV.
 
 Node and link ids must be unique. A new node or link gets the largest existing id + 1.
 Only version 2 files load.
@@ -106,8 +107,9 @@ src/
   audio/pipeline.*         # miniaudio I/O + queues + threads
   audio/sink_clock.*       # moves the transport's cursor as the device takes samples
   graph/                   # graph model, compile, I/O, DSP execution
+  graph/legacy_patch.*     # converts node kinds that no longer exist while a patch loads
   model/                   # UI-thread data: song grid, clip arrangement, WAV library, MIDI import
-  nodes/                   # nodes built from the modules below (Multi WAV, Clip Timeline)
+  nodes/                   # nodes built from the modules below (Multi WAV)
   ui/node_editor_ui.*      # imnodes editor
   ui/timeline*.*           # the timeline and its lane kinds (WAV, notes, band, group title)
   ui/clip_lane_editor.*    # editing WAV clips in timeline lanes

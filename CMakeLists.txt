@@ -75,7 +75,7 @@ set(AUDIO_EFFECT_SOURCES
   src/ui/timeline_group.cpp
   src/ui/clip_lane_editor.cpp
   src/nodes/multi_wav_generator.cpp
-  src/nodes/clip_timeline.cpp
+  src/graph/legacy_patch.cpp
   src/dsp/dry_wet_mix.cpp
   src/dsp/vu_meter.cpp
   src/dsp/oscilloscope.cpp
@@ -210,7 +210,7 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/ui/timeline_group.cpp
     src/ui/clip_lane_editor.cpp
     src/nodes/multi_wav_generator.cpp
-    src/nodes/clip_timeline.cpp
+    src/graph/legacy_patch.cpp
     src/dsp/dry_wet_mix.cpp
     src/dsp/vu_meter.cpp
     src/dsp/oscilloscope.cpp

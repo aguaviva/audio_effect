@@ -13,7 +13,8 @@
 // WAV clips on channels, one output pin per channel, played by the shared transport. Each
 // channel is a lane in the timeline holding any number of clips, from any files, which are
 // placed, trimmed, copied and pasted there. Channels can be added and removed; links from the
-// pins of removed channels are dropped (see AudioGraph::drop_stale_links()).
+// pins of removed channels are dropped (see AudioGraph::drop_stale_links()). Patches with the
+// Clip Timeline it replaces load as a Multi WAV with six channels (see legacy_patch).
 //
 // Lock-free: the UI edits the arrangement and hands the audio thread a copy of it after each
 // change, so the graph never takes this module's control mutex.
@@ -40,22 +41,12 @@ public:
     int channel_count() const { return arrangement_.channel_count(); }
     void set_channel_count(int channels);
     ClipArrangement& arrangement() { return arrangement_; }
+    const ClipArrangement& arrangement() const { return arrangement_; }
     WavLibrary& library() { return library_; }
     // Hands the audio thread the arrangement if it changed since; call after editing it.
     void sync();
 
-protected:
-    // fixed: the channel count cannot be changed from the node. prefix names the channels in
-    // the JSON ("<prefix>N_clips"); pin_names has kMaxChannels entries.
-    MultiWavGenerator(int channels, bool fixed, const char* prefix, const char* lane_name,
-                      const char* const* pin_names);
-
 private:
-    const bool fixed_;
-    const char* const prefix_;
-    const char* const lane_name_;
-    const char* const* const pin_names_;
-
     // UI thread.
     ClipArrangement arrangement_;
     WavLibrary library_{kSampleRate};
