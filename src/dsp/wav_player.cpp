@@ -101,10 +101,12 @@ bool WavPlayer::render_timeline(Timeline& timeline, const char* title) {
     if (shown_clip_ && length_ > 0) {
         timeline.Clip(*shown_clip_, *peaks_, 0.0, kSampleRate);
         if (loop) {
+            ClipStyle repeat;
+            repeat.repeat = true;
             const double seconds = static_cast<double>(length_ / 2) / kSampleRate;
             for (double start = std::max(1.0, std::floor(timeline.VisibleStart() / seconds)) * seconds;
                  start < timeline.VisibleEnd(); start += seconds) {
-                timeline.Clip(*shown_clip_, *peaks_, start, kSampleRate, false, true);
+                timeline.Clip(*shown_clip_, *peaks_, start, kSampleRate, repeat);
             }
         }
     }

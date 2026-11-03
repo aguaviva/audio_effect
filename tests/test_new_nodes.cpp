@@ -262,6 +262,85 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     reset_transport();
 }
 
+TEST(timeline_track_holds_trimmed_clips_from_several_files) {
+    std::string error;
+    auto a = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
+    auto b = WavGenerator::load("assets/audio/rhythm.wav", kSampleRate, error);
+    CHECK(a != nullptr && b != nullptr);
+    ClipTimeline timeline;
+    CHECK(timeline.load("{}"));
+    CHECK_EQ(timeline.add_clip(0, kDefaultWavPath, 0, error), 0);
+    CHECK_EQ(timeline.add_clip(0, "assets/audio/rhythm.wav", 3000, error), 1);
+    CHECK_EQ(timeline.add_clip(0, "assets/audio/does_not_exist.wav", 0, error), -1);
+    CHECK(!error.empty());
+    CHECK_EQ(timeline.clips(0).size(), static_cast<size_t>(2));
+
+    // Trimming moves the bounds into the file; the clip keeps its place in time.
+    timeline.trim_start(0, 0, 500);
+    timeline.trim_end(0, 0, 2000);
+    const ClipTimeline::Clip& first = timeline.clips(0)[0];
+    CHECK_EQ(first.start, static_cast<int64_t>(500));
+    CHECK_EQ(first.offset, static_cast<int64_t>(500));
+    CHECK_EQ(first.frames(), static_cast<int64_t>(1500));
+    // Neither edge goes past the file, and a clip keeps at least a frame.
+    timeline.trim_start(0, 0, 0);
+    CHECK_EQ(timeline.clips(0)[0].offset, static_cast<int64_t>(0));
+    timeline.trim_start(0, 0, 5000);
+    CHECK_EQ(timeline.clips(0)[0].frames(), static_cast<int64_t>(1));
+    timeline.trim_start(0, 0, 500);
+    timeline.trim_end(0, 1, 1 << 30);
+    CHECK_EQ(timeline.clips(0)[1].frames(), static_cast<int64_t>(b->interleaved_stereo.size() / 2));
+    timeline.trim_end(0, 1, 3100);
+
+    // A copy pasted on another track keeps the trim.
+    timeline.copy_clip(0, 0);
+    CHECK(ClipTimeline::can_paste());
+    CHECK_EQ(timeline.paste(4, 10000), 0);
+    CHECK_EQ(timeline.clips(4)[0].offset, static_cast<int64_t>(500));
+    CHECK_EQ(timeline.clips(4)[0].frames(), static_cast<int64_t>(1500));
+
+    reset_transport();
+    constexpr size_t kBlock = 2 * 4096;
+    std::vector<float> track1(kBlock, 1.0f);
+    std::vector<float> track5(kBlock, 1.0f);
+    timeline.set_output_buffer(0, track1.data());
+    timeline.set_output_buffer(4, track5.data());
+    run_block(timeline, kBlock);
+    for (size_t f = 0; f < kBlock / 2; ++f) {
+        float want = 0.0f;
+        if (f >= 500 && f < 2000) {
+            want = a->interleaved_stereo[2 * f];
+        } else if (f >= 3000 && f < 3100) {
+            want = b->interleaved_stereo[2 * (f - 3000)];
+        }
+        CHECK_EQ(track1[2 * f], want);
+        CHECK_EQ(track5[2 * f], 0.0f);
+    }
+
+    // Saved and loaded, trims and all; the old one-clip keys are not written.
+    const std::string saved = timeline.save();
+    CHECK(saved.find("track1_path") == std::string::npos);
+    ClipTimeline loaded;
+    CHECK(loaded.load(saved));
+    CHECK_EQ(loaded.clips(0).size(), static_cast<size_t>(2));
+    CHECK(loaded.clips(0)[1].path == "assets/audio/rhythm.wav");
+    CHECK_EQ(loaded.clips(0)[1].start, static_cast<int64_t>(3000));
+    CHECK_EQ(loaded.clips(0)[1].frames(), static_cast<int64_t>(100));
+    CHECK_EQ(loaded.clips(4)[0].offset, static_cast<int64_t>(500));
+    CHECK_EQ(loaded.clips(4)[0].frames(), static_cast<int64_t>(1500));
+
+    // A missing file keeps its clip, so saving again does not drop it.
+    ClipTimeline missing;
+    CHECK(missing.load(R"({"track2_clips":[{"path":"assets/audio/gone.wav","start":7,"offset":3,"length":9}]})"));
+    CHECK_EQ(missing.clips(1).size(), static_cast<size_t>(1));
+    CHECK_EQ(missing.clips(1)[0].frames(), static_cast<int64_t>(0));
+    CHECK(missing.save().find("\"length\":9") != std::string::npos);
+
+    timeline.remove_clip(0, 0);
+    CHECK_EQ(timeline.clips(0).size(), static_cast<size_t>(1));
+    reset_transport();
+}
+
 TEST(midi_playhead_follows_rendered_samples) {
     // One track named "Lead" in 3/4 at 120 bpm, 480 ticks a beat: C4 for beat 0, D4 for
     // beat 1, partly in running status.

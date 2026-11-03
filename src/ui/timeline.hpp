@@ -4,6 +4,7 @@
 #include "imgui.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,18 @@ struct WaveformPeaks {
 
 // Play/Pause, Stop (back to the start) and the time, for the shared transport.
 void transport_controls(bool small = false);
+
+// The part of a WAV a timeline clip shows, and how it looks.
+struct ClipStyle {
+    size_t offset = 0;          // first frame of the file shown
+    size_t length = SIZE_MAX;   // frames shown, at most to the end of the file
+    const char* label = nullptr; // in the clip's top left corner
+    bool highlight = false;     // being dragged
+    bool selected = false;      // outlined
+    // A repeat of a looping clip: it does not lengthen the scroll range, so it can be drawn
+    // over whatever is visible.
+    bool repeat = false;
+};
 
 // A note on a timeline track, in seconds.
 struct TimelineNote {
@@ -58,10 +71,9 @@ public:
     // One line of text: a row naming the tracks under it.
     static float TitleHeight() { return ImGui::GetTextLineHeight() + 8.0f; }
 
-    // Content of the current track's lane. A repeat does not lengthen the scroll range, so a
-    // looping clip can be drawn over whatever is visible.
+    // Content of the current track's lane.
     void Clip(const WavClip& clip, const WaveformPeaks& peaks, double start, double sample_rate,
-              bool highlight = false, bool repeat = false);
+              const ClipStyle& style = {});
     // Notes on a block from start to end, scaled to the lane's height; those under the cursor
     // are lit.
     void Notes(const std::vector<TimelineNote>& notes, double start, double end);
@@ -72,6 +84,7 @@ public:
     // say) claims it, and the cursor stays.
     bool LaneActivated() const { return lane_activated_; }
     bool LaneActive() const { return lane_active_; }
+    bool LaneHovered() const { return lane_hovered_; }
     void ClaimLane() { lane_claimed_ = true; }
     // Time under the mouse, never negative.
     double MouseSeconds() const;
@@ -111,5 +124,6 @@ private:
     ImVec2 lane_max_;
     bool lane_activated_ = false;
     bool lane_active_ = false;
+    bool lane_hovered_ = false;
     bool lane_claimed_ = false;
 };

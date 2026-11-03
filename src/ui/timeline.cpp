@@ -264,6 +264,7 @@ void Timeline::BeginTrack(const char* id, float height) {
     ImGui::InvisibleButton("##lane", ImVec2(std::max(1.0f, lane_max_.x - lane_min_.x), height));
     lane_activated_ = ImGui::IsItemActivated();
     lane_active_ = ImGui::IsItemActive();
+    lane_hovered_ = ImGui::IsItemHovered();
     lane_claimed_ = false;
 
     ImDrawList* draw = ImGui::GetWindowDrawList();
@@ -290,35 +291,48 @@ void Timeline::EndTrack() {
 }
 
 void Timeline::Clip(const WavClip& clip, const WaveformPeaks& peaks, double start,
-                    double sample_rate, bool highlight, bool repeat) {
-    const double frames = static_cast<double>(clip.interleaved_stereo.size() / 2);
-    const double end = start + frames / sample_rate;
-    if (!repeat) {
+                    double sample_rate, const ClipStyle& style) {
+    const size_t file_frames = clip.interleaved_stereo.size() / 2;
+    const size_t offset = std::min(style.offset, file_frames);
+    const int64_t frames = static_cast<int64_t>(std::min(style.length, file_frames - offset));
+    const double end = start + static_cast<double>(frames) / sample_rate;
+    if (!style.repeat) {
         ExtendTo(end);
     }
     ImDrawList* draw = ImGui::GetWindowDrawList();
     const ScopedClip scope(draw, lane_min_, lane_max_, view_min_, view_max_);
     const float x0 = XAt(start);
-    const float x1 = XAt(end);
+    const float x1 = std::max(XAt(end), x0 + 1.0f);
     const float top = lane_min_.y;
     const float height = lane_max_.y - lane_min_.y;
-    draw->AddRectFilled(ImVec2(x0, top + 2.0f), ImVec2(x1, top + height - 3.0f),
-                        highlight ? IM_COL32(70, 110, 170, 255) : kClipBackground, 3.0f);
+    const ImVec2 box_min(x0, top + 2.0f);
+    const ImVec2 box_max(x1, top + height - 3.0f);
+    draw->AddRectFilled(box_min, box_max,
+                        style.highlight ? IM_COL32(70, 110, 170, 255) : kClipBackground, 3.0f);
     const float mid = top + height * 0.5f;
     const float half = height * 0.5f - 4.0f;
     const auto frame_at = [&](float x) {
         return static_cast<int64_t>(std::floor((SecondsAt(x) - start) * sample_rate));
     };
     for (float x = std::floor(std::max(x0, view_min_.x)); x < std::min(x1, view_max_.x); x += 1.0f) {
-        const int64_t begin = frame_at(x);
-        const int64_t stop = frame_at(x + 1.0f);
-        if (stop <= 0) {
+        const int64_t begin = std::max<int64_t>(frame_at(x), 0);
+        const int64_t stop = std::min(frame_at(x + 1.0f), frames);
+        if (stop <= 0 || begin >= frames) {
             continue;
         }
-        const auto [lo, hi] = peaks.range(clip, static_cast<size_t>(std::max<int64_t>(begin, 0)),
-                                          static_cast<size_t>(std::max(stop, begin + 1)));
+        const auto [lo, hi] = peaks.range(clip, offset + static_cast<size_t>(begin),
+                                          offset + static_cast<size_t>(std::max(stop, begin + 1)));
         draw->AddLine(ImVec2(x + 0.5f, mid - hi * half), ImVec2(x + 0.5f, mid - lo * half + 1.0f),
                       kClipForeground);
+    }
+    if (style.label && style.label[0] && x1 - x0 > 24.0f) {
+        draw->PushClipRect(box_min, box_max, true);
+        draw->AddText(ImVec2(std::max(x0, lanes_x_) + 4.0f, top + 3.0f),
+                      IM_COL32(220, 230, 240, 200), style.label);
+        draw->PopClipRect();
+    }
+    if (style.selected) {
+        draw->AddRect(box_min, box_max, IM_COL32(255, 255, 255, 230), 3.0f, 0, 2.0f);
     }
 }
 
