@@ -79,6 +79,8 @@ void render_chunk(GraphProcessor& processor, AudioChunk& chunk, std::vector<floa
     if (!compiled || !processor.process(*compiled, chunk.samples.data(), out.data(), block_size)) {
         std::fill(out.begin(), out.end(), 0.0f);
     }
+    chunk.stamp = compiled ? processor.last_block()
+                           : Transport::Stamp{transport().block_frame(), false};
     for (size_t i = 0; i < block_size; ++i) {
         chunk.samples[i] = std::clamp(out[i], -1.0f, 1.0f);
     }
@@ -121,6 +123,7 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
         }
         pipe->playback_staging.insert(pipe->playback_staging.end(), chunk->samples.begin(),
                                       chunk->samples.end());
+        pipe->playback_clock.queued(chunk->stamp, chunk->samples.size() / CHANNELS);
         // Return buffer to free pool; drop if full (should be rare).
         if (!pipe->free_pool.push(std::move(chunk))) {
             pipe->xrun_count.fetch_add(1, std::memory_order_relaxed);
@@ -132,11 +135,13 @@ void playback_data_callback(ma_device* device, void* output, const void* /*input
         pipe->playback_staging.erase(pipe->playback_staging.begin(),
                                      pipe->playback_staging.begin() +
                                          static_cast<std::ptrdiff_t>(needed));
+        pipe->playback_clock.consumed(frame_count);
     } else {
         const size_t have = pipe->playback_staging.size();
         if (have > 0) {
             std::memcpy(out, pipe->playback_staging.data(), have * sizeof(float));
             pipe->playback_staging.clear();
+            pipe->playback_clock.consumed(have / CHANNELS);
         }
         std::fill(out + have, out + needed, 0.0f);
         pipe->xrun_count.fetch_add(1, std::memory_order_relaxed);
@@ -253,13 +258,19 @@ void offline_processor() {
     std::vector<float> live(block_size, 0.0f);
     std::vector<float> out(block_size, 0.0f);
 
+    // No device takes the blocks, so each counts as played once its period is up.
+    SinkClock sink;
     PeriodClock clock(g_pipeline.period_size);
     while (g_pipeline.running.load(std::memory_order_relaxed)) {
         auto compiled = g_pipeline.graph ? g_pipeline.graph->latest() : nullptr;
+        Transport::Stamp stamp{transport().block_frame(), false};
         if (compiled) {
             processor.process(*compiled, live.data(), out.data(), block_size);
+            stamp = processor.last_block();
         }
+        sink.queued(stamp, g_pipeline.period_size);
         clock.wait_next();
+        sink.consumed(g_pipeline.period_size);
     }
 }
 
@@ -332,6 +343,7 @@ bool AudioPipeline::open_audio(const char* capture_device, const char* playback_
     samples_per_period = period_size * CHANNELS;
     capture_staging.clear();
     playback_staging.clear();
+    playback_clock.clear();
 
     // Drain any leftover free-pool entries from a previous open, then refill.
     while (free_pool.pop()) {
@@ -456,6 +468,7 @@ bool AudioPipeline::set_playback_device(const char* device, std::string& error) 
         playback_ready = false;
     }
     playback_staging.clear();
+    playback_clock.clear();
 
     playback_ready = open_stream(ma_device_type_playback, name, error);
     if (!playback_ready && previous != name) {

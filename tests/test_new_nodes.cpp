@@ -142,7 +142,7 @@ TEST(paused_transport_is_silent_and_resumes_where_it_stopped) {
     for (float s : out) {
         CHECK_EQ(s, 0.0f);
     }
-    CHECK_EQ(transport().position(), static_cast<int64_t>(24000));
+    CHECK_EQ(transport().block_frame(), static_cast<int64_t>(24000));
 
     transport().play();
     run_block(player, out.size());
@@ -159,6 +159,53 @@ TEST(paused_transport_is_silent_and_resumes_where_it_stopped) {
     run_block(player, out.size());
     CHECK(std::equal(out.begin(), out.end(), clip->interleaved_stereo.begin() + 200));
     reset_transport();
+}
+
+TEST(cursor_is_where_the_sink_is_not_where_rendering_is) {
+    reset_transport();
+    transport().set_sink_frame(0);
+    SinkClock sink;
+    const auto render = [&] {
+        transport().begin_block();
+        const Transport::Stamp stamp = transport().block_stamp();
+        transport().end_block(256);
+        sink.queued(stamp, 256);
+    };
+
+    // Three blocks rendered ahead of the device: the cursor has not moved yet.
+    render();
+    render();
+    render();
+    CHECK_EQ(transport().block_frame(), static_cast<int64_t>(768));
+    CHECK_EQ(transport().position(), static_cast<int64_t>(0));
+    // The device takes part of one block, then across the next.
+    sink.consumed(100);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(100));
+    sink.consumed(300);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(400));
+
+    // Paused blocks hold the cursor at the pause, once the device reaches them.
+    transport().pause();
+    render();
+    sink.consumed(368);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(768));
+    sink.consumed(200);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(768));
+
+    // A seek reaches the cursor when the device gets to the first block rendered after it.
+    transport().play();
+    transport().seek(48000);
+    render();
+    CHECK_EQ(transport().position(), static_cast<int64_t>(768));
+    sink.consumed(56 + 10);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(48010));
+    // An underrun takes nothing: the cursor stays.
+    sink.consumed(1000);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(48256));
+    sink.consumed(256);
+    CHECK_EQ(transport().position(), static_cast<int64_t>(48256));
+    reset_transport();
+    transport().set_sink_frame(0);
 }
 
 TEST(waveform_peaks_match_a_direct_scan) {

@@ -23,6 +23,7 @@ struct AudioChunk {
     ~AudioChunk();
 
     std::vector<float> samples; // interleaved stereo
+    Transport::Stamp stamp;     // the transport's position when these samples were rendered
 };
 
 class AudioBufferQueue {
@@ -92,6 +93,7 @@ struct AudioPipeline {
     // Audio-thread staging (only touched from the matching device callback).
     std::vector<float> capture_staging;
     std::vector<float> playback_staging;
+    SinkClock playback_clock; // the stamps of the samples in playback_staging
     std::mutex device_mutex;
 
 private:

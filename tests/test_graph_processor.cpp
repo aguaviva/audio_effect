@@ -268,3 +268,34 @@ TEST(output_mute_and_volume_persist) {
     CHECK(loaded.load(R"({"volume_db":99})"));
     CHECK_NEAR(loaded.volume_db, AudioOutput::kMaxVolumeDb, 1e-5f);
 }
+
+TEST(graph_processor_stamps_each_block_with_the_transport) {
+    AudioGraph g;
+    g.clear();
+    const int in = g.add_node("audio_input", 0, 0);
+    const int out = g.add_node("output", 0, 0);
+    CHECK(g.add_link(in, 0, out, 0));
+    auto compiled = compile_chain(g);
+    constexpr size_t block = 64;
+    std::vector<float> live(block, 0.0f);
+    std::vector<float> output(block, 0.0f);
+    GraphProcessor proc(48000.0f);
+
+    transport().seek(1000);
+    transport().play();
+    proc.process(*compiled, live.data(), output.data(), block);
+    CHECK_EQ(proc.last_block().frame, static_cast<int64_t>(1000));
+    CHECK(proc.last_block().playing);
+    proc.process(*compiled, live.data(), output.data(), block);
+    CHECK_EQ(proc.last_block().frame, static_cast<int64_t>(1032));
+
+    transport().pause();
+    proc.process(*compiled, live.data(), output.data(), block);
+    CHECK_EQ(proc.last_block().frame, static_cast<int64_t>(1064));
+    CHECK(!proc.last_block().playing);
+
+    transport().play();
+    transport().seek(0);
+    proc.process(*compiled, live.data(), output.data(), block);
+    CHECK_EQ(proc.last_block().frame, static_cast<int64_t>(0));
+}

@@ -13,6 +13,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
                              const float* live_input,
                              float* out_float,
                              size_t block_size) {
+    last_block_ = {transport().block_frame(), false};
     if (block_size == 0) {
         return false;
     }
@@ -29,6 +30,7 @@ bool GraphProcessor::process(const CompiledGraph& graph,
     float* sink_block = buffer(graph.buffer_count);
     live_input_ = live_input;
     transport().begin_block();
+    last_block_ = transport().block_stamp();
     const float release = std::exp(-static_cast<float>(block_size_ / 2) / (0.25f * sample_rate_));
 
     bool wrote_output = false;
