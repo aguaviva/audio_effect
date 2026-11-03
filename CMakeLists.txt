@@ -56,7 +56,26 @@ set(AUDIO_EFFECT_SOURCES
   src/dsp/chord_generator.cpp
   src/dsp/gen_midi.cpp
   src/dsp/white_noise.cpp
-  src/dsp/clip_timeline.cpp
+  src/dsp/transport.cpp
+  src/dsp/clip_player.cpp
+  src/dsp/midi_sequencer.cpp
+  src/audio/sink_clock.cpp
+  src/model/tempo_grid.cpp
+  src/model/waveform_peaks.cpp
+  src/model/wav_library.cpp
+  src/model/clip_arrangement.cpp
+  src/model/clip_clipboard.cpp
+  src/model/clip_snap.cpp
+  src/model/midi_import.cpp
+  src/ui/transport_controls.cpp
+  src/ui/tempo_controls.cpp
+  src/ui/timeline_wav_lane.cpp
+  src/ui/timeline_note_lane.cpp
+  src/ui/timeline_band_lane.cpp
+  src/ui/timeline_group.cpp
+  src/ui/clip_lane_editor.cpp
+  src/nodes/multi_wav_generator.cpp
+  src/nodes/clip_timeline.cpp
   src/dsp/dry_wet_mix.cpp
   src/dsp/vu_meter.cpp
   src/dsp/oscilloscope.cpp
@@ -172,7 +191,26 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     src/dsp/chord_generator.cpp
     src/dsp/gen_midi.cpp
     src/dsp/white_noise.cpp
-    src/dsp/clip_timeline.cpp
+    src/dsp/transport.cpp
+    src/dsp/clip_player.cpp
+    src/dsp/midi_sequencer.cpp
+    src/audio/sink_clock.cpp
+    src/model/tempo_grid.cpp
+    src/model/waveform_peaks.cpp
+    src/model/wav_library.cpp
+    src/model/clip_arrangement.cpp
+    src/model/clip_clipboard.cpp
+    src/model/clip_snap.cpp
+    src/model/midi_import.cpp
+    src/ui/transport_controls.cpp
+    src/ui/tempo_controls.cpp
+    src/ui/timeline_wav_lane.cpp
+    src/ui/timeline_note_lane.cpp
+    src/ui/timeline_band_lane.cpp
+    src/ui/timeline_group.cpp
+    src/ui/clip_lane_editor.cpp
+    src/nodes/multi_wav_generator.cpp
+    src/nodes/clip_timeline.cpp
     src/dsp/dry_wet_mix.cpp
     src/dsp/vu_meter.cpp
     src/dsp/oscilloscope.cpp

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "imgui.h"
+#include "model/tempo_grid.hpp"
 
 #include <cstddef>
 #include <functional>
@@ -19,12 +20,6 @@ struct Note {
 };
 
 using PianoRollNote = Note;
-
-// From beat on, each beat lasts seconds_per_beat.
-struct TempoChange {
-    float beat = 0.0f;
-    float seconds_per_beat = 0.5f;
-};
 
 class PianoRollEditor {
 public:
@@ -55,10 +50,9 @@ public:
     void DuplicateSelection();
 
     void SetTempo(float bpm);
-    float GetTempo() const { return bpm_; }
-    // Tempo changes sorted by beat, for the seconds ruler. Before the first change, and when
-    // there are none, beats follow SetTempo.
-    void SetTempoMap(std::vector<TempoChange> changes) { tempo_map_ = std::move(changes); }
+    float GetTempo() const;
+    // Tempo changes, for the seconds ruler; replaces SetTempo's tempo.
+    void SetTempoMap(std::vector<TempoChange> changes);
     float SecondsAtBeat(float beat) const;
     float BeatAtSeconds(float seconds) const;
     void SetTimeSignature(int numerator, int denominator);
@@ -88,13 +82,12 @@ private:
 
     std::vector<PianoRollNote> notes_;
     std::function<void(int, bool)> pitch_callback_;
-    std::vector<TempoChange> tempo_map_;
+    TempoGrid tempo_; // its tempo map; the time signature and grid are below, in beats
     int next_id_ = 1;
     int low_pitch_ = 24;
     int high_pitch_ = 108;
     int drag_id_ = -1;
     int pressed_pitch_ = -1;
-    float bpm_ = 120.0f;
     float beats_per_bar_ = 4.0f;
     float grid_step_ = 0.25f;
     float pixels_per_beat_ = 80.0f;

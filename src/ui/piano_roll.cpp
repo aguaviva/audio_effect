@@ -129,37 +129,20 @@ void PianoRollEditor::AddSelected(const std::vector<PianoRollNote>& notes, float
     }
 }
 
-void PianoRollEditor::SetTempo(float bpm) { bpm_ = std::clamp(bpm, 1.0f, 999.0f); }
+void PianoRollEditor::SetTempo(float bpm) { tempo_.set_bpm(bpm); }
+
+float PianoRollEditor::GetTempo() const { return static_cast<float>(tempo_.bpm()); }
+
+void PianoRollEditor::SetTempoMap(std::vector<TempoChange> changes) {
+    tempo_.set_tempo_map(std::move(changes));
+}
 
 float PianoRollEditor::SecondsAtBeat(float beat) const {
-    float seconds = 0.0f;
-    float from = 0.0f;
-    float seconds_per_beat = 60.0f / bpm_;
-    for (const TempoChange& change : tempo_map_) {
-        if (change.beat >= beat) {
-            break;
-        }
-        seconds += (change.beat - from) * seconds_per_beat;
-        from = change.beat;
-        seconds_per_beat = change.seconds_per_beat;
-    }
-    return seconds + (beat - from) * seconds_per_beat;
+    return static_cast<float>(tempo_.seconds_at_beat(beat));
 }
 
 float PianoRollEditor::BeatAtSeconds(float seconds) const {
-    float at = 0.0f; // seconds at beat `from`
-    float from = 0.0f;
-    float seconds_per_beat = 60.0f / bpm_;
-    for (const TempoChange& change : tempo_map_) {
-        const float at_change = at + (change.beat - from) * seconds_per_beat;
-        if (at_change >= seconds) {
-            break;
-        }
-        at = at_change;
-        from = change.beat;
-        seconds_per_beat = change.seconds_per_beat;
-    }
-    return from + (seconds - at) / seconds_per_beat;
+    return static_cast<float>(tempo_.beat_at_seconds(seconds));
 }
 
 void PianoRollEditor::SetTimeSignature(int numerator, int denominator) {

@@ -11,10 +11,16 @@
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
 #include "dsp/transport.hpp"
-#include "dsp/clip_timeline.hpp"
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
+#include "audio/sink_clock.hpp"
+#include "model/clip_clipboard.hpp"
+#include "model/clip_snap.hpp"
+#include "model/tempo_grid.hpp"
+#include "model/waveform_peaks.hpp"
+#include "nodes/clip_timeline.hpp"
+#include "nodes/multi_wav_generator.hpp"
 #include "graph/audio_graph.hpp"
 #include "graph/graph_processor.hpp"
 #include "graph/node_registry.hpp"
@@ -53,7 +59,8 @@ TEST(registry_resolves_module_names_and_pins) {
     CHECK(!make_module("mixer")->bypassable());
     CHECK(!make_module("dry_wet_mix")->bypassable());
     CHECK(make_module("preamp")->bypassable());
-    for (const char* name : {"white_noise", "wav_player", "chord_generator", "audio_input", "timeline"}) {
+    for (const char* name : {"white_noise", "wav_player", "chord_generator", "audio_input", "timeline",
+                             "multi_wav"}) {
         CHECK(!make_module(name)->bypassable());
     }
     CHECK_STREQ(node_label(*make_module("pitch_detector")), "Pitch Detector");
@@ -262,6 +269,22 @@ TEST(timeline_plays_a_clip_from_where_it_is_placed) {
     reset_transport();
 }
 
+// The whole of path's file at start, as the lane editor adds a picked file; its index or -1.
+static int add_file(MultiWavGenerator& node, int channel, const std::string& path, int64_t start) {
+    const WavLibrary::Entry& file = node.library().get(path);
+    if (!file.wav) {
+        return -1;
+    }
+    ArrangedClip clip;
+    clip.path = path;
+    clip.start = start;
+    clip.wav = file.wav;
+    clip.peaks = file.peaks;
+    const int index = node.arrangement().add(channel, std::move(clip));
+    node.sync();
+    return index;
+}
+
 TEST(timeline_track_holds_trimmed_clips_from_several_files) {
     std::string error;
     auto a = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
@@ -269,42 +292,50 @@ TEST(timeline_track_holds_trimmed_clips_from_several_files) {
     CHECK(a != nullptr && b != nullptr);
     ClipTimeline timeline;
     CHECK(timeline.load("{}"));
-    CHECK_EQ(timeline.add_clip(0, kDefaultWavPath, 0, error), 0);
-    CHECK_EQ(timeline.add_clip(0, "assets/audio/rhythm.wav", 3000, error), 1);
-    CHECK_EQ(timeline.add_clip(0, "assets/audio/does_not_exist.wav", 0, error), -1);
-    CHECK(!error.empty());
-    CHECK_EQ(timeline.clips(0).size(), static_cast<size_t>(2));
+    ClipArrangement& tracks = timeline.arrangement();
+    CHECK_EQ(add_file(timeline, 0, kDefaultWavPath, 0), 0);
+    CHECK_EQ(add_file(timeline, 0, "assets/audio/rhythm.wav", 3000), 1);
+    CHECK_EQ(add_file(timeline, 0, "assets/audio/does_not_exist.wav", 0), -1);
+    CHECK(!timeline.library().get("assets/audio/does_not_exist.wav").error.empty());
+    CHECK_EQ(tracks.clips(0).size(), static_cast<size_t>(2));
 
     // Trimming moves the bounds into the file; the clip keeps its place in time.
-    timeline.trim_start(0, 0, 500);
-    timeline.trim_end(0, 0, 2000);
-    const ClipTimeline::Clip& first = timeline.clips(0)[0];
+    tracks.trim_start(0, 0, 500);
+    tracks.trim_end(0, 0, 2000);
+    const ArrangedClip& first = tracks.clips(0)[0];
     CHECK_EQ(first.start, static_cast<int64_t>(500));
     CHECK_EQ(first.offset, static_cast<int64_t>(500));
     CHECK_EQ(first.frames(), static_cast<int64_t>(1500));
     // Neither edge goes past the file, and a clip keeps at least a frame.
-    timeline.trim_start(0, 0, 0);
-    CHECK_EQ(timeline.clips(0)[0].offset, static_cast<int64_t>(0));
-    timeline.trim_start(0, 0, 5000);
-    CHECK_EQ(timeline.clips(0)[0].frames(), static_cast<int64_t>(1));
-    timeline.trim_start(0, 0, 500);
-    timeline.trim_end(0, 1, 1 << 30);
-    CHECK_EQ(timeline.clips(0)[1].frames(), static_cast<int64_t>(b->interleaved_stereo.size() / 2));
-    timeline.trim_end(0, 1, 3100);
+    tracks.trim_start(0, 0, 0);
+    CHECK_EQ(tracks.clips(0)[0].offset, static_cast<int64_t>(0));
+    tracks.trim_start(0, 0, 5000);
+    CHECK_EQ(tracks.clips(0)[0].frames(), static_cast<int64_t>(1));
+    tracks.trim_start(0, 0, 500);
+    tracks.trim_end(0, 1, 1 << 30);
+    CHECK_EQ(tracks.clips(0)[1].frames(), static_cast<int64_t>(b->interleaved_stereo.size() / 2));
+    tracks.trim_end(0, 1, 3100);
 
-    // A copy pasted on another track keeps the trim.
-    timeline.copy_clip(0, 0);
-    CHECK(ClipTimeline::can_paste());
-    CHECK_EQ(timeline.paste(4, 10000), 0);
-    CHECK_EQ(timeline.clips(4)[0].offset, static_cast<int64_t>(500));
-    CHECK_EQ(timeline.clips(4)[0].frames(), static_cast<int64_t>(1500));
+    // A copy pasted on another track, of another node even, keeps the trim.
+    clip_clipboard::copy(tracks.clips(0)[0]);
+    CHECK(clip_clipboard::get() != nullptr);
+    ArrangedClip pasted = *clip_clipboard::get();
+    pasted.start = 10000;
+    CHECK_EQ(tracks.add(4, pasted), 0);
+    CHECK_EQ(tracks.clips(4)[0].offset, static_cast<int64_t>(500));
+    CHECK_EQ(tracks.clips(4)[0].frames(), static_cast<int64_t>(1500));
+    const int duplicate = tracks.duplicate(4, 0);
+    CHECK_EQ(tracks.clips(4)[duplicate].start, static_cast<int64_t>(11500));
+    tracks.remove(4, duplicate);
 
+    // Played only after sync() hands the edits over.
     reset_transport();
     constexpr size_t kBlock = 2 * 4096;
     std::vector<float> track1(kBlock, 1.0f);
     std::vector<float> track5(kBlock, 1.0f);
     timeline.set_output_buffer(0, track1.data());
     timeline.set_output_buffer(4, track5.data());
+    timeline.sync();
     run_block(timeline, kBlock);
     for (size_t f = 0; f < kBlock / 2; ++f) {
         float want = 0.0f;
@@ -322,23 +353,169 @@ TEST(timeline_track_holds_trimmed_clips_from_several_files) {
     CHECK(saved.find("track1_path") == std::string::npos);
     ClipTimeline loaded;
     CHECK(loaded.load(saved));
-    CHECK_EQ(loaded.clips(0).size(), static_cast<size_t>(2));
-    CHECK(loaded.clips(0)[1].path == "assets/audio/rhythm.wav");
-    CHECK_EQ(loaded.clips(0)[1].start, static_cast<int64_t>(3000));
-    CHECK_EQ(loaded.clips(0)[1].frames(), static_cast<int64_t>(100));
-    CHECK_EQ(loaded.clips(4)[0].offset, static_cast<int64_t>(500));
-    CHECK_EQ(loaded.clips(4)[0].frames(), static_cast<int64_t>(1500));
+    const ClipArrangement& again = loaded.arrangement();
+    CHECK_EQ(again.clips(0).size(), static_cast<size_t>(2));
+    CHECK(again.clips(0)[1].path == "assets/audio/rhythm.wav");
+    CHECK_EQ(again.clips(0)[1].start, static_cast<int64_t>(3000));
+    CHECK_EQ(again.clips(0)[1].frames(), static_cast<int64_t>(100));
+    CHECK_EQ(again.clips(4)[0].offset, static_cast<int64_t>(500));
+    CHECK_EQ(again.clips(4)[0].frames(), static_cast<int64_t>(1500));
 
     // A missing file keeps its clip, so saving again does not drop it.
     ClipTimeline missing;
     CHECK(missing.load(R"({"track2_clips":[{"path":"assets/audio/gone.wav","start":7,"offset":3,"length":9}]})"));
-    CHECK_EQ(missing.clips(1).size(), static_cast<size_t>(1));
-    CHECK_EQ(missing.clips(1)[0].frames(), static_cast<int64_t>(0));
+    CHECK_EQ(missing.arrangement().clips(1).size(), static_cast<size_t>(1));
+    CHECK_EQ(missing.arrangement().clips(1)[0].frames(), static_cast<int64_t>(0));
+    CHECK(!missing.arrangement().error(1).empty());
     CHECK(missing.save().find("\"length\":9") != std::string::npos);
 
-    timeline.remove_clip(0, 0);
-    CHECK_EQ(timeline.clips(0).size(), static_cast<size_t>(1));
+    tracks.remove(0, 0);
+    CHECK_EQ(tracks.clips(0).size(), static_cast<size_t>(1));
     reset_transport();
+}
+
+TEST(multi_wav_has_a_pin_and_lane_per_channel) {
+    MultiWavGenerator node;
+    CHECK(node.load("{}"));
+    CHECK_EQ(node.channel_count(), MultiWavGenerator::kDefaultChannels);
+    CHECK_EQ(node.output_count(), 4);
+    CHECK_EQ(node.input_count(), 0);
+    CHECK(!node.needs_control_lock());
+    for (int ch = 0; ch < 4; ++ch) {
+        CHECK(node.arrangement().clips(ch).empty());
+    }
+
+    std::string error;
+    auto a = WavGenerator::load(kDefaultWavPath, kSampleRate, error);
+    CHECK(a != nullptr);
+    CHECK_EQ(add_file(node, 3, kDefaultWavPath, 100), 0);
+    CHECK_EQ(add_file(node, 3, kDefaultWavPath, 2000), 1);
+    node.arrangement().trim_end(3, 0, 200);
+    node.sync();
+
+    reset_transport();
+    constexpr size_t kBlock = 2 * 4096;
+    std::vector<float> ch4(kBlock, 1.0f);
+    node.set_output_buffer(3, ch4.data());
+    run_block(node, kBlock);
+    for (size_t f = 0; f < kBlock / 2; ++f) {
+        float want = 0.0f;
+        if (f >= 100 && f < 200) {
+            want = a->interleaved_stereo[2 * (f - 100)];
+        } else if (f >= 2000) {
+            want = a->interleaved_stereo[2 * (f - 2000)];
+        }
+        CHECK_EQ(ch4[2 * f], want);
+    }
+
+    // Saved with its channel count; more channels, more pins.
+    node.set_channel_count(6);
+    CHECK_EQ(node.output_count(), 6);
+    const std::string saved = node.save();
+    CHECK(saved.find("\"channels\":6") != std::string::npos);
+    MultiWavGenerator loaded;
+    CHECK(loaded.load(saved));
+    CHECK_EQ(loaded.output_count(), 6);
+    CHECK_EQ(loaded.arrangement().clips(3).size(), static_cast<size_t>(2));
+    CHECK_EQ(loaded.arrangement().clips(3)[0].frames(), static_cast<int64_t>(100));
+
+    // Fewer channels drop those clips; a removed channel's buffer, still linked until the
+    // graph drops the link, plays silence.
+    node.set_channel_count(2);
+    CHECK_EQ(node.output_count(), 2);
+    node.set_channel_count(4);
+    CHECK(node.arrangement().clips(3).empty());
+    node.set_channel_count(2);
+    std::fill(ch4.begin(), ch4.end(), 1.0f);
+    run_block(node, kBlock);
+    for (float v : ch4) {
+        CHECK_EQ(v, 0.0f);
+    }
+    node.set_channel_count(0);
+    CHECK_EQ(node.output_count(), 1);
+    node.set_channel_count(100);
+    CHECK_EQ(node.output_count(), MultiWavGenerator::kMaxChannels);
+    reset_transport();
+}
+
+TEST(removing_channels_drops_their_links) {
+    AudioGraph g;
+    const int wavs = g.add_node("multi_wav", 0, 0);
+    const int mixer = g.add_node("mixer", 0, 0);
+    CHECK_EQ(g.find_node(wavs)->module->output_count(), 4);
+    for (int ch = 0; ch < 4; ++ch) {
+        CHECK(g.add_link(wavs, ch, mixer, ch));
+    }
+    CHECK(!g.add_link(wavs, 4, mixer, 4));
+    CHECK(!g.drop_stale_links());
+    g.find_node(wavs)->as<MultiWavGenerator>()->set_channel_count(2);
+    CHECK(g.drop_stale_links());
+    CHECK_EQ(g.links().size(), static_cast<size_t>(2));
+    for (const GraphLink& link : g.links()) {
+        CHECK(link.from_slot < 2);
+    }
+}
+
+TEST(clip_edits_snap_to_the_grid_and_to_other_clips) {
+    TempoGrid grid; // 4/4 at 120 bpm, four lines a beat: one every 6000 frames
+    ClipArrangement arrangement(2);
+    WavLibrary library(kSampleRate);
+    ArrangedClip clip;
+    clip.path = kDefaultWavPath;
+    clip.wav = library.get(kDefaultWavPath).wav;
+    CHECK(clip.wav != nullptr);
+    clip.start = 30500;
+    clip.length = 10000;
+    arrangement.add(1, clip);
+
+    const ClipSnap snap{arrangement, grid, kSampleRate, 800};
+    CHECK_EQ(snap.edge(6100), static_cast<int64_t>(6000));
+    CHECK_EQ(snap.edge(8900), static_cast<int64_t>(6000));
+    CHECK_EQ(snap.edge(9100), static_cast<int64_t>(12000));
+    // The other clip's edge wins when it is nearer than the grid line and within tolerance.
+    CHECK_EQ(snap.edge(30200), static_cast<int64_t>(30000));
+    CHECK_EQ(snap.edge(30400), static_cast<int64_t>(30500));
+    CHECK_EQ(snap.edge(40300), static_cast<int64_t>(40500));
+    // Not to itself.
+    CHECK_EQ(snap.edge(30400, 1, 0), static_cast<int64_t>(30000));
+    // A moved clip lands its start, or else its end, on a line: whichever is nearer.
+    CHECK_EQ(snap.start(5900, 3000), static_cast<int64_t>(6000));
+    CHECK_EQ(snap.start(8800, 3000), static_cast<int64_t>(9000));
+    CHECK(snap.start(-100, 3000) >= 0);
+
+    grid.set_division(1);
+    CHECK_EQ(snap.edge(14000), static_cast<int64_t>(24000));
+    grid.set_time_signature(6, 8);
+    CHECK_NEAR(grid.beats_per_bar(), 3.0, 1e-12);
+}
+
+TEST(tempo_grid_maps_beats_and_round_trips) {
+    TempoGrid grid;
+    CHECK_EQ(grid.numerator(), 4);
+    CHECK_EQ(grid.denominator(), 4);
+    CHECK_NEAR(grid.bpm(), 120.0, 1e-9);
+    CHECK_EQ(grid.division(), 4);
+    CHECK_NEAR(grid.seconds_at_beat(8.0), 4.0, 1e-12);
+    grid.set_tempo_map({{4.0, 0.25}, {0.0, 0.5}});
+    CHECK(grid.has_tempo_changes());
+    CHECK_NEAR(grid.seconds_at_beat(6.0), 2.5, 1e-12);
+    CHECK_NEAR(grid.beat_at_seconds(2.5), 6.0, 1e-12);
+    CHECK_NEAR(grid.snap_seconds(2.3), 2.3125, 1e-12);
+    grid.set_time_signature(7, 5);
+    CHECK_EQ(grid.denominator(), 8);
+    grid.set_division(3);
+
+    TempoGrid loaded;
+    CHECK(loaded.load(grid.save()));
+    CHECK_EQ(loaded.numerator(), 7);
+    CHECK_EQ(loaded.denominator(), 8);
+    CHECK_EQ(loaded.division(), 3);
+    CHECK_EQ(loaded.tempo_map().size(), static_cast<size_t>(2));
+    CHECK_NEAR(loaded.seconds_at_beat(6.0), 2.5, 1e-9);
+    // Fields it does not find stay as they are.
+    CHECK(loaded.load("{\"division\":2}"));
+    CHECK_EQ(loaded.numerator(), 7);
+    CHECK_EQ(loaded.division(), 2);
 }
 
 TEST(midi_playhead_follows_rendered_samples) {
@@ -372,6 +549,11 @@ TEST(midi_playhead_follows_rendered_samples) {
     CHECK(midi.track_name(0) == "Lead");
     CHECK_NEAR(midi.piano_roll(0).GetBeatsPerBar(), 3.0f, 1e-6f);
     CHECK_NEAR(midi.piano_roll(5).GetBeatsPerBar(), 3.0f, 1e-6f);
+    // The file sets the song grid.
+    CHECK_EQ(song_grid().numerator(), 3);
+    CHECK_EQ(song_grid().denominator(), 4);
+    CHECK_NEAR(song_grid().seconds_at_beat(2.0), 2 * 1041 * 480 / 1.0e6, 1e-9);
+    CHECK(!midi.needs_control_lock());
     // 500000 us a beat plays as 1041 us a tick.
     CHECK_NEAR(midi.piano_roll(0).SecondsAtBeat(2.0f), 2 * 1041 * 480 / 1.0e6f, 1e-5f);
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
@@ -418,11 +600,13 @@ TEST(midi_playhead_follows_rendered_samples) {
     CHECK_NEAR(midi.playhead_beat(), 1.25, 0.01);
     CHECK(energy_of_out() > 1.0e-3f);
 
-    midi.rewind();
+    // Loading it again starts over.
+    CHECK(midi.set_path(path));
     CHECK(!midi.finished());
     CHECK_NEAR(midi.playhead_beat(), 0.0, 1e-9);
     CHECK_NEAR(midi.playhead_seconds(), 0.0, 1e-9);
     reset_transport();
+    song_grid() = TempoGrid{};
     std::remove(path);
 }
 

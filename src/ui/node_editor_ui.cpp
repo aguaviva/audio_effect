@@ -12,6 +12,10 @@
 #include "paths.hpp"
 #include "ui/file_picker.hpp"
 #include "ui/message_box.hpp"
+#include "ui/tempo_controls.hpp"
+#include "ui/timeline_band_lane.hpp"
+#include "ui/transport_controls.hpp"
+#include "model/tempo_grid.hpp"
 
 #include "imgui.h"
 #include "imfilebrowser.h"
@@ -84,6 +88,14 @@ bool is_source(const Module& module) {
     return module.input_count() == 0 && module.output_count() > 0;
 }
 
+// Held while the UI touches a module's fields; empty for modules that need none.
+std::unique_lock<std::mutex> control_lock_for(const Module& module) {
+    if (!module.needs_control_lock()) {
+        return {};
+    }
+    return std::unique_lock<std::mutex>(module.control_mutex());
+}
+
 std::string source_title(const GraphNode& node) {
     return std::string(node_label(*node.module)) + " #" + std::to_string(node.id);
 }
@@ -105,6 +117,7 @@ void node_editor_shutdown() {
 }
 
 void node_editor_publish(AudioGraph& graph) {
+    graph.drop_stale_links();
     graph.publish(graph.compile());
 }
 
@@ -377,6 +390,10 @@ static void draw_timeline(AudioGraph& graph, NodeEditorUiState& state) {
     }
     transport_controls();
     ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    tempo_controls(song_grid());
+    ImGui::SameLine();
     ImGui::TextDisabled("   Space plays and pauses; press the ruler or a track to move the cursor. "
                         "Wheel zooms, Shift+wheel scrolls. View > Timeline Tracks shows or hides "
                         "each source.");
@@ -388,11 +405,11 @@ static void draw_timeline(AudioGraph& graph, NodeEditorUiState& state) {
         const std::string title = source_title(node);
         ImGui::PushID(node.id);
         {
-            std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+            std::unique_lock<std::mutex> control_lock = control_lock_for(*node.module);
             if (!node.module->render_timeline(state.timeline, title.c_str())) {
                 state.timeline.BeginTrack("track");
                 ImGui::TextUnformatted(title.c_str());
-                state.timeline.Band("live", true);
+                draw_band(state.timeline, "live", true);
                 state.timeline.EndTrack();
             }
         }
@@ -530,7 +547,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
             ImGui::TableSetColumnIndex(1);        
             ImGui::PushID(node.id);
             {
-                std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+                std::unique_lock<std::mutex> control_lock = control_lock_for(*node.module);
                 draw_node_params(node, graph);
             }
             ImGui::PopID();
@@ -633,7 +650,7 @@ void node_editor_draw(AudioGraph& graph, NodeEditorUiState& state) {
     // Modal file browsers and the message box sit above the fullscreen editor window.
     process_file_browsers(graph, state);
     for (auto& node : graph.nodes()) {
-        std::lock_guard<std::mutex> control_lock(node.module->control_mutex());
+        std::unique_lock<std::mutex> control_lock = control_lock_for(*node.module);
         node.module->render_window();
     }
     draw_timeline(graph, state);

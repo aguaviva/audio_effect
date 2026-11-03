@@ -1,6 +1,7 @@
 #include "graph_io.hpp"
 
 #include "dsp/module_json.hpp"
+#include "model/tempo_grid.hpp"
 #include "node_registry.hpp"
 #include "pins.hpp"
 
@@ -100,6 +101,7 @@ bool parse_link(const std::string& json, GraphLink& link, std::string& error) {
 std::string serialize(const AudioGraph& graph) {
     std::string out = "{\n";
     out += "  \"version\":" + std::to_string(kFileVersion) + ",\n";
+    out += "  \"grid\":" + song_grid().save() + ",\n";
     out += "  \"nodes\":[\n";
     const auto& nodes = graph.nodes();
     for (size_t n = 0; n < nodes.size(); ++n) {
@@ -129,10 +131,21 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     std::unordered_set<int> node_ids;
     std::unordered_set<int> link_ids;
     bool have_nodes = false;
+    std::string grid;
+
+    // A patch without a grid (from before it had one) gets the default, or a MIDI file's; a
+    // saved grid wins over the MIDI file's, as the user may have changed it.
+    const TempoGrid previous_grid = song_grid();
+    song_grid() = TempoGrid{};
+    const auto fail = [&] {
+        song_grid() = previous_grid;
+        return false;
+    };
 
     const bool ok = module_json::for_each_member(
         text, [&](const std::string& key, const std::string& body, size_t& i) {
             if (key == "version") return module_json::skip_value(body, i);
+            if (key == "grid") return module_json::take_value(body, i, grid);
             if (key == "nodes") {
                 have_nodes = true;
                 return module_json::for_each_element(body, i, [&](const std::string& json) {
@@ -163,11 +176,11 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         });
     if (!ok) {
         if (error.empty()) error = "Malformed graph file";
-        return false;
+        return fail();
     }
     if (!have_nodes) {
         error = "Graph file missing nodes";
-        return false;
+        return fail();
     }
 
     auto find = [&](int id) -> const Module* {
@@ -190,7 +203,7 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
         if (!used_pins.insert(input_pin_id(link.to_node, link.to_slot)).second) {
             error = "Link " + std::to_string(link.id) + " connects to an input pin that is "
                     "already connected";
-            return false;
+            return fail();
         }
         valid_links.push_back(link);
     }
@@ -200,7 +213,11 @@ bool deserialize(AudioGraph& graph, const std::string& text, std::string& error)
     loaded.links() = std::move(valid_links);
     if (loaded.has_cycle()) {
         error = "The graph contains a cycle: a signal feeds back into itself.";
-        return false;
+        return fail();
+    }
+    if (!grid.empty() && !song_grid().load(grid)) {
+        error = "Invalid grid";
+        return fail();
     }
     graph.nodes() = std::move(loaded.nodes());
     graph.links() = std::move(loaded.links());

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "audio/sink_clock.hpp"
 #include "graph/audio_graph.hpp"
 #include "graph/graph_processor.hpp"
 

@@ -3,8 +3,8 @@
 #include "module.hpp"
 #include "paths.hpp"
 #include "wav_generator.hpp"
+#include "model/waveform_peaks.hpp"
 #include "ui/file_picker.hpp"
-#include "ui/timeline.hpp"
 
 #include <atomic>
 #include <memory>

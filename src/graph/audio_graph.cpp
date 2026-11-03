@@ -117,6 +117,20 @@ bool AudioGraph::remove_link(int link_id) {
     return true;
 }
 
+bool AudioGraph::drop_stale_links() {
+    const size_t before = links_.size();
+    links_.erase(std::remove_if(links_.begin(), links_.end(),
+                                [this](const GraphLink& l) {
+                                    const GraphNode* from = find_node(l.from_node);
+                                    const GraphNode* to = find_node(l.to_node);
+                                    return !from || !to ||
+                                           l.from_slot >= from->module->output_count() ||
+                                           l.to_slot >= to->module->input_count();
+                                }),
+                 links_.end());
+    return links_.size() != before;
+}
+
 GraphNode* AudioGraph::find_node(int node_id) {
     for (auto& node : nodes_) {
         if (node.id == node_id) {

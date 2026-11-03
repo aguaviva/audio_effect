@@ -17,13 +17,14 @@
 #include "dsp/preamp.hpp"
 #include "dsp/simple_reverb.hpp"
 #include "dsp/spectrum.hpp"
-#include "dsp/clip_timeline.hpp"
 #include "dsp/valve_compressor.hpp"
 #include "dsp/vu_meter.hpp"
 #include "dsp/wav_player.hpp"
 #include "dsp/wav_recorder.hpp"
 #include "dsp/white_noise.hpp"
 #include "dsp/gen_midi.hpp"
+#include "nodes/clip_timeline.hpp"
+#include "nodes/multi_wav_generator.hpp"
 
 namespace {
 
@@ -53,6 +54,7 @@ const std::vector<NodeKind>& node_kinds() {
         {"Chord Generator", "Sources", make<ChordGenerator>},
         {"Midi Generator", "Sources", make<Midi>},
         {"White Noise", "Sources", make<WhiteNoise>},
+        {"Multi WAV", "Sources", make<MultiWavGenerator>},
         {"Clip Timeline", "Sources", make<ClipTimeline>},
         {"Echo", "Effects", make<EchoEffect>},
         {"Preamp", "Effects", make<Preamp>},

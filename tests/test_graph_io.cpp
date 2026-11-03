@@ -4,6 +4,7 @@
 #include "dsp/preamp.hpp"
 #include "dsp/wav_player.hpp"
 #include "graph/graph_io.hpp"
+#include "model/tempo_grid.hpp"
 #include "paths.hpp"
 
 #include <cstdio>
@@ -219,4 +220,37 @@ TEST(graph_io_saves_nodes_before_links) {
     CHECK(text.find("next_node_id") == std::string::npos);
     CHECK(text.find("next_link_id") == std::string::npos);
     CHECK(text.find("wav_path") == std::string::npos);
+}
+
+TEST(graph_io_saves_the_song_grid) {
+    AudioGraph g;
+    g.add_node("multi_wav", 0, 0);
+    song_grid() = TempoGrid{};
+    song_grid().set_time_signature(5, 8);
+    song_grid().set_bpm(90.0);
+    song_grid().set_division(3);
+    const std::string text = graph_io::serialize(g);
+    CHECK(text.find("\"grid\":") != std::string::npos);
+
+    song_grid() = TempoGrid{};
+    AudioGraph loaded;
+    std::string error;
+    CHECK(graph_io::deserialize(loaded, text, error));
+    CHECK_EQ(song_grid().numerator(), 5);
+    CHECK_EQ(song_grid().denominator(), 8);
+    CHECK_NEAR(song_grid().bpm(), 90.0, 1e-4);
+    CHECK_EQ(song_grid().division(), 3);
+
+    // A patch from before the grid gets the default one.
+    CHECK(graph_io::deserialize(loaded, R"({"version":2,"nodes":[
+        {"id":1,"type":"preamp","x":0,"y":0,"params":{}}],"links":[]})", error));
+    CHECK_EQ(song_grid().numerator(), 4);
+    CHECK_NEAR(song_grid().bpm(), 120.0, 1e-9);
+
+    // A patch that fails to load leaves the grid as it was.
+    song_grid().set_time_signature(3, 4);
+    CHECK(!graph_io::deserialize(loaded, R"({"version":2,"grid":{"numerator":7},"nodes":[
+        {"id":1,"type":"nope","x":0,"y":0}],"links":[]})", error));
+    CHECK_EQ(song_grid().numerator(), 3);
+    song_grid() = TempoGrid{};
 }

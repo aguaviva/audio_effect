@@ -7,6 +7,9 @@
 #include "dsp/transport.hpp"
 #include "imgui.h"
 #include "ui/message_box.hpp"
+#include "ui/timeline.hpp"
+#include "ui/timeline_wav_lane.hpp"
+#include "ui/transport_controls.hpp"
 
 bool WavPlayer::set_path(const std::string& path) {
     path_ = path;
@@ -99,14 +102,14 @@ bool WavPlayer::render_timeline(Timeline& timeline, const char* title) {
         ImGui::SetTooltip("%s", path_.c_str());
     }
     if (shown_clip_ && length_ > 0) {
-        timeline.Clip(*shown_clip_, *peaks_, 0.0, kSampleRate);
+        draw_wav_clip(timeline, *shown_clip_, *peaks_, 0.0, kSampleRate);
         if (loop) {
             ClipStyle repeat;
             repeat.repeat = true;
             const double seconds = static_cast<double>(length_ / 2) / kSampleRate;
             for (double start = std::max(1.0, std::floor(timeline.VisibleStart() / seconds)) * seconds;
                  start < timeline.VisibleEnd(); start += seconds) {
-                timeline.Clip(*shown_clip_, *peaks_, start, kSampleRate, repeat);
+                draw_wav_clip(timeline, *shown_clip_, *peaks_, start, kSampleRate, repeat);
             }
         }
     }

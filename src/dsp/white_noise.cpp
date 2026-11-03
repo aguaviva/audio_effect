@@ -5,6 +5,7 @@
 
 #include "imgui.h"
 #include "ui/timeline.hpp"
+#include "ui/timeline_band_lane.hpp"
 
 std::string WhiteNoise::save() const {
     std::string out = "{";
@@ -36,7 +37,7 @@ bool WhiteNoise::render_timeline(Timeline& timeline, const char* title) {
     }
     char label[32];
     std::snprintf(label, sizeof(label), "Noise, level %.2f", level);
-    timeline.Band(label, playing);
+    draw_band(timeline, label, playing);
     timeline.EndTrack();
     return true;
 }

@@ -51,6 +51,12 @@ public:
     // has none of its own, and the timeline shows it as one plain track.
     virtual bool render_timeline(Timeline& /*timeline*/, const char* /*title*/) { return false; }
 
+    // Whether render(), render_window() and render_timeline() share fields with process() and
+    // so run under the control mutex, which makes the audio thread skip process() while the UI
+    // holds it. Modules that hand their state to the audio thread lock-free return false: the
+    // UI calls them without the mutex and the audio thread never skips them.
+    virtual bool needs_control_lock() const { return true; }
+
     // inputs[pin] is the buffer of the link wired into that pin, or nullptr when the pin is
     // unconnected. Writes sample_count samples to every output pin that has a buffer.
     virtual void process(const float* const* inputs, int input_count, size_t sample_count,

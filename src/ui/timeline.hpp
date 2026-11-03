@@ -1,60 +1,23 @@
 #pragma once
 
-#include "dsp/wav_generator.hpp"
 #include "imgui.h"
 
-#include <cstddef>
-#include <cstdint>
-#include <utility>
-#include <vector>
-
-// Min/max envelope of a clip (both channels together) at 64, 128, 256... frames per bucket,
-// so drawing a waveform reads only a few values per pixel at any zoom.
-struct WaveformPeaks {
-    static constexpr size_t kBaseFrames = 64;
-    std::vector<std::vector<std::pair<float, float>>> levels;
-
-    explicit WaveformPeaks(const WavClip& clip);
-    // Min and max over frames [begin, end), widened to whole buckets.
-    std::pair<float, float> range(const WavClip& clip, size_t begin, size_t end) const;
-};
-
-// Play/Pause, Stop (back to the start) and the time, for the shared transport.
-void transport_controls(bool small = false);
-
-// The part of a WAV a timeline clip shows, and how it looks.
-struct ClipStyle {
-    size_t offset = 0;          // first frame of the file shown
-    size_t length = SIZE_MAX;   // frames shown, at most to the end of the file
-    const char* label = nullptr; // in the clip's top left corner
-    bool highlight = false;     // being dragged
-    bool selected = false;      // outlined
-    // A repeat of a looping clip: it does not lengthen the scroll range, so it can be drawn
-    // over whatever is visible.
-    bool repeat = false;
-};
-
-// A note on a timeline track, in seconds.
-struct TimelineNote {
-    double start = 0.0;
-    double duration = 0.0;
-    int pitch = 60;
-};
-
-// Tracks against one time axis: a ruler in seconds on top, a header column on the left, a lane
-// per track and one cursor across them all. The tracks are described every frame, between
-// Begin() and End():
+// Tracks against one time axis: a ruler in bars and beats of the song's grid (see
+// song_grid()) on top, a header column on the left, a lane per track and one cursor across
+// them all. The tracks are described every frame, between Begin() and End():
 //
 //     timeline.Begin("##tracks", cursor);
 //     timeline.BeginTrack("lead");
 //     ImGui::TextUnformatted("Lead"); // header widgets
-//     timeline.Notes(notes, 0.0, song_end); // lane content
+//     draw_notes(timeline, notes, 0.0, song_end); // lane content, from a lane module
 //     timeline.EndTrack();
 //     timeline.End();
 //     if (timeline.Seeked(&seconds)) { ... }
 //
 // Pressing the ruler or a lane moves the cursor there. The wheel zooms about the mouse,
 // Shift+wheel scrolls in time, and the wheel over the headers scrolls through the tracks.
+// What lanes hold is drawn by the lane modules (timeline_wav_lane, timeline_note_lane,
+// timeline_band_lane) through the geometry below.
 class Timeline {
 public:
     static constexpr float kHeaderWidth = 190.0f;
@@ -69,16 +32,7 @@ public:
     void BeginTrack(const char* id, float height = kTrackHeight);
     void EndTrack();
     // One line of text: a row naming the tracks under it.
-    static float TitleHeight() { return ImGui::GetTextLineHeight() + 8.0f; }
-
-    // Content of the current track's lane.
-    void Clip(const WavClip& clip, const WaveformPeaks& peaks, double start, double sample_rate,
-              const ClipStyle& style = {});
-    // Notes on a block from start to end, scaled to the lane's height; those under the cursor
-    // are lit.
-    void Notes(const std::vector<TimelineNote>& notes, double start, double end);
-    // A signal without a length, across the whole lane; dim while inactive.
-    void Band(const char* label, bool active);
+    static float TitleHeight();
 
     // The current track's lane as a button. A track that uses a press itself (to drag a clip,
     // say) claims it, and the cursor stays.
@@ -93,14 +47,27 @@ public:
     double VisibleStart() const { return SecondsAt(lanes_x_); }
     double VisibleEnd() const { return SecondsAt(view_max_.x); }
 
-private:
+    // For lane modules, in screen coordinates.
     float XAt(double seconds) const;
     double SecondsAt(float x) const;
+    ImVec2 LaneMin() const { return lane_min_; }
+    ImVec2 LaneMax() const { return lane_max_; }
+    double Cursor() const { return cursor_; }
+    // Content up to seconds: the scroll range covers it.
+    void ExtendTo(double seconds);
+    // Clips drawing to the part of the current lane that is in view.
+    void PushLaneClip() const;
+    void PopLaneClip() const;
+
+private:
     void HandleWheel();
     void DrawTicks(float top, float bottom) const;
     void DrawRuler() const;
     void DrawCursor(float top, float bottom) const;
-    void ExtendTo(double seconds);
+    // Calls line(seconds, kind, bar, beat) for the grid lines in view: kind 0 for a bar,
+    // 1 a beat, 2 a grid division; labelled when there is room for a label.
+    template <typename F>
+    void ForEachGridLine(F line) const;
 
     double seconds_per_pixel_ = 0.05;
     double length_ = 60.0;      // seconds the scroll range covers, from the last frame
@@ -116,7 +83,6 @@ private:
     float lanes_x_ = 0.0f; // where time 0 is when not scrolled
     float scroll_x_ = 0.0f;
     float row_y_ = 0.0f;   // top of the next track, in the scrolled content
-    double tick_step_ = 1.0;
     bool ruler_active_ = false;
 
     // The current track.

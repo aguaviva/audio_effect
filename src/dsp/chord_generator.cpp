@@ -7,6 +7,7 @@
 
 #include "imgui.h"
 #include "ui/timeline.hpp"
+#include "ui/timeline_band_lane.hpp"
 
 std::string ChordGenerator::save() const {
     std::string out = "{";
@@ -42,7 +43,7 @@ bool ChordGenerator::render_timeline(Timeline& timeline, const char* title) {
         playing = !playing;
     }
     const std::string chord = chord_display_name(std::clamp(index, 0, kChordCount - 1));
-    timeline.Band(chord.c_str(), playing);
+    draw_band(timeline, chord.c_str(), playing);
     timeline.EndTrack();
     return true;
 }

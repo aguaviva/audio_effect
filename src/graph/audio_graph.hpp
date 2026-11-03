@@ -62,6 +62,9 @@ public:
     // On refusal, why (if given) says what was wrong, worded for the user.
     bool add_link(int from_node, int from_slot, int to_node, int to_slot, std::string* why = nullptr);
     bool remove_link(int link_id);
+    // Removes links from or to pins a module no longer has (its channel count went down, say);
+    // true when it removed any.
+    bool drop_stale_links();
     // Input pins to show: the module's count, except a Mixer shows one per connection
     // plus one spare.
     int input_pin_count(int node_id) const;
