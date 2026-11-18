@@ -24,15 +24,15 @@ void TempoGrid::set_bpm(double bpm) {
 
 double TempoGrid::bpm() const { return 60.0 / changes_.front().seconds_per_beat; }
 
-void TempoGrid::set_tempo_map(std::vector<TempoChange> changes) {
+void TempoGrid::set_tempo_map(std::vector<TempoGridChange> changes) {
     changes.erase(std::remove_if(changes.begin(), changes.end(),
-                                 [](const TempoChange& c) { return !(c.seconds_per_beat > 0.0); }),
+                                 [](const TempoGridChange& c) { return !(c.seconds_per_beat > 0.0); }),
                   changes.end());
     if (changes.empty()) {
         return;
     }
     std::stable_sort(changes.begin(), changes.end(),
-                     [](const TempoChange& a, const TempoChange& b) { return a.beat < b.beat; });
+                     [](const TempoGridChange& a, const TempoGridChange& b) { return a.beat < b.beat; });
     changes.front().beat = 0.0;
     changes_ = std::move(changes);
 }
@@ -41,7 +41,7 @@ double TempoGrid::seconds_at_beat(double beat) const {
     double seconds = 0.0;
     double from = 0.0;
     double seconds_per_beat = changes_.front().seconds_per_beat;
-    for (const TempoChange& change : changes_) {
+    for (const TempoGridChange& change : changes_) {
         if (change.beat >= beat) {
             break;
         }
@@ -56,7 +56,7 @@ double TempoGrid::beat_at_seconds(double seconds) const {
     double at = 0.0; // seconds at beat `from`
     double from = 0.0;
     double seconds_per_beat = changes_.front().seconds_per_beat;
-    for (const TempoChange& change : changes_) {
+    for (const TempoGridChange& change : changes_) {
         const double at_change = at + (change.beat - from) * seconds_per_beat;
         if (at_change >= seconds) {
             break;
@@ -88,7 +88,7 @@ std::string TempoGrid::save() const {
     module_json::write_int(out, "division", division_);
     module_json::append_comma(out);
     out += "\"tempo\":[";
-    for (const TempoChange& c : changes_) {
+    for (const TempoGridChange& c : changes_) {
         module_json::append_comma(out);
         std::string change = "{";
         module_json::write_float(change, "beat", static_cast<float>(c.beat));
@@ -108,7 +108,7 @@ bool TempoGrid::load(const std::string& json) {
     module_json::read(json, "division", division);
     set_time_signature(numerator, denominator);
     set_division(division);
-    std::vector<TempoChange> changes;
+    std::vector<TempoGridChange> changes;
     const bool ok = module_json::for_each_member(
         json, [&](const std::string& key, const std::string& text, size_t& i) {
             if (key != "tempo") {

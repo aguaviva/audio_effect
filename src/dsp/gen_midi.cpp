@@ -30,6 +30,7 @@ double Midi::playhead_seconds() const {
 bool Midi::set_path(const std::string& path) {
     path_ = path;
     error_.clear();
+    const uint32_t edit_generation = ++midi_edit_generation_;
 
     auto sequencer = std::make_unique<MidiSequencer>();
     MidiSongInfo info;
@@ -40,7 +41,7 @@ bool Midi::set_path(const std::string& path) {
                 inst = GetNewPiano();
             }
         }
-        if (!sequencer->load(path, instruments_, error_)) {
+        if (!sequencer->load(path, instruments_, midi_edits_, edit_generation, error_)) {
             return false;
         }
         info = read_midi_song(sequencer->song(), kTracks);
@@ -56,6 +57,7 @@ bool Midi::set_path(const std::string& path) {
     // tempo is edited afterwards; their bars and snapping follow the grid.
     for (int t = 0; t < kTracks; t++) {
         audio_effect::PianoRollEditor& roll = piano_rolls_[t];
+        roll.SetNoteEditCallback({});
         roll.ClearNotes();
         roll.SetTimeSignature(info.numerator, info.denominator);
         roll.SetTempoMap(info.tempo_map);
@@ -64,8 +66,27 @@ bool Midi::set_path(const std::string& path) {
             track_names_[t] = info.track_names[t];
             for (const ImportedNote& n : info.notes[t]) {
                 roll.AddNote(n.pitch, static_cast<float>(n.start), static_cast<float>(n.duration),
-                             n.velocity);
+                             n.velocity, n.channel, n.end_status, n.end_velocity);
             }
+            const uint32_t tpq =
+                std::max<uint32_t>(1, sequencer->song().m_midi_state.m_ticksPerQuarterNote);
+            roll.SetNoteEditCallback([this, t, tpq, edit_generation](
+                                         const audio_effect::PianoRollNote& note, bool insert) {
+                const double start = std::max(0.0, static_cast<double>(note.startBeat));
+                const double duration = std::max(1.0 / tpq, static_cast<double>(note.duration));
+                const bool queued = midi_edits_.push({
+                    insert, edit_generation, static_cast<uint8_t>(t),
+                    static_cast<uint8_t>(note.pitch),
+                    static_cast<uint8_t>(note.velocity), static_cast<uint8_t>(note.channel),
+                    static_cast<uint8_t>(note.end_status),
+                    static_cast<uint8_t>(note.end_velocity),
+                    static_cast<uint32_t>(std::llround(start * tpq)),
+                    static_cast<uint32_t>(
+                        std::max<long long>(1, std::llround(duration * tpq)))});
+                if (!queued) {
+                    show_error("The MIDI edit queue is full; the edit was not saved.");
+                }
+            });
             roll.FrameNotes();
         } else {
             track_names_[t].clear();
@@ -107,6 +128,9 @@ bool Midi::load(const std::string& json) {
 bool Midi::render() {
     bool changed = false;
     sequencer_.collect();
+    if (midi_edit_failed_.exchange(false, std::memory_order_relaxed)) {
+        show_error("A piano-roll edit could not be applied to the MIDI track.");
+    }
     const std::string picked = picker_.poll();
     if (!picked.empty()) {        
         if (!set_path(picked)) {
@@ -217,8 +241,7 @@ void Midi::render_window() {
             audio_effect::PianoRollEditor& roll = piano_rolls_[channel];
             roll.SetTimeSignature(grid.numerator(), grid.denominator());
             roll.SetGridDivision(grid.division());
-            roll.SetPlayhead(roll.BeatAtSeconds(static_cast<float>(transport().position()) /
-                                                kSampleRate));
+            roll.SetPlayheadSeconds(static_cast<float>(transport().position()) / kSampleRate);
             roll.SetFollowPlayhead(follow_playhead_);
             roll.Render("##piano_roll", ImVec2(0.0f, 520.0f));
         }
@@ -233,6 +256,12 @@ void Midi::process(const float* const* /*inputs*/, int /*input_count*/,
         outputs[t] = output_buffer(t);
     }
     MidiSequencer* sequencer = sequencer_.acquire();
+    if (sequencer) {
+        sequencer->apply_pending_edits();
+        if (sequencer->take_edit_error()) {
+            midi_edit_failed_.store(true, std::memory_order_relaxed);
+        }
+    }
     if (!sequencer || !transport().block_playing()) {
         for (float* out : outputs) {
             if (out) {

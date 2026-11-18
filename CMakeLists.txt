@@ -90,9 +90,9 @@ set(AUDIO_EFFECT_SOURCES
   third_party/imgui/backends/imgui_impl_opengl3.cpp
   third_party/imnodes/imnodes.cpp
   third_party/miniaudio/miniaudio.c
-  third_party/simplemidi/midi.cpp
-  third_party/simplemidi/inst-piano.cpp
-  third_party/simplemidi/misc.cpp
+  third_party/simplemidi/src/midi.cpp
+  third_party/simplemidi/apps/Player/inst-piano.cpp
+  third_party/simplemidi/src/misc.cpp
 )
 
 add_executable(audio_effect_gui ${AUDIO_EFFECT_SOURCES})
@@ -109,7 +109,8 @@ target_include_directories(audio_effect_gui PRIVATE
   third_party/imnodes
   third_party/imgui-filebrowser
   third_party/miniaudio
-  third_party/simplemidi
+  third_party/simplemidi/src
+  third_party/simplemidi/apps/Player
 )
 
 if(MSVC)
@@ -222,15 +223,15 @@ if(AUDIO_EFFECT_BUILD_TESTS)
     third_party/imgui/imgui_tables.cpp
     third_party/imgui/imgui_widgets.cpp
     third_party/miniaudio/miniaudio.c
-    third_party/simplemidi/midi.cpp
-    third_party/simplemidi/inst-piano.cpp
-    third_party/simplemidi/misc.cpp
+    third_party/simplemidi/src/midi.cpp
+    third_party/simplemidi/apps/Player/inst-piano.cpp
+    third_party/simplemidi/src/misc.cpp
   )
   add_executable(graph_tests ${TEST_SOURCES})
   target_compile_definitions(graph_tests PRIVATE MA_NO_MP3 MA_NO_FLAC)
   target_include_directories(graph_tests PRIVATE
     src src/graph src/dsp src/audio tests third_party/imgui third_party/imgui-filebrowser
-    third_party/miniaudio third_party/simplemidi)
+    third_party/miniaudio third_party/simplemidi/src third_party/simplemidi/apps/Player)
   if(NOT MSVC)
     target_compile_options(graph_tests PRIVATE -Wall -Wextra)
   endif()

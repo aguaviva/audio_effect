@@ -64,8 +64,11 @@ private:
     std::vector<TimelineNote> timeline_notes_; // scratch for render_timeline()
 
     RtHandoff<MidiSequencer> sequencer_;
+    MidiNoteEditQueue midi_edits_;
+    uint32_t midi_edit_generation_ = 0;
     // Written by the audio thread after each block.
     std::atomic<double> playhead_beat_{0.0};
     std::atomic<uint64_t> played_frames_{0};
     std::atomic<bool> finished_{false};
+    std::atomic<bool> midi_edit_failed_{false};
 };

@@ -1,10 +1,12 @@
 #include "midi_import.hpp"
 
+#include "instrument.h"
 #include "midi.h"
 
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <utility>
 
 namespace {
@@ -73,6 +75,64 @@ std::string printable(const uint8_t* data, uint32_t length) {
     return first == std::string::npos ? std::string() : out.substr(first, out.find_last_not_of(' ') - first + 1);
 }
 
+class NoteDrawInstrument : public Instrument {
+public:
+    NoteDrawInstrument(std::vector<ImportedNote>& notes, const MidiState& state)
+        : notes_(notes), state_(state),
+          ticks_per_beat_(std::max<uint32_t>(1, state.m_ticksPerQuarterNote)) {
+        for (auto& channel : starts_) {
+            channel.fill(-1);
+        }
+    }
+
+    void send_midi(uint8_t* data, size_t size) override {
+        if (size < 3) {
+            return;
+        }
+        const uint8_t type = data[0] >> 4;
+        if (type != 0x8 && type != 0x9) {
+            return;
+        }
+        const uint8_t channel = data[0] & 0x0f;
+        const uint8_t key = data[1] & 0x7f;
+        const uint32_t tick = state_.m_time;
+        int64_t& start = starts_[channel][key];
+        if (start >= 0) {
+            notes_.push_back({key, static_cast<double>(start) / ticks_per_beat_,
+                              static_cast<double>(tick - start) / ticks_per_beat_,
+                              velocities_[channel][key], channel, data[0], data[2]});
+            start = -1;
+        }
+        if (type == 0x9 && data[2] > 0) {
+            start = tick;
+            velocities_[channel][key] = data[2];
+        }
+    }
+
+    void render_samples(uint32_t, float*) override {}
+
+    void finish() {
+        for (size_t channel = 0; channel < starts_.size(); ++channel) {
+            for (size_t key = 0; key < starts_[channel].size(); ++key) {
+                if (starts_[channel][key] >= 0) {
+                    notes_.push_back({static_cast<int>(key),
+                                      static_cast<double>(starts_[channel][key]) /
+                                          ticks_per_beat_,
+                                      1.0, velocities_[channel][key],
+                                      static_cast<int>(channel), 0, 0});
+                }
+            }
+        }
+    }
+
+private:
+    std::vector<ImportedNote>& notes_;
+    const MidiState& state_;
+    uint32_t ticks_per_beat_;
+    std::array<std::array<int64_t, 128>, 16> starts_{};
+    std::array<std::array<int, 128>, 16> velocities_{};
+};
+
 } // namespace
 
 MidiSongInfo read_midi_song(MidiSong& song, int max_tracks) {
@@ -83,81 +143,54 @@ MidiSongInfo read_midi_song(MidiSong& song, int max_tracks) {
     info.notes.resize(static_cast<size_t>(tracks));
 
     bool have_signature = false;
-    std::vector<std::pair<uint32_t, uint32_t>> tempos; // tick, microseconds per quarter note
     for (uint32_t t = 0; t < song.GetTrackCount(); t++) {
         const MidiTrack* mt = song.GetTrack(t);
         std::string name;
         for_each_meta(mt->m_pTrackIni, mt->m_pTrackFin,
-                      [&](uint32_t tick, uint8_t type, const uint8_t* data, uint32_t length) {
+                      [&](uint32_t, uint8_t type, const uint8_t* data, uint32_t length) {
             if (type == 0x03 && name.empty()) {
                 name = printable(data, length);
             } else if (type == 0x58 && length >= 2 && !have_signature) {
                 info.numerator = data[0];
                 info.denominator = 1 << std::min<int>(data[1], 5);
                 have_signature = true;
-            } else if (type == 0x51 && length >= 3) {
-                tempos.emplace_back(tick, (data[0] << 16) | (data[1] << 8) | data[2]);
             }
         });
         if (static_cast<int>(t) < tracks) {
             info.track_names[t] = name;
         }
     }
-    std::stable_sort(tempos.begin(), tempos.end(),
-                     [](const auto& a, const auto& b) { return a.first < b.first; });
-    // Beats last as long as the sequencer plays them: it rounds tempo down to whole
-    // microseconds per tick, and plays at 110 bpm until a file sets a tempo.
-    auto seconds_per_beat = [tpq](uint32_t us_per_quarter) {
-        return static_cast<double>(std::max<uint32_t>(1, us_per_quarter / tpq) * tpq) / 1.0e6;
-    };
-    if (tempos.empty() || tempos.front().first > 0) {
-        info.tempo_map.push_back({0.0, seconds_per_beat(60000000 / 110)});
-    }
-    for (const auto& [tick, us_per_quarter] : tempos) {
-        info.tempo_map.push_back({static_cast<double>(tick) / tpq, seconds_per_beat(us_per_quarter)});
+    // Use the tempo map already computed by SimpleMIDI's midi.cpp. It includes the
+    // default 120 BPM tempo and the absolute ticks for all tempo meta events.
+    for (const ::TempoChange& tempo : song.getTempoChanges()) {
+        if (tempo.usPerQuarter == 0) {
+            continue;
+        }
+        const uint32_t us_per_tick =
+            std::max<uint32_t>(1, tempo.usPerQuarter / tpq);
+        info.tempo_map.push_back({
+            static_cast<double>(tempo.absolute_tick) / tpq,
+            static_cast<double>(us_per_tick * tpq) / 1.0e6
+        });
     }
 
     // A note-on opens a note, the next note-off of that key and channel (or note-on with
     // velocity 0) closes it; notes still open at the end last a beat.
-    const double ticks_per_beat = static_cast<double>(tpq);
-    for (int t = 0; t < tracks; t++) {
-        MidiTrack* mt = song.GetTrack(t);
-        std::vector<ImportedNote>& notes = info.notes[t];
-        std::array<std::array<int64_t, 128>, 16> on_tick;
-        std::array<std::array<int, 128>, 16> on_velocity{};
-        for (auto& channel : on_tick) {
-            channel.fill(-1);
-        }
-        uint32_t time = 0;
-        do {
-            const uint32_t now = time;
-            time = mt->play(now, [&](uint8_t* pdata, size_t size) {
-                const int type = pdata[0] >> 4;
-                if (size < 3 || (type != 0x8 && type != 0x9)) {
-                    return;
-                }
-                const int channel = pdata[0] & 0xf;
-                const int key = pdata[1] & 0x7f;
-                int64_t& start = on_tick[channel][key];
-                if (start >= 0) {
-                    notes.push_back({key, start / ticks_per_beat, (now - start) / ticks_per_beat,
-                                     on_velocity[channel][key]});
-                    start = -1;
-                }
-                if (type == 0x9 && pdata[2] > 0) {
-                    start = now;
-                    on_velocity[channel][key] = pdata[2];
-                }
-            });
-        } while (time != NO_EVENTS);
-        for (int channel = 0; channel < 16; ++channel) {
-            for (int key = 0; key < 128; ++key) {
-                if (on_tick[channel][key] >= 0) {
-                    notes.push_back({key, on_tick[channel][key] / ticks_per_beat, 1.0,
-                                     on_velocity[channel][key]});
-                }
-            }
-        }
+    std::vector<std::unique_ptr<NoteDrawInstrument>> instruments(static_cast<size_t>(tracks));
+    std::vector<MidiSendFunc> callbacks(song.GetTrackCount());
+    for (int t = 0; t < tracks; ++t) {
+        instruments[t] = std::make_unique<NoteDrawInstrument>(info.notes[t], song.m_midi_state);
+        NoteDrawInstrument* instrument = instruments[t].get();
+        callbacks[t] = [instrument](uint8_t* data, size_t size) {
+            instrument->send_midi(data, size);
+        };
     }
+    song.Reset();
+    while (song.step(callbacks.data()) != NO_EVENTS) {
+    }
+    for (int t = 0; t < tracks; ++t) {
+        instruments[t]->finish();
+    }
+    song.Reset();
     return info;
 }

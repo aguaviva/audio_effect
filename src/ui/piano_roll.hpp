@@ -17,25 +17,32 @@ struct Note {
     float duration = 1.0f;
     int velocity = 100;
     bool selected = false;
+    int channel = 0;
+    int end_status = 0x80;
+    int end_velocity = 0;
 };
 
 using PianoRollNote = Note;
 
 class PianoRollEditor {
 public:
-    int AddNote(int pitch, float startBeat, float duration, int velocity = 100);
+    int AddNote(int pitch, float startBeat, float duration, int velocity = 100, int channel = 0,
+                int endStatus = 0x80, int endVelocity = 0);
     const std::vector<PianoRollNote>& GetNotes() const { return notes_; }
     void ClearNotes();
 
     // Beat being played, drawn as a line over the grid; negative hides it.
-    void SetPlayhead(float beat) { playhead_beat_ = beat; }
-    float GetPlayhead() const { return playhead_beat_; }
+    void SetPlayheadSeconds(float seconds) { playhead_seconds_ = seconds; }
+    float GetPlayheadSeconds() const { return playhead_seconds_; }
     // While the playhead moves, scroll so it stays in view.
     void SetFollowPlayhead(bool follow) { follow_playhead_ = follow; }
     // On the next Render, scroll to the start and center the notes' pitch range.
     void FrameNotes() { frame_pending_ = true; }
 
     void SetPitchCallback(std::function<void(int, bool)> callback);
+    void SetNoteEditCallback(std::function<void(const PianoRollNote&, bool)> callback) {
+        note_edit_callback_ = std::move(callback);
+    }
     void DeleteNote(int noteId);
     void SelectAll();
     void ClearSelection();
@@ -52,7 +59,7 @@ public:
     void SetTempo(float bpm);
     float GetTempo() const;
     // Tempo changes, for the seconds ruler; replaces SetTempo's tempo.
-    void SetTempoMap(std::vector<TempoChange> changes);
+    void SetTempoMap(std::vector<TempoGridChange> changes);
     float SecondsAtBeat(float beat) const;
     float BeatAtSeconds(float seconds) const;
     void SetTimeSignature(int numerator, int denominator);
@@ -65,6 +72,7 @@ public:
 private:
     float MaxBeat() const;
     float BeatAt(float x, const ImVec2& origin) const;
+    float TimeToPixels(float seconds) const;
     int PitchAt(float y, const ImVec2& origin) const;
     float Snap(float beat) const;
     PianoRollNote* HitNote(float x, float y, const ImVec2& origin);
@@ -82,6 +90,7 @@ private:
 
     std::vector<PianoRollNote> notes_;
     std::function<void(int, bool)> pitch_callback_;
+    std::function<void(const PianoRollNote&, bool)> note_edit_callback_;
     TempoGrid tempo_; // its tempo map; the time signature and grid are below, in beats
     int next_id_ = 1;
     int low_pitch_ = 24;
@@ -94,8 +103,8 @@ private:
     float row_height_ = 18.0f;
     float scroll_x_ = 0.0f;
     float scroll_y_ = 0.0f;
-    float playhead_beat_ = -1.0f;
-    float followed_beat_ = -1.0f;
+    float playhead_seconds_ = -1.0f;
+    float followed_seconds_ = -1.0f;
     bool follow_playhead_ = true;
     bool frame_pending_ = false;
     // While dragging: the grabbed note and every selected note as they were when grabbed,

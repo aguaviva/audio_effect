@@ -1,9 +1,10 @@
 {
   "version":2,
+  "grid":{"numerator":4,"denominator":4,"division":4,"tempo":[{"beat":0.000000,"bpm":240.384613},{"beat":5.000000,"bpm":120.076851},{"beat":10.000000,"bpm":60.009602},{"beat":15.000000,"bpm":30.004801},{"beat":20.000000,"bpm":10.000000}]},
   "nodes":[
-    {"id":1,"type":"midi","x":552.000000,"y":264.000000,"params":{"bypassed":false,"path":"/home/raul/repos/SimpleMidi/build/ZELDA1.MID"}},
-    {"id":2,"type":"mixer","x":829.000000,"y":257.000000,"params":{"bypassed":false,"gain_0":1.000000,"muted_0":false,"gain_1":1.000000,"muted_1":false,"gain_2":1.000000,"muted_2":false,"gain_3":1.000000,"muted_3":false,"gain_4":1.000000,"muted_4":false,"gain_5":1.000000,"muted_5":false,"gain_6":1.000000,"muted_6":false,"gain_7":1.000000,"muted_7":false}},
-    {"id":3,"type":"output","x":1185.000000,"y":322.000000,"params":{"bypassed":false,"device":"default","muted":false,"volume_db":0.000000}}
+    {"id":1,"type":"midi","x":558.000000,"y":8.000000,"params":{"bypassed":false,"path":"/home/raul/repos/SimpleMidi/midis/same_notes_tempo_change.mid"}},
+    {"id":2,"type":"mixer","x":817.000000,"y":3.000000,"params":{"bypassed":false,"gain_0":1.000000,"muted_0":false,"gain_1":1.000000,"muted_1":false,"gain_2":1.000000,"muted_2":false,"gain_3":1.000000,"muted_3":false,"gain_4":1.000000,"muted_4":false,"gain_5":1.000000,"muted_5":false,"gain_6":1.000000,"muted_6":false,"gain_7":1.000000,"muted_7":false}},
+    {"id":3,"type":"output","x":1107.000000,"y":15.000000,"params":{"bypassed":false,"device":"default","muted":false,"volume_db":0.000000}}
   ],
   "links":[
     {"id":1,"from":1,"from_slot":0,"to":2,"to_slot":0},

@@ -4,7 +4,7 @@
 #include <vector>
 
 // From beat on, each beat lasts seconds_per_beat.
-struct TempoChange {
+struct TempoGridChange {
     double beat = 0.0;
     double seconds_per_beat = 0.5;
 };
@@ -26,8 +26,8 @@ public:
     // The tempo at the start.
     double bpm() const;
     // Sorted by beat; the first change's tempo also applies before it. Empty keeps the tempo.
-    void set_tempo_map(std::vector<TempoChange> changes);
-    const std::vector<TempoChange>& tempo_map() const { return changes_; }
+    void set_tempo_map(std::vector<TempoGridChange> changes);
+    const std::vector<TempoGridChange>& tempo_map() const { return changes_; }
     bool has_tempo_changes() const { return changes_.size() > 1; }
 
     double seconds_at_beat(double beat) const;
@@ -48,7 +48,7 @@ private:
     int numerator_ = 4;
     int denominator_ = 4;
     int division_ = kDefaultDivision;
-    std::vector<TempoChange> changes_{{0.0, 0.5}};
+    std::vector<TempoGridChange> changes_{{0.0, 0.5}};
 };
 
 // The project's grid: the timeline ruler and every track's snapping use it. Loading a MIDI file

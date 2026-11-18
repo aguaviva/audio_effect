@@ -13,6 +13,9 @@ struct ImportedNote {
     double start = 0.0;
     double duration = 1.0;
     int velocity = 100;
+    int channel = 0;
+    int end_status = 0x80;
+    int end_velocity = 0;
 };
 
 // What the sequencer does not keep: track names, the song's time signature and tempo map, and
@@ -20,8 +23,8 @@ struct ImportedNote {
 struct MidiSongInfo {
     int numerator = 4;
     int denominator = 4;
-    // As the sequencer plays it: whole microseconds per tick, 110 bpm before the first tempo.
-    std::vector<TempoChange> tempo_map;
+    // As the sequencer plays it: beat and seconds-per-beat tempo changes.
+    std::vector<TempoGridChange> tempo_map;
     std::vector<std::string> track_names;
     std::vector<std::vector<ImportedNote>> notes;
 };

@@ -1,9 +1,11 @@
 {
   "version":2,
+  "grid":{"numerator":4,"denominator":4,"division":4,"tempo":[{"beat":0.000000,"bpm":167.022980}]},
   "nodes":[
-    {"id":1,"type":"midi","x":552.000000,"y":264.000000,"params":{"bypassed":false,"path":"/repos/audio_effect/assets/audio/MetalGearMSX_OperationIntrudeN313.mid"}},
+    {"id":1,"type":"midi","x":478.000000,"y":51.000000,"params":{"bypassed":false,"path":"/home/raul/repos/SimpleMidi/build/mario.mid"}},
     {"id":2,"type":"mixer","x":829.000000,"y":257.000000,"params":{"bypassed":false,"gain_0":1.000000,"muted_0":false,"gain_1":1.000000,"muted_1":false,"gain_2":1.000000,"muted_2":false,"gain_3":1.000000,"muted_3":false,"gain_4":1.000000,"muted_4":false,"gain_5":1.000000,"muted_5":false,"gain_6":1.000000,"muted_6":false,"gain_7":1.000000,"muted_7":false}},
-    {"id":3,"type":"output","x":1185.000000,"y":322.000000,"params":{"bypassed":false,"device":"default","muted":false,"volume_db":0.000000}}
+    {"id":3,"type":"output","x":1185.000000,"y":322.000000,"params":{"bypassed":false,"device":"default","muted":false,"volume_db":0.000000}},
+    {"id":4,"type":"multi_wav","x":257.000000,"y":198.000000,"params":{"bypassed":false,"channels":2}}
   ],
   "links":[
     {"id":1,"from":1,"from_slot":0,"to":2,"to_slot":0},
