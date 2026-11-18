@@ -135,7 +135,7 @@ void MidiSequencer::seek(uint64_t target) {
     song_.seek(target_us, muted.data());
     interval_remaining_frames_ = 0;
     played_frames_ = target;
-    finished_ = target_us >= song_.get_total_ms();
+    finished_ = target_us >= song_.get_total_us();
     for (int t = 0; t < tracks_; ++t) {
         instruments_[t]->reset();
     }

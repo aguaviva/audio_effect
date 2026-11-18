@@ -29,6 +29,6 @@ struct MidiSongInfo {
     std::vector<std::vector<ImportedNote>> notes;
 };
 
-// Reads the first max_tracks tracks of a loaded song; the first time signature found applies
-// to the whole song. Plays the tracks through to read them, so rewind the song afterwards.
+// Reads the first max_tracks tracks of a loaded song, using the MIDI state for its time
+// signature and tempo map. Plays the tracks through to read them, so rewind the song afterwards.
 MidiSongInfo read_midi_song(MidiSong& song, int max_tracks);
